@@ -1,0 +1,93 @@
+/* Copyright (C) 2026-present Aristotelis — see repository license. */
+
+import { describe, expect, it } from 'vitest';
+import { UnixTimestampType } from './unix-timestamp.type';
+
+describe('UnixTimestampType', () => {
+  const type = new UnixTimestampType();
+
+  it('converts Date to numeric unix timestamp in milliseconds', () => {
+    const now = new Date('2026-08-24T12:00:00.000Z');
+    const result = type.convertToDatabaseValue(now);
+    expect(result).toBe(now.getTime());
+  });
+
+  it('passes through null and undefined in convertToDatabaseValue', () => {
+    expect(type.convertToDatabaseValue(null)).toBeNull();
+    expect(type.convertToDatabaseValue(undefined)).toBeUndefined();
+  });
+
+  it('converts number timestamp to Date object in convertToJSValue', () => {
+    const ts = 1787572800000;
+    const result = type.convertToJSValue(ts);
+    expect(result).toBeInstanceOf(Date);
+    expect(result.getTime()).toBe(ts);
+  });
+
+  it('converts string number timestamp to Date object in convertToJSValue', () => {
+    const ts = 1787572800000;
+    const result = type.convertToJSValue(String(ts));
+    expect(result).toBeInstanceOf(Date);
+    expect(result.getTime()).toBe(ts);
+  });
+
+  it('converts bigint timestamp to Date object in convertToJSValue', () => {
+    const ts = 1787572800000;
+    const result = type.convertToJSValue(BigInt(ts));
+    expect(result).toBeInstanceOf(Date);
+    expect(result.getTime()).toBe(ts);
+  });
+
+  it('converts string and bigint to numeric millisecond timestamp in convertToDatabaseValue', () => {
+    const ts = 1787572800000;
+    expect(type.convertToDatabaseValue(String(ts))).toBe(ts);
+    expect(type.convertToDatabaseValue(BigInt(ts))).toBe(ts);
+  });
+
+  it('passes through null and undefined in convertToJSValue', () => {
+    expect(type.convertToJSValue(null)).toBeNull();
+    expect(type.convertToJSValue(undefined)).toBeUndefined();
+  });
+
+  it('specifies bigint column type by default', () => {
+    expect(type.getColumnType()).toBe('bigint');
+  });
+
+  it('delegates to platform.getBigIntTypeDeclarationSQL when platform is provided', () => {
+    const platform = {
+      getBigIntTypeDeclarationSQL: () => 'BIGINT_CUSTOM_SQL',
+    };
+    expect(type.getColumnType({} as never, platform as never)).toBe(
+      'BIGINT_CUSTOM_SQL',
+    );
+  });
+
+  it('handles Date instance directly in convertToJSValue', () => {
+    const d = new Date('2026-08-24T12:00:00.000Z');
+    expect(type.convertToJSValue(d)).toBe(d);
+  });
+
+  it('handles non-numeric date string and arbitrary objects in convertToDatabaseValue and convertToJSValue', () => {
+    const isoStr = '2026-08-24T12:00:00.000Z';
+    expect(type.convertToDatabaseValue(isoStr)).toBe(
+      new Date(isoStr).getTime(),
+    );
+
+    const d = new Date('2026-08-24T12:00:00.000Z');
+    const objVal = { toString: () => '2026-08-24T12:00:00.000Z' };
+    expect(type.convertToDatabaseValue(objVal as any)).toBe(d.getTime());
+    expect(type.convertToJSValue(objVal as any)).toEqual(d);
+  });
+
+  it('converts number directly in convertToDatabaseValue', () => {
+    const ts = 1787572800000;
+    expect(type.convertToDatabaseValue(ts)).toBe(ts);
+  });
+
+  it('converts ISO string in convertToJSValue', () => {
+    const iso = '2026-08-24T12:00:00.000Z';
+    const result = type.convertToJSValue(iso);
+    expect(result).toBeInstanceOf(Date);
+    expect(result.toISOString()).toBe(iso);
+  });
+});

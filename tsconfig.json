@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "outDir": "dist"
+  },
+  "include": [
+    "index.ts",
+    "*.spec.ts",
+    "application/**/*.ts",
+    "domain/**/*.ts",
+    "http/**/*.ts",
+    "persistence/**/*.ts",
+    "types/**/*.ts"
+  ],
+  "exclude": ["dist", "node_modules"]
+}
