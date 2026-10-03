@@ -1,0 +1,310 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Comprehensive Architecture & Event-Driven Topology",
+    "subtitle": "Complete framework-neutral CQRS execution, pipeline behaviors, domain events and async BullMQ queues",
+    "output": "architecture.html",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    {
+      "id": "http_clients",
+      "type": "external",
+      "label": "HTTP Clients",
+      "sublabel": "Browser / Mobile / APIs",
+      "pos": [40, 240],
+      "size": [160, 70]
+    },
+    {
+      "id": "api_routing",
+      "type": "backend",
+      "label": "api HTTP Layer",
+      "sublabel": "Express & Fastify route table",
+      "tag": "Dual Adapter",
+      "pos": [280, 240],
+      "size": [190, 70]
+    },
+    {
+      "id": "cqrs_buses",
+      "type": "backend",
+      "label": "@cqrs-ddd/cqrs",
+      "sublabel": "CommandBus & QueryBus",
+      "tag": "createCqrs()",
+      "pos": [600, 240],
+      "size": [210, 70]
+    },
+    {
+      "id": "pipeline_engine",
+      "type": "backend",
+      "label": "@cqrs-ddd/pipeline",
+      "sublabel": "Behavior Pipeline Engine",
+      "tag": "createPipeline()",
+      "pos": [940, 240],
+      "size": [210, 70]
+    },
+    {
+      "id": "pipe_zod",
+      "type": "backend",
+      "label": "@cqrs-ddd/pipeline-zod",
+      "sublabel": "Zod Validation & Mapper",
+      "pos": [1280, 40],
+      "size": [220, 58]
+    },
+    {
+      "id": "pipe_casl",
+      "type": "security",
+      "label": "@cqrs-ddd/pipeline-casl",
+      "sublabel": "CASL Authorizer (Fail-closed)",
+      "pos": [1280, 115],
+      "size": [220, 58]
+    },
+    {
+      "id": "pipe_tenant",
+      "type": "security",
+      "label": "@cqrs-ddd/pipeline-tenant",
+      "sublabel": "Tenant Context & Scoping",
+      "pos": [1280, 190],
+      "size": [220, 58]
+    },
+    {
+      "id": "pipe_cache",
+      "type": "database",
+      "label": "@cqrs-ddd/pipeline-cache",
+      "sublabel": "Response Cache (CAS & Invalidation)",
+      "pos": [1280, 265],
+      "size": [220, 58]
+    },
+    {
+      "id": "pipe_idempotency",
+      "type": "database",
+      "label": "@cqrs-ddd/pipeline-idempotency",
+      "sublabel": "Idempotency Store & Replay Guard",
+      "pos": [1280, 340],
+      "size": [220, 58]
+    },
+    {
+      "id": "pipe_resilience",
+      "type": "backend",
+      "label": "@cqrs-ddd/pipeline-resilience",
+      "sublabel": "Retry, Circuit Breaker & Timeout",
+      "pos": [1280, 415],
+      "size": [220, 58]
+    },
+    {
+      "id": "pipe_ops",
+      "type": "cloud",
+      "label": "Audit & Telemetry",
+      "sublabel": "Audit, Rate-Limit, OTel & DeadLetter",
+      "pos": [1280, 490],
+      "size": [220, 58]
+    },
+    {
+      "id": "domain_model",
+      "type": "backend",
+      "label": "@cqrs-ddd/core",
+      "sublabel": "AggregateRoot, Entities, Rules & Values",
+      "tag": "Pure DDD",
+      "pos": [600, 460],
+      "size": [210, 75]
+    },
+    {
+      "id": "event_bus",
+      "type": "messagebus",
+      "label": "EventBus & Publisher",
+      "sublabel": "Buffered Aggregate Events",
+      "tag": "@cqrs-ddd/cqrs",
+      "pos": [600, 640],
+      "size": [210, 70]
+    },
+    {
+      "id": "bullmq_queues",
+      "type": "messagebus",
+      "label": "BullMQ Job Queues",
+      "sublabel": "welcome-email & batch-update queues",
+      "tag": "Async Jobs",
+      "pos": [600, 810],
+      "size": [210, 70]
+    },
+    {
+      "id": "job_processors",
+      "type": "backend",
+      "label": "Job Processors",
+      "sublabel": "@InJobContext Restored Execution",
+      "pos": [940, 810],
+      "size": [210, 70]
+    },
+    {
+      "id": "mikro_orm_adapter",
+      "type": "database",
+      "label": "@cqrs-ddd/mikro-orm",
+      "sublabel": "AggregateRepository & Optimistic Locks",
+      "pos": [280, 460],
+      "size": [200, 75]
+    },
+    {
+      "id": "persistence_dbs",
+      "type": "database",
+      "label": "PostgreSQL & Redis",
+      "sublabel": "Multi-Tenant Schemas, Redis Cache & Queues",
+      "pos": [40, 460],
+      "size": [170, 75]
+    },
+    {
+      "id": "utils_pkg",
+      "type": "backend",
+      "label": "Utilities",
+      "sublabel": "uuidv7, safe-stringify, untyped",
+      "pos": [280, 640],
+      "size": [200, 65]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Entry & Inbound Gateway",
+      "wraps": ["http_clients", "api_routing"]
+    },
+    {
+      "kind": "region",
+      "label": "Cross-Cutting Pipeline Behaviors",
+      "wraps": ["pipe_zod", "pipe_casl", "pipe_tenant", "pipe_cache", "pipe_idempotency", "pipe_resilience", "pipe_ops"]
+    },
+    {
+      "kind": "region",
+      "label": "Domain Core & Persistence",
+      "wraps": ["domain_model", "mikro_orm_adapter", "persistence_dbs", "utils_pkg"]
+    },
+    {
+      "kind": "region",
+      "label": "Event-Driven & Asynchronous Processing",
+      "wraps": ["event_bus", "bullmq_queues", "job_processors"]
+    }
+  ],
+  "connections": [
+    {
+      "id": "clients_to_routing",
+      "from": "http_clients",
+      "to": "api_routing",
+      "label": "HTTP Request"
+    },
+    {
+      "id": "routing_to_cqrs",
+      "from": "api_routing",
+      "to": "cqrs_buses",
+      "label": "dispatch"
+    },
+    {
+      "id": "cqrs_to_pipeline",
+      "from": "cqrs_buses",
+      "to": "pipeline_engine",
+      "label": "runs pipeline"
+    },
+    {
+      "id": "pipe_to_zod",
+      "from": "pipeline_engine",
+      "to": "pipe_zod"
+    },
+    {
+      "id": "pipe_to_casl",
+      "from": "pipeline_engine",
+      "to": "pipe_casl"
+    },
+    {
+      "id": "pipe_to_tenant",
+      "from": "pipeline_engine",
+      "to": "pipe_tenant"
+    },
+    {
+      "id": "pipe_to_cache",
+      "from": "pipeline_engine",
+      "to": "pipe_cache"
+    },
+    {
+      "id": "pipe_to_idempotency",
+      "from": "pipeline_engine",
+      "to": "pipe_idempotency"
+    },
+    {
+      "id": "pipe_to_resilience",
+      "from": "pipeline_engine",
+      "to": "pipe_resilience"
+    },
+    {
+      "id": "pipe_to_ops",
+      "from": "pipeline_engine",
+      "to": "pipe_ops"
+    },
+    {
+      "id": "cqrs_to_domain",
+      "from": "cqrs_buses",
+      "to": "domain_model",
+      "label": "invokes handlers"
+    },
+    {
+      "id": "domain_to_events",
+      "from": "domain_model",
+      "to": "event_bus",
+      "label": "publishes buffered events"
+    },
+    {
+      "id": "events_to_queues",
+      "from": "event_bus",
+      "to": "bullmq_queues",
+      "label": "withJobContext enqueues"
+    },
+    {
+      "id": "queues_to_processors",
+      "from": "bullmq_queues",
+      "to": "job_processors",
+      "label": "drains jobs"
+    },
+    {
+      "id": "domain_to_orm",
+      "from": "domain_model",
+      "to": "mikro_orm_adapter",
+      "label": "persisted via"
+    },
+    {
+      "id": "orm_to_dbs",
+      "from": "mikro_orm_adapter",
+      "to": "persistence_dbs",
+      "label": "SQL & KV"
+    },
+    {
+      "id": "domain_to_utils",
+      "from": "domain_model",
+      "to": "utils_pkg"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "CQRS & Request Pipeline",
+      "items": [
+        "CommandBus and QueryBus build without DI containers via createCqrs()",
+        "Pipeline behaviors wrap handlers with validation, security, caching and telemetry",
+        "Symbol.for('@cqrs-ddd/request-kind') connects requests without coupling"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Domain Events & Async Queues",
+      "items": [
+        "Aggregates buffer domain events (UserCreatedEvent, UserUpdatedEvent, etc.)",
+        "CommandBaseHandler automatically publishes buffered events after successful persistence",
+        "BullMqUserEventDispatcher stamps tenant/correlation/principal using withJobContext()",
+        "Background workers drain queues under @InJobContext with complete execution context restored"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Security & Multi-Tenancy Invariants",
+      "items": [
+        "Fail-closed tenant schemas in PostgreSQL (no shared fallback)",
+        "Short-circuit cache and idempotency keys require tenant, principal and permissions",
+        "Version-conditioned optimistic updates (optimisticUpdate) eliminate lost updates"
+      ]
+    }
+  ]
+}
