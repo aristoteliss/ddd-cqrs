@@ -1,0 +1,615 @@
+/* Copyright (C) 2026-present Aristotelis — see repository license. */
+
+import { describe, expect, it, vi } from 'vitest';
+import {
+  getCorrelationId,
+  runWithCorrelationId,
+} from '../correlation.store.js';
+import {
+  CorrelationFrom,
+  WithCorrelation,
+} from './with-correlation.decorator.js';
+
+function fakeJob(data: Record<string, any> = {}) {
+  return { data } as any;
+}
+
+function fakeRmqContext(correlationId?: string) {
+  return {
+    getMessage: () => ({
+      properties: { correlationId },
+    }),
+  };
+}
+
+function fakeKafkaContext(headers?: Record<string, Buffer | string>) {
+  return {
+    getMessage: () => ({ headers }),
+  };
+}
+
+describe('WithCorrelation — default path', () => {
+  it('sets the correlation store from job.data.correlationId', async () => {
+    let captured: string | undefined;
+
+    class Processor {
+      @WithCorrelation()
+      async handle(_job: any) {
+        captured = getCorrelationId();
+        return 'done';
+      }
+    }
+
+    const p = new Processor();
+    const result = await p.handle(fakeJob({ correlationId: 'abc-123' }));
+
+    expect(captured).toBe('abc-123');
+    expect(result).toBe('done');
+  });
+
+  it('generates uuidv7 when correlationId is missing from job.data', async () => {
+    let captured: string | undefined;
+
+    class Processor {
+      @WithCorrelation()
+      async handle(_job: any) {
+        captured = getCorrelationId();
+      }
+    }
+
+    const p = new Processor();
+    await p.handle(fakeJob({}));
+
+    expect(captured).toBeDefined();
+    expect(captured).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+  });
+
+  it('does not leak correlation ID outside the method', async () => {
+    class Processor {
+      @WithCorrelation()
+      async handle(_job: any) {
+        return getCorrelationId();
+      }
+    }
+
+    const p = new Processor();
+    await p.handle(fakeJob({ correlationId: 'scoped' }));
+
+    // Outside the decorated method, the scoped ID must not persist.
+    // getCorrelationId() returns a fresh uuidv7 when no context is active.
+    expect(getCorrelationId()).not.toBe('scoped');
+  });
+
+  it('inherits parent context when no ID is extracted', async () => {
+    let captured: string | undefined;
+
+    class Processor {
+      @WithCorrelation()
+      async handle(_job: any) {
+        captured = getCorrelationId();
+      }
+    }
+
+    const p = new Processor();
+
+    // Simulate: already inside a parent correlation context (e.g. saga)
+    await runWithCorrelationId('parent-id', async () => {
+      await p.handle(fakeJob({})); // no correlationId in data
+    });
+
+    expect(captured).toBe('parent-id');
+  });
+});
+
+describe('WithCorrelation — custom path', () => {
+  it('supports string shorthand', async () => {
+    let captured: string | undefined;
+
+    class Processor {
+      @WithCorrelation('data.x-request-id')
+      async handle(_job: any) {
+        captured = getCorrelationId();
+      }
+    }
+
+    const p = new Processor();
+    await p.handle(fakeJob({ 'x-request-id': 'custom-456' }));
+
+    expect(captured).toBe('custom-456');
+  });
+
+  it('supports path in options object', async () => {
+    let captured: string | undefined;
+
+    class Processor {
+      @WithCorrelation({ path: 'data.traceId' })
+      async handle(_job: any) {
+        captured = getCorrelationId();
+      }
+    }
+
+    const p = new Processor();
+    await p.handle(fakeJob({ traceId: 'trace-789' }));
+
+    expect(captured).toBe('trace-789');
+  });
+
+  it('handles deeply nested path', async () => {
+    let captured: string | undefined;
+
+    class Processor {
+      @WithCorrelation({ path: 'metadata.tracing.correlationId' })
+      async handle(_msg: any) {
+        captured = getCorrelationId();
+      }
+    }
+
+    const p = new Processor();
+    await p.handle({
+      metadata: { tracing: { correlationId: 'deep-nested' } },
+    });
+
+    expect(captured).toBe('deep-nested');
+  });
+});
+
+describe('WithCorrelation — custom extract', () => {
+  it('extracts from RabbitMQ context (second argument)', async () => {
+    let captured: string | undefined;
+
+    class Handler {
+      @WithCorrelation({
+        extract: (_data: any, ctx: any) =>
+          ctx.getMessage().properties.correlationId,
+      })
+      async handle(_data: any, _ctx: any) {
+        captured = getCorrelationId();
+      }
+    }
+
+    const h = new Handler();
+    await h.handle({ userId: '1' }, fakeRmqContext('rmq-abc'));
+
+    expect(captured).toBe('rmq-abc');
+  });
+
+  it('extracts from Kafka context headers', async () => {
+    let captured: string | undefined;
+
+    class Handler {
+      @WithCorrelation({
+        extract: (_data: any, ctx: any) => {
+          const headers = ctx.getMessage().headers;
+          return headers?.['x-correlation-id']?.toString();
+        },
+      })
+      async handle(_data: any, _ctx: any) {
+        captured = getCorrelationId();
+      }
+    }
+
+    const h = new Handler();
+    await h.handle(
+      { orderId: '42' },
+      fakeKafkaContext({ 'x-correlation-id': 'kafka-xyz' }),
+    );
+
+    expect(captured).toBe('kafka-xyz');
+  });
+
+  it('extract takes precedence over path', async () => {
+    let captured: string | undefined;
+
+    class Processor {
+      @WithCorrelation({
+        path: 'data.correlationId',
+        extract: () => 'from-extract',
+      })
+      async handle(_job: any) {
+        captured = getCorrelationId();
+      }
+    }
+
+    const p = new Processor();
+    await p.handle(fakeJob({ correlationId: 'from-path' }));
+
+    expect(captured).toBe('from-extract');
+  });
+
+  it('falls back to uuidv7 when extractor returns undefined', async () => {
+    let captured: string | undefined;
+
+    class Handler {
+      @WithCorrelation({ extract: () => undefined })
+      async handle() {
+        captured = getCorrelationId();
+      }
+    }
+
+    const h = new Handler();
+    await h.handle();
+
+    expect(captured).toBeDefined();
+    expect(captured).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+  });
+});
+
+describe('WithCorrelation — return value & errors', () => {
+  it('preserves async return value', async () => {
+    class Processor {
+      @WithCorrelation()
+      async handle(_job: any) {
+        return { success: true, count: 42 };
+      }
+    }
+
+    const p = new Processor();
+    const result = await p.handle(fakeJob({ correlationId: 'id' }));
+    expect(result).toEqual({ success: true, count: 42 });
+  });
+
+  it('preserves synchronous return value', () => {
+    class Processor {
+      @WithCorrelation()
+      handle(_job: any) {
+        return 'sync';
+      }
+    }
+
+    const p = new Processor();
+    expect(p.handle(fakeJob({ correlationId: 'id' }))).toBe('sync');
+  });
+
+  it('propagates async errors', async () => {
+    class Processor {
+      @WithCorrelation()
+      async handle(_job: any) {
+        throw new Error('boom');
+      }
+    }
+
+    const p = new Processor();
+    await expect(p.handle(fakeJob({ correlationId: 'id' }))).rejects.toThrow(
+      'boom',
+    );
+  });
+
+  it('propagates synchronous errors', () => {
+    class Processor {
+      @WithCorrelation()
+      handle(_job: any) {
+        throw new Error('sync-boom');
+      }
+    }
+
+    const p = new Processor();
+    expect(() => p.handle(fakeJob({ correlationId: 'id' }))).toThrow(
+      'sync-boom',
+    );
+  });
+});
+
+describe('WithCorrelation — this context & meta', () => {
+  it('preserves class instance (this)', async () => {
+    class Processor {
+      readonly tag = 'my-processor';
+
+      @WithCorrelation()
+      async handle(_job: any) {
+        return this.tag;
+      }
+    }
+
+    const p = new Processor();
+    expect(await p.handle(fakeJob({ correlationId: 'id' }))).toBe(
+      'my-processor',
+    );
+  });
+
+  it('preserves original function name', () => {
+    class Processor {
+      @WithCorrelation()
+      async handleSendEmail(_job: any) {}
+    }
+
+    const descriptor = Object.getOwnPropertyDescriptor(
+      Processor.prototype,
+      'handleSendEmail',
+    )!;
+    expect(descriptor.value.name).toBe('handleSendEmail');
+  });
+});
+
+describe('WithCorrelation — edge cases', () => {
+  it('warns when first argument is an array and dot-path is used', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    class Processor {
+      @WithCorrelation()
+      async handle(_job: any) {
+        return getCorrelationId();
+      }
+    }
+
+    const p = new Processor();
+    await p.handle([{ correlationId: 'in-array' }] as any);
+
+    expect(warnSpy).toHaveBeenCalledOnce();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('first argument is an array'),
+    );
+
+    warnSpy.mockRestore();
+  });
+
+  it('does not warn for array when custom extract is provided', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    class Processor {
+      @WithCorrelation({ extract: (data: any) => data?.[0]?.correlationId })
+      async handle(_job: any) {
+        return getCorrelationId();
+      }
+    }
+
+    const p = new Processor();
+    await p.handle([{ correlationId: 'arr-extract' }] as any);
+
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('handles undefined first argument (generates uuidv7)', async () => {
+    let captured: string | undefined;
+
+    class Processor {
+      @WithCorrelation()
+      async handle(_job: any) {
+        captured = getCorrelationId();
+      }
+    }
+
+    const p = new Processor();
+    await p.handle(undefined as any);
+
+    expect(captured).toBeDefined();
+    expect(captured).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+  });
+
+  it('handles null data in first argument', async () => {
+    let captured: string | undefined;
+
+    class Processor {
+      @WithCorrelation()
+      async handle(_job: any) {
+        captured = getCorrelationId();
+      }
+    }
+
+    const p = new Processor();
+    await p.handle({ data: null } as any);
+
+    expect(captured).toBeDefined();
+  });
+
+  it('does not interfere with other decorator metadata', () => {
+    const processMeta = new WeakMap<object, { name: string }>();
+    function FakeProcess(name: string): MethodDecorator {
+      return (_target, _key, desc) => {
+        processMeta.set(desc.value as object, { name });
+        return desc;
+      };
+    }
+
+    class Processor {
+      @FakeProcess('send-email')
+      @WithCorrelation()
+      async handle(_job: any) {}
+    }
+
+    const instance = new Processor();
+    const meta = processMeta.get(instance.handle);
+    expect(meta).toEqual({ name: 'send-email' });
+  });
+
+  it('inner decorator wins over outer correlation context', async () => {
+    let captured: string | undefined;
+
+    class Processor {
+      @WithCorrelation()
+      async handle(_job: any) {
+        captured = getCorrelationId();
+      }
+    }
+
+    const p = new Processor();
+
+    await runWithCorrelationId('outer-id', async () => {
+      await p.handle(fakeJob({ correlationId: 'inner-id' }));
+    });
+
+    expect(captured).toBe('inner-id');
+  });
+});
+
+describe('WithCorrelation — cron job', () => {
+  it('generates uuidv7 for methods with no arguments', async () => {
+    let captured: string | undefined;
+
+    class Scheduler {
+      @WithCorrelation()
+      async hourlySync() {
+        captured = getCorrelationId();
+      }
+    }
+
+    const s = new Scheduler();
+    await s.hourlySync();
+
+    expect(captured).toBeDefined();
+    expect(captured).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+  });
+});
+
+describe('CorrelationFrom.grpc', () => {
+  it('extracts correlationId from gRPC metadata', async () => {
+    let captured: string | undefined;
+
+    class Handler {
+      @WithCorrelation(CorrelationFrom.grpc())
+      async handle(_data: any, _metadata: any) {
+        captured = getCorrelationId();
+      }
+    }
+
+    const fakeMetadata = {
+      get: (key: string) => (key === 'x-correlation-id' ? ['grpc-456'] : []),
+    };
+
+    const h = new Handler();
+    await h.handle({}, fakeMetadata);
+    expect(captured).toBe('grpc-456');
+  });
+});
+
+describe('WithCorrelation — logLevel', () => {
+  it('logs at the specified level with the resolved correlationId', async () => {
+    const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+
+    class Processor {
+      @WithCorrelation({ logLevel: 'debug' })
+      async handle(_job: unknown) {
+        return getCorrelationId();
+      }
+    }
+
+    const p = new Processor();
+    await p.handle(fakeJob({ correlationId: 'log-test-123' }));
+
+    expect(debugSpy).toHaveBeenCalledOnce();
+    expect(debugSpy).toHaveBeenCalledWith(
+      expect.stringContaining('log-test-123'),
+    );
+
+    debugSpy.mockRestore();
+  });
+
+  it('logs the class and method name in the message', async () => {
+    const verboseSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+
+    class EmailProcessor {
+      @WithCorrelation({
+        logLevel: 'log',
+        logger: { log: verboseSpy, warn: vi.fn() },
+      })
+      async handleSendEmail(_job: any) {}
+    }
+
+    const p = new EmailProcessor();
+    await p.handleSendEmail(fakeJob({ correlationId: 'id' }));
+
+    expect(verboseSpy).toHaveBeenCalledWith(
+      expect.stringContaining('EmailProcessor.handleSendEmail'),
+    );
+
+    verboseSpy.mockRestore();
+  });
+
+  it('logs at debug level when logLevel is omitted', async () => {
+    const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+
+    class Processor {
+      @WithCorrelation()
+      async handle(_job: any) {}
+    }
+
+    const p = new Processor();
+    await p.handle(fakeJob({ correlationId: 'default-level' }));
+
+    expect(debugSpy).toHaveBeenCalledOnce();
+    expect(debugSpy).toHaveBeenCalledWith(
+      expect.stringContaining('default-level'),
+    );
+
+    debugSpy.mockRestore();
+  });
+
+  it('does not log when logLevel is "none"', async () => {
+    const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    class Processor {
+      @WithCorrelation({ logLevel: 'none' })
+      async handle(_job: any) {}
+    }
+
+    const p = new Processor();
+    await p.handle(fakeJob({ correlationId: 'none-level' }));
+
+    expect(debugSpy).not.toHaveBeenCalled();
+    expect(logSpy).not.toHaveBeenCalled();
+
+    debugSpy.mockRestore();
+    logSpy.mockRestore();
+  });
+
+  it('logs the resolved uuidv7 when extracted ID is undefined', async () => {
+    const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+
+    class Processor {
+      @WithCorrelation({ logLevel: 'debug' })
+      async handle(_job: any) {}
+    }
+
+    const p = new Processor();
+    await p.handle(fakeJob({})); // no correlationId → fallback to uuidv7
+
+    expect(debugSpy).toHaveBeenCalledOnce();
+    expect(debugSpy).toHaveBeenCalledWith(
+      expect.not.stringContaining('undefined'),
+    );
+
+    debugSpy.mockRestore();
+  });
+
+  it('routes to the console method of each level by default', async () => {
+    const levels = ['log', 'debug', 'warn', 'error'] as const;
+
+    for (const level of levels) {
+      const spy = vi.spyOn(console, level).mockImplementation(() => {});
+
+      class Processor {
+        @WithCorrelation({ logLevel: level })
+        async handle(_job: any) {}
+      }
+
+      const p = new Processor();
+      await p.handle(fakeJob({ correlationId: `id-${level}` }));
+
+      expect(spy).toHaveBeenCalledOnce();
+      spy.mockRestore();
+    }
+  });
+});
+
+it('propagates correlation when the logger does not implement the selected level', () => {
+  const logger = { log: vi.fn(), warn: vi.fn(), error: vi.fn() };
+  class Processor {
+    @WithCorrelation({ logger, logLevel: 'debug' })
+    handle(_job: unknown) {
+      return getCorrelationId();
+    }
+  }
+  expect(
+    new Processor().handle(fakeJob({ correlationId: 'without-debug' })),
+  ).toBe('without-debug');
+  expect(logger.log).not.toHaveBeenCalled();
+});

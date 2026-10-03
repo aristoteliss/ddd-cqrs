@@ -1,0 +1,61 @@
+{
+  "name": "@cqrs-ddd/pipeline-job-context",
+  "version": "0.5.0",
+  "description": "Carries the tenant, correlation id and principal of a request into the queue jobs it enqueues, and gives system-started work an explicit context",
+  "author": "Aristotelis",
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aristoteliss/ddd-cqrs.git",
+    "directory": "packages/pipeline-job-context"
+  },
+  "homepage": "https://aristoteliss.github.io/ddd-cqrs/packages/pipeline-job-context/",
+  "bugs": {
+    "url": "https://github.com/aristoteliss/ddd-cqrs/issues"
+  },
+  "keywords": [
+    "nestjs",
+    "cqrs",
+    "pipeline",
+    "multi-tenancy",
+    "queue",
+    "jobs",
+    "authorization",
+    "correlation-id"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "LICENSE",
+    "COMMERCIAL_LICENSE.txt"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "build:watch": "tsc -p tsconfig.build.json --watch",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo",
+    "rebuild": "pnpm run clean && pnpm run build",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "pnpm run rebuild"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^5.0.3",
+    "vitest": "^5.0.3"
+  }
+}
