@@ -1,0 +1,186 @@
+/* Copyright (C) 2026-present Aristotelis — see repository license. */
+
+process.env.TESTCONTAINERS_RYUK_DISABLED = 'true';
+
+import type { Job, Queue } from 'bullmq';
+import request from 'supertest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { BullMqUserEventDispatcher } from '../src/users/jobs/bullmq-user-event-dispatcher.adapter.js';
+import { WELCOME_EMAIL_QUEUE } from '../src/users/jobs/send-welcome-email.processor.js';
+import { ADAPTERS, bootstrapE2E, type E2EContext } from './support/e2e-app.js';
+
+describe.each(ADAPTERS)(
+  'BullMQ worker lifecycle & dead-letter queue (e2e) on %s',
+  (adapter) => {
+    let ctx: E2EContext;
+    let http: E2EContext['server'];
+    let welcomeQueue: Queue;
+    let deadLetterQueue: Queue;
+
+    const admin = JSON.stringify({
+      id: 'admin-1',
+      email: 'admin@acme.test',
+      department: 'platform',
+      grants: ['all|manage|*'],
+    });
+
+    beforeAll(async () => {
+      ctx = await bootstrapE2E({ adapter });
+      http = ctx.server;
+      welcomeQueue = ctx.storage.queue(WELCOME_EMAIL_QUEUE);
+      deadLetterQueue = ctx.storage.queue('dead-letters');
+    });
+
+    afterAll(async () => {
+      await new Promise((r) => setTimeout(r, 300));
+      await ctx?.close();
+    });
+
+    it('dispatches welcome email job to BullMQ on user creation and processes it to completion', async () => {
+      const email = `bullmq-worker-${Date.now()}@acme.test`;
+      const correlationId = `corr-worker-${Date.now()}`;
+
+      const res = await request(http)
+        .post('/users')
+        .set('x-tenant-schema', 'tenant')
+        .set('x-correlation-id', correlationId)
+        .set('x-api-id', 'api-admin-client')
+        .set('x-api-key', 'admin-secret-key-12345')
+        .send({ email, name: 'BullMQ Worker User' });
+
+      expect(res.status).toBe(201);
+
+      // Wait for the job to be enqueued and processed to completion by SendWelcomeEmailProcessor
+      let completedJob: Job | undefined;
+      for (let i = 0; i < 40; i++) {
+        const jobs = await welcomeQueue.getJobs([
+          'completed',
+          'active',
+          'waiting',
+          'delayed',
+        ]);
+        const found = jobs.find((j) => j.data?.email === email);
+        if (found) {
+          const state = await found.getState();
+          if (state === 'completed') {
+            completedJob = found;
+            break;
+          }
+        }
+        await new Promise((r) => setTimeout(r, 100));
+      }
+
+      expect(completedJob).toBeDefined();
+      expect(completedJob?.data.email).toBe(email);
+      expect(completedJob?.data.jobContext).toMatchObject({
+        tenantId: 'tenant',
+        correlationId,
+      });
+    }, 15000);
+
+    it('captures unhandled event handler failures into dead-letters queue via DeadLetterBehavior', async () => {
+      const email = `deadletter-fail-${Date.now()}@acme.test`;
+      const correlationId = `corr-deadletter-${Date.now()}`;
+
+      // Simulate downstream email failure in UserCreatedHandler
+      const spy = vi
+        .spyOn(BullMqUserEventDispatcher.prototype, 'enqueueWelcomeEmail')
+        .mockRejectedValueOnce(new Error('Downstream email gateway timeout'));
+
+      const res = await request(http)
+        .post('/users')
+        .set('x-tenant-schema', 'tenant')
+        .set('x-correlation-id', correlationId)
+        .set('x-test-user', admin)
+        .send({ email, name: 'DeadLetter Fail User' });
+
+      // Since UserCreatedHandler has rethrow: false, HTTP response is not interrupted
+      expect(res.status).toBe(201);
+      expect(spy).toHaveBeenCalled();
+      spy.mockRestore();
+
+      // Verify the failure was delivered to the dead-letters queue
+      let deadLetterJob: Job | undefined;
+      for (let i = 0; i < 40; i++) {
+        const jobs = await deadLetterQueue.getJobs([
+          'waiting',
+          'completed',
+          'active',
+          'delayed',
+        ]);
+        const found = jobs.find(
+          (j) =>
+            j.data?.correlationId === correlationId &&
+            j.data?.requestName === 'UserCreatedEvent',
+        );
+        if (found) {
+          deadLetterJob = found;
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 100));
+      }
+
+      expect(deadLetterJob).toBeDefined();
+      expect(deadLetterJob?.name).toBe('dead-letter');
+      expect(deadLetterJob?.data.requestKind).toBe('event');
+      expect(deadLetterJob?.data.handlerName).toBe('UserCreatedHandler');
+      expect(deadLetterJob?.data.error.name).toBe('Error');
+      expect(deadLetterJob?.data.error.message).toBe(
+        'Downstream email gateway timeout',
+      );
+      expect(deadLetterJob?.data.tenantId).toBe('tenant');
+      expect(typeof deadLetterJob?.data.failedAt).toBe('string');
+    }, 15000);
+
+    it('does not send ignored errors like validation failures to dead-letters queue', async () => {
+      const initialJobs = await deadLetterQueue.getJobs([
+        'waiting',
+        'completed',
+        'active',
+        'delayed',
+      ]);
+      const initialCount = initialJobs.length;
+
+      // Send invalid payload triggering ZodValidationError
+      const res = await request(http)
+        .post('/users')
+        .set('x-tenant-schema', 'tenant')
+        .set('x-test-user', admin)
+        .send({ email: 'not-an-email' });
+
+      expect(res.status).toBe(400);
+
+      // Wait briefly and verify count did not increase
+      await new Promise((r) => setTimeout(r, 200));
+      const currentJobs = await deadLetterQueue.getJobs([
+        'waiting',
+        'completed',
+        'active',
+        'delayed',
+      ]);
+      expect(currentJobs.length).toBe(initialCount);
+    }, 15000);
+  },
+);
+
+describe('a second application in the same process', () => {
+  let ctx: E2EContext;
+
+  beforeAll(async () => {
+    ctx = await bootstrapE2E();
+  });
+
+  afterAll(async () => {
+    await ctx?.close();
+  });
+
+  it("connects its queues to its own Redis, not the first application's", async () => {
+    const queue = ctx.storage.queue('dead-letters');
+
+    const job = await queue.add('probe', { probe: true });
+
+    expect((await queue.getJob(job.id as string))?.data).toEqual({
+      probe: true,
+    });
+  });
+});
