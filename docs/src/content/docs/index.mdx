@@ -1,0 +1,50 @@
+---
+title: ddd-cqrs
+description: Pipeline behaviors and DDD building blocks for TypeScript that need no framework.
+template: splash
+editUrl: false
+hero:
+  tagline: Wrap plain functions and class methods with logging, validation, authorization, caching, idempotency and more, model the domain with aggregates and commands, and run commands, queries and events with the API of NestJS CQRS, all without a framework.
+  actions:
+    - text: Getting started
+      link: /ddd-cqrs/getting-started/
+      icon: right-arrow
+    - text: Overview
+      link: /ddd-cqrs/overview/
+      variant: minimal
+    - text: API reference
+      link: /ddd-cqrs/api/
+      variant: minimal
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## What is here
+
+<CardGrid>
+  <LinkCard
+    title="Getting started"
+    description="Install the engine, create a pipeline and wrap a function."
+    href="/ddd-cqrs/getting-started/"
+  />
+  <LinkCard
+    title="Concepts"
+    description="How an operation is named and kinded, in which order behaviors run, and what the context holds."
+    href="/ddd-cqrs/concepts/wrapping/"
+  />
+  <LinkCard
+    title="CQRS without NestJS"
+    description="Decorated handlers, a pipeline per handler and the buses of createCqrs(), with no container."
+    href="/ddd-cqrs/guides/cqrs/"
+  />
+  <LinkCard
+    title="Guides"
+    description="Plain Node.js, class methods, CQRS, coming from NestJS, DDD, HTTP with Express and Fastify, multi-tenancy, background jobs, testing, custom behaviors and HTTP errors."
+    href="/ddd-cqrs/guides/plain-node/"
+  />
+  <LinkCard
+    title="Packages"
+    description="One page per package: what it does, how to install it and how to configure it."
+    href="/ddd-cqrs/packages/pipeline/"
+  />
+</CardGrid>
