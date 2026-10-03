@@ -1,0 +1,65 @@
+{
+  "name": "@cqrs-ddd/pipeline-zod",
+  "version": "0.5.0",
+  "description": "Zod validation for @cqrs-ddd/pipeline: validates and parses the input of a command, query, event or wrapped function",
+  "author": "Aristotelis",
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aristoteliss/ddd-cqrs.git",
+    "directory": "packages/pipeline-zod"
+  },
+  "homepage": "https://aristoteliss.github.io/ddd-cqrs/packages/pipeline-zod/",
+  "bugs": {
+    "url": "https://github.com/aristoteliss/ddd-cqrs/issues"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./http": {
+      "types": "./dist/http.d.ts",
+      "default": "./dist/http.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "LICENSE",
+    "COMMERCIAL_LICENSE.txt"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "build:watch": "tsc -p tsconfig.build.json --watch",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo",
+    "rebuild": "pnpm run clean && pnpm run build",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "prepublishOnly": "pnpm run rebuild",
+    "test:watch": "vitest"
+  },
+  "peerDependencies": {
+    "@cqrs-ddd/pipeline": "workspace:^",
+    "zod": "^4.3.0"
+  },
+  "devDependencies": {
+    "@cqrs-ddd/pipeline": "workspace:*",
+    "@vitest/coverage-v8": "^5.0.3",
+    "vitest": "^5.0.3",
+    "zod": "^4.6.5"
+  },
+  "dependencies": {
+    "@cqrs-ddd/untyped": "workspace:^"
+  },
+  "keywords": []
+}

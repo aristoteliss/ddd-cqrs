@@ -1,0 +1,159 @@
+/* Copyright (C) 2026-present Aristotelis — see repository license. */
+
+import {
+  IPipelineBehavior,
+  IPipelineContext,
+  NextDelegate,
+  replaceRequest,
+} from '@cqrs-ddd/pipeline';
+import { untyped } from '@cqrs-ddd/untyped';
+import { ZodType } from 'zod';
+import { ZodValidationError } from './errors/zod-validation.error.js';
+import {
+  assertPlainRequestOutput,
+  defineEnumerableDataProperties,
+} from './helpers/request-output.js';
+import {
+  getRawInput,
+  getValidatedData,
+  getValidationState,
+  hasBeenMutated,
+  setValidatedData,
+  ZOD_RAW_INPUT_KEY,
+  ZOD_VALIDATED_DATA_KEY,
+} from './helpers/zod-data.helpers.js';
+
+export {
+  getRawInput,
+  getValidatedData,
+  ZOD_RAW_INPUT_KEY,
+  ZOD_VALIDATED_DATA_KEY,
+};
+
+/**
+ * Conventional property key used to attach a Zod schema to a command, query, or event class.
+ *
+ * Classes built with `createCommand()`, `createQuery()`, or `createZodRequest()` automatically receive this property, so
+ * {@link ZodValidationBehavior} can introspect and validate without extra wiring.
+ *
+ * For manually-written event classes you can attach the schema yourself:
+ *
+ * @example
+ * ```ts
+ * import { ZOD_SCHEMA_KEY } from '@cqrs-ddd/pipeline-zod';
+ * import { z } from 'zod';
+ *
+ * const userCreatedSchema = z.object({
+ *   userId: z.uuid(),
+ *   username: z.string().min(1),
+ *   email: z.email(),
+ * });
+ *
+ * export class UserCreatedEvent {
+ *   static readonly [ZOD_SCHEMA_KEY] = userCreatedSchema;
+ *
+ *   constructor(
+ *     public readonly userId: string,
+ *     public readonly username: string,
+ *     public readonly email: string,
+ *   ) {}
+ * }
+ * ```
+ */
+export const ZOD_SCHEMA_KEY = '_zodSchema' as const;
+
+/** Options of {@link ZodValidationBehavior}. */
+export interface ZodValidationOptions {
+  /**
+   * The schema of the input. Given, the input is parsed into a copy that the handler
+   * receives, so the caller's value never changes; this is how a wrapped function is
+   * validated (its arguments as a `z.tuple` when it takes several). Absent, the schema
+   * attached to the request class applies, in place.
+   */
+  schema?: ZodType;
+}
+
+/**
+ * Pipeline behavior that parses the incoming request (command, query, or event)
+ * with a Zod schema when one is attached to the request class via the `_zodSchema`
+ * static property (set automatically by `createCommand()`, `createQuery()`, or `createZodRequest()`).
+ *
+ * **How it works:**
+ * - If `context.requestType._zodSchema` is a `ZodType`, the behavior runs
+ *   `schema.safeParseAsync(context.request)`.
+ * - On failure it throws {@link ZodValidationError}; `toHttpResponse()` from
+ *   `@cqrs-ddd/pipeline-zod/http` maps it to an HTTP 400.
+ * - On success, the parsed result must be a plain object because pipeline
+ *   request identity is preserved in-place. Keys omitted by the schema are
+ *   deleted and parsed/coerced/defaulted values are assigned before the handler
+ *   runs. A top-level transform to an array, primitive, Date, or other
+ *   non-record shape is rejected rather than corrupting the request instance.
+ * - If no schema is attached (e.g. a plain event class), the behavior is a transparent
+ *   no-op and simply calls `next()`.
+ *
+ * **Registration — globally for all request kinds:**
+ * ```ts
+ * createPipeline({
+ *   globalBehaviors: {
+ *     scope: 'all',
+ *     before: [ZodValidationBehavior],
+ *   },
+ * });
+ * ```
+ *
+ * **Registration — per handler only:**
+ * ```ts
+ * class CreateUserHandler {
+ *   @pipeline.wrap({ kind: 'command' }, ZodValidationBehavior)
+ *   async handle(command: CreateUserCommand) {}
+ * }
+ * ```
+ */
+export class ZodValidationBehavior implements IPipelineBehavior {
+  async handle(
+    context: IPipelineContext,
+    next: NextDelegate,
+  ): Promise<unknown> {
+    const declared = context.getBehaviorOptions<ZodValidationOptions>(
+      ZodValidationBehavior,
+    )?.schema;
+    if (declared) {
+      const parsed = await declared.safeParseAsync(context.request);
+      if (!parsed.success) throw new ZodValidationError(parsed.error);
+      replaceRequest(context, parsed.data);
+      return next();
+    }
+
+    const schema = context.requestType
+      ? (untyped(context.requestType)[ZOD_SCHEMA_KEY] as ZodType | undefined)
+      : undefined;
+
+    if (!schema) return next();
+    if (!context.request || typeof context.request !== 'object') {
+      throw new TypeError(
+        'ZodValidationBehavior requires the pipeline request to be an object when a schema is attached.',
+      );
+    }
+    const request = context.request as Record<string, unknown>;
+    const state = getValidationState(request);
+    if (state?.schema === schema && !hasBeenMutated(request, state.snapshot))
+      return next();
+
+    const result = await schema.safeParseAsync(request);
+    if (!result.success) throw new ZodValidationError(result.error);
+    assertPlainRequestOutput(result.data, 'behavior');
+
+    // A previously parsed request only gives up the fields its schema produced;
+    // an unvalidated one gives up every field the schema does not keep.
+    const removable = state
+      ? Object.keys(state.snapshot)
+      : Object.keys(request);
+    for (const key of removable) {
+      if (!Object.hasOwn(result.data, key)) delete request[key];
+    }
+    defineEnumerableDataProperties(request, result.data);
+    setValidatedData(request, schema, result.data);
+
+    return next();
+  }
+}
