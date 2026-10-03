@@ -1,0 +1,8 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": ["lint/**/*.ts", "ddd/**/*.ts", "vitest.config.ts"]
+}
