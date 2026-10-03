@@ -1,0 +1,142 @@
+/* Copyright (C) 2026-present Aristotelis — see repository license. */
+
+import type { Session } from '@fastify/secure-session';
+import { httpExchangeStore } from '../../common/context/http-exchange.store.js';
+import type {
+  SessionData,
+  SessionPrincipal,
+} from '../../common/types/session-principal.js';
+import type { ISessionCookies } from '../application/ports/session-cookies.port.js';
+import type { AuthResult } from '../application/results/auth.result.js';
+
+export const REFRESH_COOKIE = 'refresh_token';
+
+const REFRESH_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: true,
+  sameSite: 'strict',
+  path: '/auths',
+} as const;
+
+type CookieOptions = typeof REFRESH_COOKIE_OPTIONS & { expires?: Date };
+
+type ClearCookie = (name: string, options: CookieOptions) => unknown;
+
+type CookieResponse =
+  | {
+      setCookie(name: string, value: string, options: CookieOptions): unknown;
+      clearCookie: ClearCookie;
+    }
+  | {
+      cookie(name: string, value: string, options: CookieOptions): unknown;
+      clearCookie: ClearCookie;
+    };
+
+export class SessionService implements ISessionCookies {
+  /**
+   * Writes the cookies of a login or refresh on the current HTTP request, taken
+   * from `httpExchangeStore`; outside an HTTP request it does nothing.
+   *
+   * - A new refresh token goes into the `refresh_token` cookie: `HttpOnly`,
+   *   `Secure`, `SameSite=Strict`, sent only to `/auths`, and expiring with the
+   *   session. Refresh returns the access token only in its body, so
+   *   `SameSite=Strict` is what protects it from CSRF. A grace-window refresh
+   *   carries no new token and leaves the cookie as it is.
+   * - On Fastify, the access token and the principal
+   *   `{ id, type, tenant, sid, expiresAt }` go into the secure-session
+   *   cookie, so the browser authenticates without a Bearer header.
+   *
+   * @param result - Result of login or refresh.
+   *
+   * @example
+   * ```ts
+   * // CreateAuthHandler, through the SESSION_COOKIES port
+   * this.cookies.save(result);
+   * return result;
+   * ```
+   */
+  save(result: AuthResult): void {
+    const exchange = httpExchangeStore.getStore();
+    if (!exchange) return;
+
+    if (result.refreshToken) {
+      const res = exchange.response as CookieResponse;
+      const options = {
+        ...REFRESH_COOKIE_OPTIONS,
+        expires: new Date(result.sessionExpiresAt),
+      };
+      if ('setCookie' in res) {
+        res.setCookie(REFRESH_COOKIE, result.refreshToken, options);
+      } else {
+        res.cookie(REFRESH_COOKIE, result.refreshToken, options);
+      }
+    }
+
+    exchange.session?.set('user', {
+      id: result.userId,
+      type: result.principalType,
+      tenant: result.tenant,
+      sid: result.aggregate.id,
+      expiresAt: result.accessTokenExpiresAt,
+    });
+    exchange.session?.set('token', result.accessToken);
+  }
+
+  /**
+   * Deletes the secure-session cookie and the `refresh_token` cookie of the
+   * current HTTP request, clearing the refresh cookie under the path it was set
+   * with; outside an HTTP request it does nothing.
+   *
+   * @example
+   * ```ts
+   * // RevokeAuthHandler, through the SESSION_COOKIES port
+   * this.cookies.clear();
+   * ```
+   */
+  clear(): void {
+    const exchange = httpExchangeStore.getStore();
+    if (!exchange) return;
+
+    exchange.session?.delete();
+    (exchange.response as CookieResponse).clearCookie(
+      REFRESH_COOKIE,
+      REFRESH_COOKIE_OPTIONS,
+    );
+  }
+
+  /**
+   * Deletes a secure-session cookie that can no longer authenticate. It takes
+   * the session explicitly because principal resolution runs in `authenticate`,
+   * before `httpExchangeStore` is set up.
+   *
+   * @param session - `req.session`; `undefined` on Express.
+   *
+   * @example
+   * ```ts
+   * if (this.sessionService.isExpired(req.session?.user)) {
+   *   this.sessionService.discard(req.session);
+   * }
+   * ```
+   */
+  discard(session: Session<SessionData> | undefined): void {
+    session?.delete();
+  }
+
+  /**
+   * Whether a principal read back from the session cookie can no longer
+   * authenticate: it is missing, or its `expiresAt` is absent or past. A cookie
+   * written without `expiresAt` therefore never authenticates.
+   *
+   * @param user - `req.session?.user`.
+   *
+   * @example
+   * ```ts
+   * if (this.sessionService.isExpired(req.session?.user)) {
+   *   this.sessionService.discard(req.session);
+   * }
+   * ```
+   */
+  isExpired(user: SessionPrincipal | undefined): boolean {
+    return typeof user?.expiresAt !== 'number' || user.expiresAt <= Date.now();
+  }
+}

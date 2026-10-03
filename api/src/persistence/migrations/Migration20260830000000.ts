@@ -1,0 +1,312 @@
+/* Copyright (C) 2026-present Aristotelis — see repository license. */
+
+import { Migration } from '@mikro-orm/migrations';
+import { generateDropSchemaSql, generateSchemaSql } from '../schema-ddl.js';
+
+const SYSTEM_ROLES = {
+  ADMIN: 'admin',
+  USER_MANAGER: 'user-manager',
+  SELF: 'self',
+  VIEWER: 'viewer',
+  SUPPORT_AGENT: 'support-agent',
+} as const;
+
+const IDS = {
+  roles: {
+    admin: '019de10c-b680-7000-8000-000000000001',
+    userManager: '019de10c-b680-7000-8000-000000000002',
+    self: '019de10c-b680-7000-8000-000000000003',
+    viewer: '019de10c-b680-7000-8000-000000000004',
+    supportAgent: '019de10c-b680-7000-8000-000000000005',
+  },
+  users: {
+    aliceAdmin: '019de10c-b680-7000-8000-000000000006',
+    bobManager: '019de10c-b680-7000-8000-000000000007',
+    carolSelf: '019de10c-b680-7000-8000-000000000008',
+    daveViewer: '019de10c-b680-7000-8000-000000000009',
+    eveMultirole: '019de10c-b680-7000-8000-00000000000a',
+    frankSupport: '019de10c-b680-7000-8000-00000000000b',
+    graceLimited: '019de10c-b680-7000-8000-00000000000c',
+    vinceViewer: '019de10c-b680-7000-8000-00000000000d',
+  },
+  capabilities: {
+    allManage: '019de10c-b680-7000-8000-00000000000e',
+    userRead: '019de10c-b680-7000-8000-00000000000f',
+    userCreate: '019de10c-b680-7000-8000-000000000010',
+    userUpdate: '019de10c-b680-7000-8000-000000000011',
+    userDelete: '019de10c-b680-7000-8000-000000000012',
+    departmentManageUsers: '019de10c-b680-7000-8000-000000000013',
+    denyDeleteByManager: '019de10c-b680-7000-8000-000000000014',
+    selfUpdateUsername: '019de10c-b680-7000-8000-000000000015',
+    selfRead: '019de10c-b680-7000-8000-000000000016',
+    viewerReadFields: '019de10c-b680-7000-8000-000000000017',
+    denyDepartmentEmailUpdate: '019de10c-b680-7000-8000-000000000018',
+    supportReadDepartment: '019de10c-b680-7000-8000-000000000019',
+    supportUpdateUsername: '019de10c-b680-7000-8000-00000000001a',
+    denyDeleteBySupport: '019de10c-b680-7000-8000-00000000001b',
+  },
+} as const;
+
+function sqlString(value: string | null): string {
+  return value === null ? 'null' : `'${value.replaceAll("'", "''")}'`;
+}
+
+export class Migration20260830000000 extends Migration {
+  /** The tenant the demo seed names its users and emails after. */
+  protected readonly seedTenant: string = 'tenant';
+
+  /**
+   * This migration, seeding the demo data for `tenant`. The ORM options list it
+   * under this class's name, so the applied history is unchanged.
+   *
+   * @example
+   * ```ts
+   * migrationsList: [
+   *   { name: Migration20260830000000.name, class: Migration20260830000000.seeding('tenant_a') },
+   * ],
+   * ```
+   */
+  static seeding(tenant: string): typeof Migration20260830000000 {
+    return class extends Migration20260830000000 {
+      protected override readonly seedTenant = tenant;
+    };
+  }
+
+  override async up(): Promise<void> {
+    this.createSchema();
+    this.seedDemoData();
+  }
+
+  override async down(): Promise<void> {
+    for (const sql of generateDropSchemaSql()) {
+      this.addSql(sql);
+    }
+  }
+
+  private createSchema(): void {
+    for (const sql of generateSchemaSql()) {
+      this.addSql(sql);
+    }
+  }
+
+  private seedDemoData(): void {
+    const now = Date.now();
+    const tenant = this.tenantToken();
+
+    const roles = [
+      [IDS.roles.admin, SYSTEM_ROLES.ADMIN],
+      [IDS.roles.userManager, SYSTEM_ROLES.USER_MANAGER],
+      [IDS.roles.self, SYSTEM_ROLES.SELF],
+      [IDS.roles.viewer, SYSTEM_ROLES.VIEWER],
+      [IDS.roles.supportAgent, SYSTEM_ROLES.SUPPORT_AGENT],
+    ] as const;
+    for (const [id, name] of roles) {
+      this.addSql(
+        `insert into roles (id, name, created_at, updated_at) values ('${id}', '${name}', ${now}, ${now});`,
+      );
+    }
+
+    const users = [
+      [IDS.users.aliceAdmin, 'alice', 'engineering'],
+      [IDS.users.bobManager, 'bob', 'engineering'],
+      [IDS.users.carolSelf, 'carol', 'marketing'],
+      [IDS.users.daveViewer, 'dave', 'marketing'],
+      [IDS.users.eveMultirole, 'eve', 'support'],
+      [IDS.users.frankSupport, 'frank', 'support'],
+      [IDS.users.graceLimited, 'grace', 'engineering'],
+      [IDS.users.vinceViewer, 'vince', 'marketing'],
+    ] as const;
+    for (const [id, name, department] of users) {
+      this.addSql(
+        `insert into users (id, username, email, department, created_at, updated_at) values (` +
+          `'${id}', '${name}_${tenant}', '${name}+${tenant}@seed.local', '${department}', ${now}, ${now});`,
+      );
+    }
+
+    const capabilities: ReadonlyArray<
+      readonly [
+        string,
+        string,
+        string,
+        string | null,
+        boolean,
+        string | null,
+        string | null,
+      ]
+    > = [
+      [IDS.capabilities.allManage, 'all', 'manage', null, false, null, null],
+      [IDS.capabilities.userRead, 'User', 'read', null, false, null, null],
+      [IDS.capabilities.userCreate, 'User', 'create', null, false, null, null],
+      [IDS.capabilities.userUpdate, 'User', 'update', null, false, null, null],
+      [IDS.capabilities.userDelete, 'User', 'delete', null, false, null, null],
+      [
+        IDS.capabilities.departmentManageUsers,
+        'User',
+        'manage',
+        '{"department":"${user.department}"}',
+        false,
+        null,
+        null,
+      ],
+      [
+        IDS.capabilities.denyDeleteByManager,
+        'User',
+        'delete',
+        null,
+        true,
+        'User managers cannot delete users',
+        null,
+      ],
+      [
+        IDS.capabilities.selfUpdateUsername,
+        'User',
+        'update',
+        '{"id":"${user.id}"}',
+        false,
+        null,
+        'username',
+      ],
+      [
+        IDS.capabilities.selfRead,
+        'User',
+        'read',
+        '{"id":"${user.id}"}',
+        false,
+        null,
+        null,
+      ],
+      [
+        IDS.capabilities.viewerReadFields,
+        'User',
+        'read',
+        null,
+        false,
+        null,
+        'id,username,email',
+      ],
+      [
+        IDS.capabilities.denyDepartmentEmailUpdate,
+        'User',
+        'update',
+        '{"department":"${user.department}"}',
+        true,
+        'Cannot modify email addresses',
+        'email',
+      ],
+      [
+        IDS.capabilities.supportReadDepartment,
+        'User',
+        'read',
+        '{"department":"${user.department}"}',
+        false,
+        null,
+        null,
+      ],
+      [
+        IDS.capabilities.supportUpdateUsername,
+        'User',
+        'update',
+        '{"department":"${user.department}"}',
+        false,
+        null,
+        'username',
+      ],
+      [
+        IDS.capabilities.denyDeleteBySupport,
+        'User',
+        'delete',
+        null,
+        true,
+        'Support agents cannot delete users',
+        null,
+      ],
+    ];
+    for (const [
+      id,
+      subject,
+      action,
+      conditions,
+      inverted,
+      reason,
+      fields,
+    ] of capabilities) {
+      this.addSql(
+        `insert into capabilities (id, action, subject, conditions, inverted, reason, fields, created_at, updated_at) values (` +
+          `'${id}', '${action}', '${subject}', ${sqlString(conditions)}, ${inverted ? 'true' : 'false'}, ${sqlString(reason)}, ${sqlString(fields)}, ${now}, ${now});`,
+      );
+    }
+
+    const roleCapabilities = [
+      [IDS.roles.admin, IDS.capabilities.allManage],
+      [IDS.roles.userManager, IDS.capabilities.departmentManageUsers],
+      [IDS.roles.userManager, IDS.capabilities.denyDeleteByManager],
+      [IDS.roles.userManager, IDS.capabilities.denyDepartmentEmailUpdate],
+      [IDS.roles.self, IDS.capabilities.selfUpdateUsername],
+      [IDS.roles.self, IDS.capabilities.selfRead],
+      [IDS.roles.viewer, IDS.capabilities.viewerReadFields],
+      [IDS.roles.supportAgent, IDS.capabilities.supportReadDepartment],
+      [IDS.roles.supportAgent, IDS.capabilities.supportUpdateUsername],
+      [IDS.roles.supportAgent, IDS.capabilities.denyDeleteBySupport],
+    ] as const;
+    for (const [roleId, capabilityId] of roleCapabilities) {
+      this.addSql(
+        `insert into role_capabilities (role_id, capability_id) values ('${roleId}', '${capabilityId}');`,
+      );
+    }
+
+    const userRoles = [
+      [IDS.users.aliceAdmin, IDS.roles.admin],
+      [IDS.users.bobManager, IDS.roles.userManager],
+      [IDS.users.carolSelf, IDS.roles.self],
+      [IDS.users.daveViewer, IDS.roles.viewer],
+      [IDS.users.eveMultirole, IDS.roles.viewer],
+      [IDS.users.eveMultirole, IDS.roles.self],
+      [IDS.users.frankSupport, IDS.roles.supportAgent],
+      [IDS.users.graceLimited, IDS.roles.userManager],
+      [IDS.users.vinceViewer, IDS.roles.viewer],
+    ] as const;
+    for (const [userId, roleId] of userRoles) {
+      this.addSql(
+        `insert into user_roles (user_id, role_id) values ('${userId}', '${roleId}');`,
+      );
+    }
+
+    this.addSql(
+      `insert into user_additional_capabilities (user_id, capability_id) values (` +
+        `'${IDS.users.vinceViewer}', '${IDS.capabilities.userCreate}');`,
+    );
+    this.addSql(
+      `insert into user_denied_capabilities (user_id, capability_id) values (` +
+        `'${IDS.users.graceLimited}', '${IDS.capabilities.userRead}');`,
+    );
+
+    this.addSql(`insert into user_permission_rules
+      (user_id, position, source, role_id, capability_id, subject, action, conditions, fields, inverted, reason)
+    select user_id,
+           row_number() over (partition by user_id order by grp, role_key, capability_id),
+           source, role_id, capability_id, subject, action, conditions, fields, inverted, reason
+    from (
+      select ur.user_id, 0 as grp, ur.role_id as role_key, 'role' as source, ur.role_id,
+             c.id as capability_id, c.subject, c.action, c.conditions, c.fields, c.inverted, c.reason
+        from user_roles ur
+        join role_capabilities rc on rc.role_id = ur.role_id
+        join capabilities c on c.id = rc.capability_id
+      union all
+      select uac.user_id, 1, '', 'additional', null,
+             c.id, c.subject, c.action, c.conditions, c.fields, c.inverted, c.reason
+        from user_additional_capabilities uac
+        join capabilities c on c.id = uac.capability_id
+      union all
+      select udc.user_id, 2, '', 'denied', null,
+             c.id, c.subject, c.action, c.conditions, c.fields, true, c.reason
+        from user_denied_capabilities udc
+        join capabilities c on c.id = udc.capability_id
+    ) s;`);
+  }
+
+  private tenantToken(): string {
+    const raw = this.seedTenant.trim().toLowerCase();
+    const token = raw.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    return token || 'tenant';
+  }
+}
