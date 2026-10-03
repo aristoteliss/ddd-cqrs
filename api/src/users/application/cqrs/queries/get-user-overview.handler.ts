@@ -1,0 +1,129 @@
+/* Copyright (C) 2026-present Aristotelis — see repository license. */
+
+import type { IQueryRepository } from '@cqrs-ddd/core/application';
+import { type IQueryHandler, QueryHandler, UsePipeline } from '@cqrs-ddd/cqrs';
+import { cache } from '@cqrs-ddd/pipeline-cache';
+import {
+  type Capability,
+  type CapabilityString,
+  CaslAuthorizer,
+  type Projected,
+  requires,
+} from '@cqrs-ddd/pipeline-casl';
+import {
+  APP_ACTIONS,
+  APP_SUBJECTS,
+  userCapabilitiesSubject,
+} from '../../../../common/constants/index.js';
+import { GetRolesQuery } from '../../../../roles/application/cqrs/queries/get-roles.query.js';
+import type { Role } from '../../../../roles/domain/models/role.entity.js';
+import type { User } from '../../../domain/models/user.entity.js';
+import type { UserPermissionAssignments } from '../../permission-assignments.js';
+import { GetUserQuery } from './get-user.query.js';
+import { GetUserCapabilitiesQuery } from './get-user-capabilities.query.js';
+import { GetUserOverviewQuery } from './get-user-overview.query.js';
+import { userOverviewCacheOptions } from './user-overview-cache.policy.js';
+
+export interface UserOverviewDto {
+  id?: string;
+  username?: string;
+  email?: string;
+  department?: string | null;
+  roles?: (string | null)[];
+  capabilities?: (string | null)[];
+}
+
+@QueryHandler(GetUserOverviewQuery)
+@UsePipeline(
+  requires({ action: APP_ACTIONS.READ, subject: APP_SUBJECTS.USER }),
+  cache(userOverviewCacheOptions),
+)
+export class GetUserOverviewHandler
+  implements IQueryHandler<GetUserOverviewQuery, UserOverviewDto | null>
+{
+  constructor(
+    private readonly users: IQueryRepository<GetUserQuery, User | null>,
+    private readonly capabilities: IQueryRepository<
+      GetUserCapabilitiesQuery,
+      UserPermissionAssignments
+    >,
+    private readonly roles: IQueryRepository<GetRolesQuery, Role[]>,
+    private readonly authorizer: CaslAuthorizer,
+  ) {}
+
+  async execute(query: GetUserOverviewQuery): Promise<UserOverviewDto | null> {
+    const user = await this.users.find(
+      new GetUserQuery({ userId: query.userId }, { refresh: true }),
+    );
+    if (!user) return null;
+    this.authorizer.authorize(APP_ACTIONS.READ, user);
+
+    const candidate: UserOverviewDto = {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      department: user.department,
+      ...(await this.readablePermissions(user.id)),
+    };
+
+    return this.authorizer.project('read', user, candidate);
+  }
+
+  private async readablePermissions(
+    userId: string,
+  ): Promise<Pick<UserOverviewDto, 'roles' | 'capabilities'>> {
+    const permissions = userCapabilitiesSubject(userId);
+    if (!this.authorizer.can(APP_ACTIONS.READ, permissions)) return {};
+
+    const assignments = await this.capabilities.find(
+      new GetUserCapabilitiesQuery({ userId }),
+    );
+    const readable = this.authorizer.project(APP_ACTIONS.READ, permissions, {
+      roles: assignments?.roles ?? [],
+      additionalCapabilities: assignments?.additionalCapabilities ?? [],
+    });
+
+    return {
+      ...(readable.roles
+        ? { roles: await this.readableRoleNames(readable.roles) }
+        : {}),
+      ...(readable.additionalCapabilities
+        ? { capabilities: readable.additionalCapabilities.map(capabilityLabel) }
+        : {}),
+    };
+  }
+
+  private async readableRoleNames(
+    names: readonly (string | null | undefined)[],
+  ): Promise<(string | null)[]> {
+    const wanted = names.filter(
+      (name): name is string => typeof name === 'string',
+    );
+    if (wanted.length === 0) return names.map(() => null);
+
+    const loaded = await this.roles.find(new GetRolesQuery({ names: wanted }));
+    const byName = new Map(loaded.map((role) => [role.name, role]));
+
+    return names
+      .map((name) => (typeof name === 'string' ? name : null))
+      .filter((name) => {
+        if (name === null) return true;
+        const role = byName.get(name);
+        return (
+          role !== undefined &&
+          this.authorizer.can(APP_ACTIONS.READ, role) &&
+          this.authorizer.can(APP_ACTIONS.READ, role, 'name')
+        );
+      });
+  }
+}
+
+function capabilityLabel(
+  entry: Projected<Capability | CapabilityString> | null | undefined,
+): string | null {
+  if (entry === null || entry === undefined) return null;
+  if (typeof entry === 'string') return entry;
+  return typeof entry.subject === 'string' && typeof entry.action === 'string'
+    ? `${entry.subject}:${entry.action}`
+    : null;
+}
