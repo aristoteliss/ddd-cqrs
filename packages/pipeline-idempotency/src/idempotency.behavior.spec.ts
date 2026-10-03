@@ -1,0 +1,1040 @@
+/* Copyright (C) 2026-present Aristotelis — see repository license. */
+
+import {
+  type IPipelineBehaviorContract,
+  type IPipelineContext,
+  PIPELINE_BEHAVIOR_CONTRACT,
+} from '@cqrs-ddd/pipeline';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { IdempotencyCompletionError } from './errors/idempotency-completion.error.js';
+import { IdempotencyConflictError } from './errors/idempotency-conflict.error.js';
+import { fingerprintValue } from './helpers/fingerprint.js';
+import {
+  IDEMPOTENCY_KEY_ITEM,
+  IDEMPOTENCY_OWNERSHIP_LOST_ITEM,
+  IDEMPOTENCY_REPLAYED_ITEM,
+  IdempotencyBehavior,
+} from './idempotency.behavior.js';
+import type { IdempotencyBehaviorOptions } from './interfaces/idempotency-options.interface.js';
+import type { IdempotencyRecord } from './interfaces/idempotency-record.interface.js';
+import type { IdempotencyStore } from './interfaces/idempotency-store.interface.js';
+import { MemoryIdempotencyStore } from './stores/memory.store.js';
+
+function makeCtx(overrides: Partial<IPipelineContext> = {}): IPipelineContext {
+  return {
+    correlationId: 'corr-123',
+    request: { orderId: 'o1', amount: 100 },
+    requestType: class CreateOrderCommand {},
+    requestName: 'CreateOrderCommand',
+    handlerType: class CreateOrderHandler {},
+    handlerName: 'CreateOrderHandler',
+    requestKind: 'command',
+    startedAt: new Date('2026-01-01T00:00:00.000Z'),
+    response: undefined,
+    items: new Map(),
+    getBehaviorOptions: vi.fn().mockReturnValue(undefined),
+    ...overrides,
+  } as unknown as IPipelineContext;
+}
+
+function withOptions(
+  ctx: IPipelineContext,
+  options: IdempotencyBehaviorOptions,
+): IPipelineContext {
+  vi.mocked(ctx.getBehaviorOptions).mockReturnValue(
+    options as unknown as ReturnType<IPipelineContext['getBehaviorOptions']>,
+  );
+  return ctx;
+}
+
+const byKey: IdempotencyBehaviorOptions = {
+  keyFactory: (c) => (c.request as { orderId: string }).orderId,
+};
+
+describe('IdempotencyBehavior', () => {
+  let store: MemoryIdempotencyStore;
+
+  beforeEach(() => {
+    store = new MemoryIdempotencyStore();
+  });
+
+  it('runs the handler, stores the response, and returns it on first call', async () => {
+    const behavior = new IdempotencyBehavior(store);
+    const next = vi.fn().mockResolvedValue({ id: 'created' });
+
+    const result = await behavior.handle(withOptions(makeCtx(), byKey), next);
+
+    expect(result).toEqual({ id: 'created' });
+    expect(next).toHaveBeenCalledTimes(1);
+    const record = (await store.get('o1')) as IdempotencyRecord;
+    expect(record.status).toBe('completed');
+    expect(record.response).toEqual({ id: 'created' });
+    expect(record.claimId).toEqual(expect.any(String));
+  });
+
+  it('stores the public toJSON representation of class responses', async () => {
+    class Outcome {
+      constructor(private readonly internalId: string) {}
+
+      toJSON(): { id: string } {
+        return { id: this.internalId };
+      }
+    }
+
+    const behavior = new IdempotencyBehavior(store);
+    await behavior.handle(
+      withOptions(makeCtx(), byKey),
+      vi.fn().mockResolvedValue(new Outcome('created')),
+    );
+
+    const replay = await behavior.handle(
+      withOptions(makeCtx(), byKey),
+      vi.fn().mockResolvedValue({ id: 'SHOULD_NOT_RUN' }),
+    );
+
+    expect(replay).toEqual({ id: 'created' });
+  });
+
+  it.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+    'rejects invalid ttl %s before claiming a key',
+    async (ttl) => {
+      const behavior = new IdempotencyBehavior(store);
+      const next = vi.fn();
+
+      await expect(
+        behavior.handle(withOptions(makeCtx(), { ...byKey, ttl }), next),
+      ).rejects.toThrow('positive safe integer');
+      expect(next).not.toHaveBeenCalled();
+      expect(await store.get('o1')).toBeUndefined();
+    },
+  );
+
+  it('replays the stored response without running the handler on a duplicate', async () => {
+    const behavior = new IdempotencyBehavior(store);
+    const first = vi.fn().mockResolvedValue({ id: 'created' });
+    await behavior.handle(withOptions(makeCtx(), byKey), first);
+
+    const second = vi.fn().mockResolvedValue({ id: 'SHOULD_NOT_RUN' });
+    const ctx = withOptions(makeCtx(), byKey);
+    const result = await behavior.handle(ctx, second);
+
+    expect(result).toEqual({ id: 'created' });
+    expect(second).not.toHaveBeenCalled();
+    expect(ctx.items.get(IDEMPOTENCY_REPLAYED_ITEM)).toBe(true);
+  });
+
+  it('partitions replay records by principal when the key is scoped', async () => {
+    const behavior = new IdempotencyBehavior(store);
+    const options: IdempotencyBehaviorOptions = {
+      keyFactory: (ctx) =>
+        `${ctx.items.get('principalId')}:${(ctx.request as { orderId: string }).orderId}`,
+    };
+    const alice = withOptions(makeCtx(), options);
+    alice.items.set('principalId', 'alice');
+    const bob = withOptions(makeCtx(), options);
+    bob.items.set('principalId', 'bob');
+
+    expect(
+      await behavior.handle(alice, vi.fn().mockResolvedValue('alice-result')),
+    ).toBe('alice-result');
+    expect(
+      await behavior.handle(bob, vi.fn().mockResolvedValue('bob-result')),
+    ).toBe('bob-result');
+  });
+
+  it('stores and replays a JSON snapshot consistently with durable stores', async () => {
+    const behavior = new IdempotencyBehavior(store);
+    const completedAt = new Date('2026-01-01T00:00:00.000Z');
+
+    const first = await behavior.handle(
+      withOptions(makeCtx(), byKey),
+      vi.fn().mockResolvedValue({ completedAt }),
+    );
+    const replay = await behavior.handle(
+      withOptions(makeCtx(), byKey),
+      vi.fn(),
+    );
+
+    expect(first).toEqual({ completedAt });
+    expect(replay).toEqual({ completedAt: completedAt.toISOString() });
+  });
+
+  it('retains the owned claim when a successful response cannot be serialized', async () => {
+    // The handler already succeeded, so its side effects have happened;
+    // deleting the claim would let the very next retry repeat them.
+    const behavior = new IdempotencyBehavior(store);
+
+    const error = await behavior
+      .handle(withOptions(makeCtx(), byKey), vi.fn().mockResolvedValue(123n))
+      .then(() => undefined)
+      .catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(IdempotencyCompletionError);
+    expect(error).toMatchObject({
+      executionSucceeded: true,
+      phase: 'snapshot',
+    });
+    expect((error as IdempotencyCompletionError).cause).toBeInstanceOf(
+      TypeError,
+    );
+
+    const retained = await store.get('o1');
+    expect(retained).toMatchObject({ status: 'in_progress' });
+  });
+
+  it('blocks an immediate retry after an unserializable success', async () => {
+    const behavior = new IdempotencyBehavior(store);
+    const next = vi.fn().mockResolvedValue(123n);
+
+    await expect(
+      behavior.handle(withOptions(makeCtx(), byKey), next),
+    ).rejects.toBeInstanceOf(IdempotencyCompletionError);
+
+    // The retry must not reach the handler again while the claim is live.
+    await expect(
+      behavior.handle(withOptions(makeCtx(), byKey), next),
+    ).rejects.toBeInstanceOf(IdempotencyConflictError);
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['a Map', () => new Map([['id', 1]])],
+    ['a sparse array', () => new Array(1)],
+  ])(
+    'treats %s that native JSON would silently corrupt as a snapshot failure',
+    async (_label, makeResponse) => {
+      const behavior = new IdempotencyBehavior(store);
+
+      const error = await behavior
+        .handle(
+          withOptions(makeCtx(), byKey),
+          vi.fn().mockResolvedValue(makeResponse()),
+        )
+        .then(() => undefined)
+        .catch((thrown: unknown) => thrown);
+
+      expect(error).toMatchObject({ phase: 'snapshot' });
+      expect(await store.get('o1')).toMatchObject({ status: 'in_progress' });
+    },
+  );
+
+  it('rejects reuse of a key by a different request type', async () => {
+    const behavior = new IdempotencyBehavior(store);
+    await behavior.handle(
+      withOptions(makeCtx(), byKey),
+      vi.fn().mockResolvedValue({ id: 'created' }),
+    );
+
+    const refundContext = withOptions(
+      makeCtx({ requestName: 'RefundOrderCommand' }),
+      byKey,
+    );
+    const refund = vi.fn().mockResolvedValue({ id: 'refunded' });
+
+    await expect(behavior.handle(refundContext, refund)).rejects.toMatchObject({
+      statusCode: 422,
+      reason: 'key_reuse',
+    });
+    expect(refund).not.toHaveBeenCalled();
+  });
+
+  it('exposes the active key on the context', async () => {
+    const behavior = new IdempotencyBehavior(store);
+    const ctx = withOptions(makeCtx(), byKey);
+
+    await behavior.handle(ctx, vi.fn().mockResolvedValue('ok'));
+
+    expect(ctx.items.get(IDEMPOTENCY_KEY_ITEM)).toBe('o1');
+  });
+
+  it('rejects a store without completeIfOwned and deleteIfOwned at construction', () => {
+    const incompleteStore = {
+      get: vi.fn(),
+      setIfAbsent: vi.fn(),
+      set: vi.fn(),
+      delete: vi.fn(),
+    } as unknown as IdempotencyStore;
+
+    expect(() => new IdempotencyBehavior(incompleteStore)).toThrow(
+      /missing required methods/,
+    );
+    expect(incompleteStore.setIfAbsent).not.toHaveBeenCalled();
+  });
+
+  it('throws a 409 conflict while a duplicate is still in progress', async () => {
+    const mockStore: IdempotencyStore = {
+      get: vi.fn().mockResolvedValue({
+        key: 'o1',
+        status: 'in_progress',
+        requestName: 'CreateOrderCommand',
+        claimId: 'existing-owner',
+        fingerprint: fingerprintValue({ orderId: 'o1', amount: 100 }),
+        createdAt: new Date().toISOString(),
+      }),
+      setIfAbsent: vi.fn().mockResolvedValue(false),
+      completeIfOwned: vi.fn(),
+      deleteIfOwned: vi.fn(),
+      set: vi.fn(),
+      delete: vi.fn(),
+    };
+    const behavior = new IdempotencyBehavior(mockStore);
+    const next = vi.fn();
+
+    await expect(
+      behavior.handle(withOptions(makeCtx(), byKey), next),
+    ).rejects.toMatchObject({ statusCode: 409, reason: 'in_progress' });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('throws a 422 when an in-progress key has a different payload', async () => {
+    const mockStore: IdempotencyStore = {
+      get: vi.fn().mockResolvedValue({
+        key: 'o1',
+        status: 'in_progress',
+        requestName: 'CreateOrderCommand',
+        claimId: 'existing-owner',
+        fingerprint: fingerprintValue({ orderId: 'o1', amount: 1 }),
+        createdAt: new Date().toISOString(),
+      }),
+      setIfAbsent: vi.fn().mockResolvedValue(false),
+      completeIfOwned: vi.fn(),
+      deleteIfOwned: vi.fn(),
+      set: vi.fn(),
+      delete: vi.fn(),
+    };
+    const behavior = new IdempotencyBehavior(mockStore);
+    const context = makeCtx({ request: { orderId: 'o1', amount: 999 } });
+
+    await expect(
+      behavior.handle(withOptions(context, byKey), vi.fn()),
+    ).rejects.toMatchObject({ statusCode: 422, reason: 'key_reuse' });
+  });
+
+  it('rejects a record without a fingerprint when fingerprinting is enabled', async () => {
+    const mockStore: IdempotencyStore = {
+      get: vi.fn().mockResolvedValue({
+        key: 'o1',
+        status: 'completed',
+        requestName: 'CreateOrderCommand',
+        claimId: 'other-owner',
+        response: 'stored-result',
+        createdAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+      }),
+      setIfAbsent: vi.fn().mockResolvedValue(false),
+      completeIfOwned: vi.fn(),
+      deleteIfOwned: vi.fn(),
+      set: vi.fn(),
+      delete: vi.fn(),
+    };
+
+    await expect(
+      new IdempotencyBehavior(mockStore).handle(
+        withOptions(makeCtx(), byKey),
+        vi.fn(),
+      ),
+    ).rejects.toMatchObject({ statusCode: 422, reason: 'key_reuse' });
+  });
+
+  it('throws a 422 conflict when the key is reused with a different payload', async () => {
+    const behavior = new IdempotencyBehavior(store);
+    await behavior.handle(
+      withOptions(makeCtx(), byKey),
+      vi.fn().mockResolvedValue('first'),
+    );
+
+    const ctx = withOptions(
+      makeCtx({ request: { orderId: 'o1', amount: 999 } }),
+      byKey,
+    );
+
+    await expect(
+      behavior.handle(ctx, vi.fn().mockResolvedValue('second')),
+    ).rejects.toBeInstanceOf(IdempotencyConflictError);
+    await expect(behavior.handle(ctx, vi.fn())).rejects.toMatchObject({
+      statusCode: 422,
+      reason: 'key_reuse',
+    });
+  });
+
+  it('skips fingerprint checks when fingerprinting is disabled', async () => {
+    const behavior = new IdempotencyBehavior(store);
+    const opts: IdempotencyBehaviorOptions = { ...byKey, fingerprint: false };
+    await behavior.handle(
+      withOptions(makeCtx(), opts),
+      vi.fn().mockResolvedValue('first'),
+    );
+
+    const ctx = withOptions(
+      makeCtx({ request: { orderId: 'o1', amount: 999 } }),
+      opts,
+    );
+    const result = await behavior.handle(ctx, vi.fn());
+
+    expect(result).toBe('first');
+    expect(ctx.items.get(IDEMPOTENCY_REPLAYED_ITEM)).toBe(true);
+  });
+
+  it('runs the handler normally when no key is produced', async () => {
+    const behavior = new IdempotencyBehavior(store);
+    const ctx = withOptions(makeCtx(), {
+      keyFactory: () => undefined,
+    });
+    const next = vi.fn().mockResolvedValue('ran');
+
+    const result = await behavior.handle(ctx, next);
+
+    expect(result).toBe('ran');
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(ctx.items.has(IDEMPOTENCY_KEY_ITEM)).toBe(false);
+  });
+
+  it('runs the handler for out-of-scope request kinds', async () => {
+    const behavior = new IdempotencyBehavior(store);
+    const next = vi.fn().mockResolvedValue('query-result');
+    const ctx = withOptions(makeCtx({ requestKind: 'query' }), byKey);
+
+    const result = await behavior.handle(ctx, next);
+
+    expect(result).toBe('query-result');
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  it('releases the key and rethrows when the handler fails (releaseOnError)', async () => {
+    const behavior = new IdempotencyBehavior(store);
+    const boom = new Error('handler failed');
+    const ctx = withOptions(makeCtx(), byKey);
+
+    await expect(
+      behavior.handle(ctx, vi.fn().mockRejectedValue(boom)),
+    ).rejects.toBe(boom);
+
+    expect(await store.get('o1')).toBeUndefined();
+
+    const retry = vi.fn().mockResolvedValue('ok');
+    const result = await behavior.handle(withOptions(makeCtx(), byKey), retry);
+    expect(result).toBe('ok');
+    expect(retry).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the key claimed when releaseOnError is false', async () => {
+    const behavior = new IdempotencyBehavior(store);
+    const ctx = withOptions(makeCtx(), { ...byKey, releaseOnError: false });
+
+    await expect(
+      behavior.handle(ctx, vi.fn().mockRejectedValue(new Error('x'))),
+    ).rejects.toThrow('x');
+
+    const record = await store.get('o1');
+    expect(record?.status).toBe('in_progress');
+  });
+
+  it('does not release a successfully executed key when persisting the completed record fails', async () => {
+    const persistenceError = new Error('store unavailable');
+    const mockStore: IdempotencyStore = {
+      get: vi.fn(),
+      setIfAbsent: vi.fn().mockResolvedValue(true),
+      completeIfOwned: vi.fn().mockRejectedValue(persistenceError),
+      deleteIfOwned: vi.fn(),
+      set: vi.fn(),
+      delete: vi.fn(),
+    };
+    const behavior = new IdempotencyBehavior(mockStore);
+    const next = vi.fn().mockResolvedValue({ id: 'already-created' });
+
+    await expect(
+      behavior.handle(withOptions(makeCtx(), byKey), next),
+    ).rejects.toSatisfy(
+      (err: unknown) =>
+        err instanceof IdempotencyCompletionError &&
+        err.key === 'o1' &&
+        err.executionSucceeded === true &&
+        err.cause === persistenceError,
+    );
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(mockStore.deleteIfOwned).not.toHaveBeenCalled();
+    expect(mockStore.delete).not.toHaveBeenCalled();
+  });
+
+  it('returns the successful result without overwriting a newer claim when ownership is lost', async () => {
+    let claimedRecord: IdempotencyRecord | undefined;
+    const mockStore: IdempotencyStore = {
+      get: vi.fn(),
+      setIfAbsent: vi.fn((_key, record) => {
+        claimedRecord = record;
+        return true;
+      }),
+      completeIfOwned: vi.fn().mockResolvedValue(false),
+      deleteIfOwned: vi.fn(),
+      set: vi.fn(),
+      delete: vi.fn(),
+    };
+    const logger = {
+      log: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+      warn: vi.fn(),
+    };
+    const behavior = new IdempotencyBehavior(mockStore, undefined, logger);
+    const ctx = withOptions(makeCtx(), byKey);
+
+    const result = await behavior.handle(
+      ctx,
+      vi.fn().mockResolvedValue({ id: 'already-created' }),
+    );
+
+    expect(result).toEqual({ id: 'already-created' });
+    expect(claimedRecord?.claimId).toEqual(expect.any(String));
+    expect(mockStore.completeIfOwned).toHaveBeenCalledWith(
+      'o1',
+      claimedRecord?.claimId,
+      expect.objectContaining({
+        status: 'completed',
+        claimId: claimedRecord?.claimId,
+      }),
+      expect.any(Number),
+    );
+    expect(ctx.items.get(IDEMPOTENCY_OWNERSHIP_LOST_ITEM)).toBe(true);
+    expect(logger.error).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the same claim owner when releasing a failed execution', async () => {
+    let claimedRecord: IdempotencyRecord | undefined;
+    const mockStore: IdempotencyStore = {
+      get: vi.fn(),
+      setIfAbsent: vi.fn((_key, record) => {
+        claimedRecord = record;
+        return true;
+      }),
+      completeIfOwned: vi.fn(),
+      deleteIfOwned: vi.fn().mockResolvedValue(false),
+      set: vi.fn(),
+      delete: vi.fn(),
+    };
+    const behavior = new IdempotencyBehavior(mockStore);
+    const boom = new Error('handler failed');
+
+    await expect(
+      behavior.handle(
+        withOptions(makeCtx(), byKey),
+        vi.fn().mockRejectedValue(boom),
+      ),
+    ).rejects.toBe(boom);
+
+    expect(mockStore.deleteIfOwned).toHaveBeenCalledWith(
+      'o1',
+      claimedRecord?.claimId,
+    );
+    expect(mockStore.delete).not.toHaveBeenCalled();
+  });
+
+  it('retries once when a failed claim is followed by no live record', async () => {
+    let retriedClaim: IdempotencyRecord | undefined;
+    const mockStore: IdempotencyStore = {
+      get: vi.fn().mockResolvedValue(undefined),
+      setIfAbsent: vi
+        .fn()
+        .mockResolvedValueOnce(false)
+        .mockImplementationOnce((_key, claim) => {
+          retriedClaim = claim;
+          return true;
+        }),
+      completeIfOwned: vi.fn().mockResolvedValue(true),
+      deleteIfOwned: vi.fn(),
+      set: vi.fn(),
+      delete: vi.fn(),
+    };
+    const behavior = new IdempotencyBehavior(mockStore);
+    const next = vi.fn().mockResolvedValue({ id: 'created-after-expiry' });
+
+    await expect(
+      behavior.handle(withOptions(makeCtx(), byKey), next),
+    ).resolves.toEqual({ id: 'created-after-expiry' });
+
+    expect(mockStore.setIfAbsent).toHaveBeenCalledTimes(2);
+    expect(mockStore.get).toHaveBeenCalledTimes(1);
+    expect(next).toHaveBeenCalledTimes(1);
+    const claimAttempts = vi.mocked(mockStore.setIfAbsent).mock.calls;
+    expect(claimAttempts[0]?.[1].claimId).toBe(claimAttempts[1]?.[1].claimId);
+    expect(mockStore.completeIfOwned).toHaveBeenCalledWith(
+      'o1',
+      retriedClaim?.claimId,
+      expect.objectContaining({ claimId: retriedClaim?.claimId }),
+      expect.any(Number),
+    );
+  });
+
+  it('bounds reclaim attempts when the key remains contended', async () => {
+    const mockStore: IdempotencyStore = {
+      get: vi.fn().mockResolvedValue(undefined),
+      setIfAbsent: vi.fn().mockResolvedValue(false),
+      completeIfOwned: vi.fn(),
+      deleteIfOwned: vi.fn(),
+      set: vi.fn(),
+      delete: vi.fn(),
+    };
+    const behavior = new IdempotencyBehavior(mockStore);
+    const next = vi.fn();
+
+    await expect(
+      behavior.handle(withOptions(makeCtx(), byKey), next),
+    ).rejects.toMatchObject({ statusCode: 409, reason: 'in_progress' });
+
+    expect(mockStore.setIfAbsent).toHaveBeenCalledTimes(2);
+    expect(mockStore.get).toHaveBeenCalledTimes(2);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('does not mutate an injected logger and supplies context per message', async () => {
+    const logger = {
+      log: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+      warn: vi.fn(),
+      setContext: vi.fn(),
+    };
+    const mockStore: IdempotencyStore = {
+      get: vi.fn().mockResolvedValue({
+        key: 'o1',
+        status: 'completed',
+        requestName: 'CreateOrderCommand',
+        claimId: 'existing-owner',
+        fingerprint: 'matching-fingerprint',
+        response: 'replayed',
+        createdAt: new Date().toISOString(),
+      }),
+      setIfAbsent: vi.fn().mockResolvedValue(false),
+      completeIfOwned: vi.fn(),
+      deleteIfOwned: vi.fn(),
+      set: vi.fn(),
+      delete: vi.fn(),
+    };
+    const behavior = new IdempotencyBehavior(mockStore, undefined, logger);
+    const ctx = withOptions(makeCtx(), { ...byKey, fingerprint: false });
+
+    await expect(behavior.handle(ctx, vi.fn())).resolves.toBe('replayed');
+
+    expect(logger.setContext).not.toHaveBeenCalled();
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.stringContaining('Replaying idempotent response'),
+      IdempotencyBehavior.name,
+    );
+  });
+
+  it('prints its context once through the default Nest logger', async () => {
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
+    try {
+      const mockStore: IdempotencyStore = {
+        get: vi.fn().mockResolvedValue({
+          key: 'o1',
+          status: 'completed',
+          requestName: 'CreateOrderCommand',
+          claimId: 'existing-owner',
+          fingerprint: 'matching-fingerprint',
+          response: 'replayed',
+          createdAt: new Date().toISOString(),
+        }),
+        setIfAbsent: vi.fn().mockResolvedValue(false),
+        completeIfOwned: vi.fn(),
+        deleteIfOwned: vi.fn(),
+        set: vi.fn(),
+        delete: vi.fn(),
+      };
+      const behavior = new IdempotencyBehavior(mockStore);
+      const ctx = withOptions(makeCtx(), { ...byKey, fingerprint: false });
+
+      await expect(behavior.handle(ctx, vi.fn())).resolves.toBe('replayed');
+
+      expect(debug).toHaveBeenCalledWith(
+        expect.stringContaining('Replaying idempotent response'),
+        IdempotencyBehavior.name,
+      );
+    } finally {
+      debug.mockRestore();
+    }
+  });
+
+  it('merges module defaults under per-handler options', async () => {
+    const behavior = new IdempotencyBehavior(store, { scope: ['event'] });
+    const next = vi.fn().mockResolvedValue('ran');
+    const ctx = withOptions(makeCtx(), byKey);
+
+    const result = await behavior.handle(ctx, next);
+
+    expect(result).toBe('ran');
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(ctx.items.has(IDEMPOTENCY_KEY_ITEM)).toBe(false);
+  });
+
+  describe('replay scope', () => {
+    const scoped = (scope: string | undefined): IdempotencyBehaviorOptions => ({
+      ...byKey,
+      replayScopeFactory: () => scope,
+    });
+
+    it('captures the scope on the claim and on the completed record', async () => {
+      const behavior = new IdempotencyBehavior(store);
+
+      await behavior.handle(
+        withOptions(makeCtx(), scoped('scope-a')),
+        vi.fn().mockResolvedValue({ id: 'created' }),
+      );
+
+      const record = (await store.get('o1')) as IdempotencyRecord;
+      expect(record.status).toBe('completed');
+      expect(record.replayScope).toBe('scope-a');
+    });
+
+    it('replays to a caller whose scope still matches', async () => {
+      const behavior = new IdempotencyBehavior(store);
+      const next = vi.fn().mockResolvedValue({ id: 'created' });
+
+      await behavior.handle(withOptions(makeCtx(), scoped('scope-a')), next);
+      const replayed = await behavior.handle(
+        withOptions(makeCtx(), scoped('scope-a')),
+        next,
+      );
+
+      expect(replayed).toEqual({ id: 'created' });
+      expect(next).toHaveBeenCalledTimes(1);
+    });
+
+    it('refuses to replay to a caller whose permissions changed, without re-running the handler', async () => {
+      const behavior = new IdempotencyBehavior(store);
+      const next = vi.fn().mockResolvedValue({ id: 'created' });
+
+      await behavior.handle(withOptions(makeCtx(), scoped('scope-a')), next);
+
+      const ctx = withOptions(makeCtx(), scoped('scope-b'));
+      await expect(behavior.handle(ctx, next)).rejects.toMatchObject({
+        reason: 'replay_scope',
+        statusCode: 409,
+      });
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(ctx.items.has(IDEMPOTENCY_REPLAYED_ITEM)).toBe(false);
+    });
+
+    it('keeps the stored record so the operation cannot execute a second time', async () => {
+      const behavior = new IdempotencyBehavior(store);
+      const next = vi.fn().mockResolvedValue({ id: 'created' });
+
+      await behavior.handle(withOptions(makeCtx(), scoped('scope-a')), next);
+      await expect(
+        behavior.handle(withOptions(makeCtx(), scoped('scope-b')), next),
+      ).rejects.toThrow(IdempotencyConflictError);
+
+      const record = (await store.get('o1')) as IdempotencyRecord;
+      expect(record.status).toBe('completed');
+      expect(record.replayScope).toBe('scope-a');
+    });
+
+    it('refuses a record stored without a scope once a scope is required', async () => {
+      const behavior = new IdempotencyBehavior(store);
+      const next = vi.fn().mockResolvedValue({ id: 'created' });
+
+      await behavior.handle(withOptions(makeCtx(), byKey), next);
+      expect(
+        ((await store.get('o1')) as IdempotencyRecord).replayScope,
+      ).toBeUndefined();
+
+      await expect(
+        behavior.handle(withOptions(makeCtx(), scoped('scope-a')), next),
+      ).rejects.toMatchObject({ reason: 'replay_scope' });
+      expect(next).toHaveBeenCalledTimes(1);
+    });
+
+    it('treats a caller with no resolvable scope as unable to replay a scoped record', async () => {
+      const behavior = new IdempotencyBehavior(store);
+      const next = vi.fn().mockResolvedValue({ id: 'created' });
+
+      await behavior.handle(withOptions(makeCtx(), scoped('scope-a')), next);
+
+      await expect(
+        behavior.handle(withOptions(makeCtx(), scoped(undefined)), next),
+      ).rejects.toMatchObject({ reason: 'replay_scope' });
+    });
+
+    it('does not claim the key when the scope factory rejects the request', async () => {
+      const behavior = new IdempotencyBehavior(store);
+      const next = vi.fn();
+
+      await expect(
+        behavior.handle(
+          withOptions(makeCtx(), {
+            ...byKey,
+            replayScopeFactory: () => {
+              throw new Error('missing ability');
+            },
+          }),
+          next,
+        ),
+      ).rejects.toThrow('missing ability');
+
+      expect(next).not.toHaveBeenCalled();
+      expect(await store.get('o1')).toBeUndefined();
+    });
+
+    it('leaves payload fingerprinting as an independent check', async () => {
+      const behavior = new IdempotencyBehavior(store);
+      const next = vi.fn().mockResolvedValue({ id: 'created' });
+
+      await behavior.handle(withOptions(makeCtx(), scoped('scope-a')), next);
+
+      const changedPayload = makeCtx({
+        request: { orderId: 'o1', amount: 999 },
+      });
+      await expect(
+        behavior.handle(withOptions(changedPayload, scoped('scope-a')), next),
+      ).rejects.toMatchObject({ reason: 'key_reuse' });
+    });
+
+    it('ignores scope entirely when no factory is configured', async () => {
+      const behavior = new IdempotencyBehavior(store);
+      const next = vi.fn().mockResolvedValue({ id: 'created' });
+
+      await behavior.handle(withOptions(makeCtx(), byKey), next);
+      const replayed = await behavior.handle(
+        withOptions(makeCtx(), byKey),
+        next,
+      );
+
+      expect(replayed).toEqual({ id: 'created' });
+      expect(next).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('PIPELINE_BEHAVIOR_CONTRACT', () => {
+    const contract = (
+      IdempotencyBehavior as unknown as Record<
+        symbol,
+        IPipelineBehaviorContract
+      >
+    )[PIPELINE_BEHAVIOR_CONTRACT];
+
+    it('declares ordering after CaslBehavior for scoped requests', () => {
+      const order =
+        typeof contract?.order === 'function'
+          ? contract.order({
+              handlerType: class CreateOrderHandler {},
+              handlerName: 'CreateOrderHandler',
+              requestKind: 'command',
+              declarationSource: 'handler',
+              effectiveOptions: {},
+              handlerOptions: {},
+              globalOptions: undefined,
+              effectiveBehaviorTypes: [IdempotencyBehavior],
+            })
+          : contract?.order;
+      expect(order?.after).toContain('CaslBehavior');
+    });
+
+    it('skips ordering constraint when request kind is out of scope', () => {
+      const order =
+        typeof contract?.order === 'function'
+          ? contract.order({
+              handlerType: class GetOrderHandler {},
+              handlerName: 'GetOrderHandler',
+              requestKind: 'query',
+              declarationSource: 'handler',
+              effectiveOptions: {},
+              handlerOptions: {},
+              globalOptions: undefined,
+              effectiveBehaviorTypes: [IdempotencyBehavior],
+            })
+          : contract?.order;
+      expect(order).toBeUndefined();
+    });
+
+    it('returns diagnostic when handler declares intent without keyFactory for command', () => {
+      const diagnostics = contract?.validate?.({
+        handlerType: class CreateOrderHandler {},
+        handlerName: 'CreateOrderHandler',
+        requestKind: 'command',
+        declarationSource: 'handler',
+        effectiveOptions: {},
+        handlerOptions: {},
+        globalOptions: undefined,
+        effectiveBehaviorTypes: [IdempotencyBehavior],
+      });
+
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics?.[0].behaviorName).toBe('IdempotencyBehavior');
+      expect(diagnostics?.[0].message).toContain('explicit `keyFactory`');
+      expect(diagnostics?.[0].fix).toContain('Provide keyFactory');
+    });
+
+    it('does not return diagnostic when keyFactory is provided', () => {
+      const diagnostics = contract?.validate?.({
+        handlerType: class CreateOrderHandler {},
+        handlerName: 'CreateOrderHandler',
+        requestKind: 'command',
+        declarationSource: 'handler',
+        effectiveOptions: { keyFactory: () => 'order-1' },
+        handlerOptions: { keyFactory: () => 'order-1' },
+        globalOptions: undefined,
+        effectiveBehaviorTypes: [IdempotencyBehavior],
+      });
+
+      expect(diagnostics).toBeUndefined();
+    });
+
+    it('does not return diagnostic when request kind is outside of configured scope', () => {
+      const diagnostics = contract?.validate?.({
+        handlerType: class GetOrderHandler {},
+        handlerName: 'GetOrderHandler',
+        requestKind: 'query',
+        declarationSource: 'handler',
+        effectiveOptions: { scope: ['command'] },
+        handlerOptions: { scope: ['command'] },
+        globalOptions: undefined,
+        effectiveBehaviorTypes: [IdempotencyBehavior],
+      });
+
+      expect(diagnostics).toBeUndefined();
+    });
+
+    it('allows passive pass-through when declarationSource is global', () => {
+      const diagnostics = contract?.validate?.({
+        handlerType: class CreateOrderHandler {},
+        handlerName: 'CreateOrderHandler',
+        requestKind: 'command',
+        declarationSource: 'global',
+        effectiveOptions: {},
+        handlerOptions: undefined,
+        globalOptions: {},
+        effectiveBehaviorTypes: [IdempotencyBehavior],
+      });
+
+      expect(diagnostics).toBeUndefined();
+    });
+
+    it('returns diagnostic when keyFactory is not a callable function', () => {
+      const diagnostics = contract?.validate?.({
+        handlerType: class CreateOrderHandler {},
+        handlerName: 'CreateOrderHandler',
+        requestKind: 'command',
+        declarationSource: 'handler',
+        effectiveOptions: { keyFactory: 'invalid' as never },
+        handlerOptions: { keyFactory: 'invalid' as never },
+        globalOptions: undefined,
+        effectiveBehaviorTypes: [IdempotencyBehavior],
+      });
+
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics?.[0].message).toContain('must be a callable function');
+    });
+  });
+
+  it('replays response when a second failed claim reveals a completed record', async () => {
+    const ctx = makeCtx();
+    const mockStore: IdempotencyStore = {
+      get: vi
+        .fn()
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce({
+          key: 'o1',
+          status: 'completed',
+          requestName: 'CreateOrderCommand',
+          claimId: 'other-claim',
+          fingerprint: fingerprintValue(ctx.request),
+          response: { id: 'order-123' },
+          createdAt: new Date().toISOString(),
+          completedAt: new Date().toISOString(),
+        }),
+      setIfAbsent: vi.fn().mockResolvedValue(false),
+      completeIfOwned: vi.fn(),
+      deleteIfOwned: vi.fn(),
+      set: vi.fn(),
+      delete: vi.fn(),
+    };
+    const behavior = new IdempotencyBehavior(mockStore);
+    const next = vi.fn();
+
+    const result = await behavior.handle(withOptions(ctx, byKey), next);
+    expect(result).toEqual({ id: 'order-123' });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('logs warning and does not suppress original error when release cleanup fails', async () => {
+    const logger = {
+      error: vi.fn(),
+      warn: vi.fn(),
+      log: vi.fn(),
+      debug: vi.fn(),
+    };
+    const mockStore: IdempotencyStore = {
+      get: vi.fn(),
+      setIfAbsent: vi.fn().mockResolvedValue(true),
+      completeIfOwned: vi.fn(),
+      deleteIfOwned: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('store connection failed'))
+        .mockRejectedValueOnce('store string error'),
+      set: vi.fn(),
+      delete: vi.fn(),
+    };
+    const behavior = new IdempotencyBehavior(mockStore, {}, logger);
+    const boom = new Error('original handler error');
+
+    await expect(
+      behavior.handle(
+        withOptions(makeCtx(), byKey),
+        vi.fn().mockRejectedValue(boom),
+      ),
+    ).rejects.toBe(boom);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('store connection failed'),
+      IdempotencyBehavior.name,
+    );
+
+    await expect(
+      behavior.handle(
+        withOptions(makeCtx(), byKey),
+        vi.fn().mockRejectedValue(boom),
+      ),
+    ).rejects.toBe(boom);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('store string error'),
+      IdempotencyBehavior.name,
+    );
+  });
+
+  it('handles undefined options in resolveEffectiveOptions', () => {
+    const behavior = new IdempotencyBehavior(store, { ttl: 5000 });
+    expect(behavior.resolveEffectiveOptions(undefined)).toEqual({ ttl: 5000 });
+    expect(behavior.resolveEffectiveOptions()).toEqual({ ttl: 5000 });
+  });
+
+  it('handles non-Error thrown during store completion', async () => {
+    const logger = {
+      error: vi.fn(),
+      warn: vi.fn(),
+      log: vi.fn(),
+      debug: vi.fn(),
+    };
+    const mockStore: IdempotencyStore = {
+      get: vi.fn(),
+      setIfAbsent: vi.fn().mockResolvedValue(true),
+      completeIfOwned: vi
+        .fn()
+        .mockRejectedValueOnce('raw string completion error'),
+      deleteIfOwned: vi.fn(),
+      set: vi.fn(),
+      delete: vi.fn(),
+    };
+    const behavior = new IdempotencyBehavior(mockStore, {}, logger);
+
+    await expect(
+      behavior.handle(
+        withOptions(makeCtx(), byKey),
+        vi.fn().mockResolvedValue({ ok: true }),
+      ),
+    ).rejects.toBeInstanceOf(IdempotencyCompletionError);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('Idempotency completion persistence failed'),
+      undefined,
+      IdempotencyBehavior.name,
+    );
+  });
+});

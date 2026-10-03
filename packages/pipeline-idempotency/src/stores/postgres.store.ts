@@ -1,0 +1,270 @@
+/* Copyright (C) 2026-present Aristotelis — see repository license. */
+
+import type {
+  IdempotencyRecord,
+  JsonValue,
+} from '../interfaces/idempotency-record.interface.js';
+import type { IdempotencyStore } from '../interfaces/idempotency-store.interface.js';
+
+/** A single returned row, keyed by column name. */
+export interface PostgresRowLike {
+  [column: string]: unknown;
+}
+
+/** Minimal structural shape of a `pg` query result. */
+export interface PostgresQueryResultLike {
+  rows: PostgresRowLike[];
+  rowCount?: number | null;
+}
+
+/**
+ * Minimal structural shape of a `pg` `Pool` / `Client`. Declared locally so this
+ * package does not hard-depend on `pg` — a real `Pool` or `Client` satisfies it.
+ * Add it in your app: `pnpm add pg`.
+ */
+export interface PostgresQueryableLike {
+  query(text: string, values?: unknown[]): Promise<PostgresQueryResultLike>;
+}
+
+/** Options for {@link PostgresIdempotencyStore}. */
+export interface PostgresIdempotencyStoreOptions {
+  /**
+   * Destination table, optionally schema-qualified (e.g. `app.idempotency_keys`).
+   * Default `'idempotency_keys'`. Validated as a safe SQL identifier.
+   */
+  table?: string;
+}
+
+/** Allows `table` or `schema.table` made of unquoted SQL identifiers only. */
+const SAFE_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$/;
+
+function assertSafeTable(table: string): string {
+  if (!SAFE_IDENTIFIER.test(table)) {
+    throw new Error(
+      `Invalid idempotency table name "${table}". ` +
+        'Use an unquoted identifier like "idempotency_keys" or "schema.idempotency_keys".',
+    );
+  }
+  return table;
+}
+
+/**
+ * SQL that creates the idempotency table and its `expires_at` index. Run it
+ * from an application migration, not at request time.
+ *
+ * `response` holds the response as JSON text rather than `jsonb`: `jsonb`
+ * rejects the `\u0000` and unpaired-surrogate escapes `JSON.stringify` writes,
+ * and a completed response must always be storable and replay exactly.
+ *
+ * @param table - Table name (validated). Default `'idempotency_keys'`.
+ * @returns SQL statements required by {@link PostgresIdempotencyStore}.
+ */
+export function createIdempotencyTableSql(table = 'idempotency_keys'): string {
+  const name = assertSafeTable(table);
+  return `CREATE TABLE IF NOT EXISTS ${name} (
+  key           TEXT        PRIMARY KEY,
+  status        TEXT        NOT NULL,
+  request_name  TEXT        NOT NULL,
+  claim_id      TEXT,
+  fingerprint   TEXT,
+  replay_scope  TEXT,
+  response      TEXT,
+  created_at    TIMESTAMPTZ NOT NULL,
+  completed_at  TIMESTAMPTZ,
+  expires_at    TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ${indexName(name)} ON ${name} (expires_at);`;
+}
+
+/** Derives a safe index name from a (possibly schema-qualified) table name. */
+function indexName(table: string): string {
+  const base = table.includes('.') ? (table.split('.').pop() as string) : table;
+  return `${base}_expires_at_idx`;
+}
+
+function toIso(value: unknown): string {
+  return value instanceof Date ? value.toISOString() : String(value);
+}
+
+function mapRow(key: string, row: PostgresRowLike): IdempotencyRecord {
+  return {
+    key,
+    status: row.status as IdempotencyRecord['status'],
+    requestName: row.request_name as string,
+    claimId: (row.claim_id as string | null) ?? undefined,
+    fingerprint: (row.fingerprint as string | null) ?? undefined,
+    replayScope: (row.replay_scope as string | null) ?? undefined,
+    // SQL NULL: no response stored. The text 'null' is an explicit null response.
+    response: row.has_response
+      ? (JSON.parse(row.response as string) as JsonValue)
+      : undefined,
+    createdAt: toIso(row.created_at),
+    completedAt: row.completed_at ? toIso(row.completed_at) : undefined,
+  };
+}
+
+/**
+ * Validates a lease TTL before it is interpolated into a PostgreSQL interval.
+ *
+ * Lease expiry is computed and compared using the database clock. The returned
+ * string is safe to concatenate only because the input is first constrained to a
+ * positive safe integer.
+ */
+function assertLeaseTtl(ttlMs: number): string {
+  if (!Number.isSafeInteger(ttlMs) || ttlMs <= 0) {
+    throw new TypeError(
+      `Idempotency lease TTL must be a positive safe integer in milliseconds, received ${ttlMs}.`,
+    );
+  }
+  return String(ttlMs);
+}
+
+/**
+ * {@link IdempotencyStore} backed by **Postgres** (`pg`) — a drop-in
+ * replacement that shares state across instances without a separate Redis.
+ *
+ * Create the table once with {@link createIdempotencyTableSql}. Atomicity of
+ * {@link setIfAbsent} comes from a conditional `INSERT … ON CONFLICT … DO
+ * UPDATE`: an absent key is inserted, an expired key is atomically replaced,
+ * and a live conflict is left untouched. Completion/release also compare
+ * `claim_id` in the same SQL statement, so a stale execution cannot mutate a
+ * newer claim. The table name is validated as a plain SQL identifier (it is
+ * interpolated, not parameterized); all values are passed as bound parameters.
+ *
+ * @example
+ * ```ts
+ * import { Pool } from 'pg';
+ * const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+ * await pool.query(createIdempotencyTableSql());
+ * const store = new PostgresIdempotencyStore(pool);
+ * ```
+ */
+export class PostgresIdempotencyStore implements IdempotencyStore {
+  private readonly table: string;
+
+  constructor(
+    private readonly db: PostgresQueryableLike,
+    options: PostgresIdempotencyStoreOptions = {},
+  ) {
+    this.table = assertSafeTable(options.table ?? 'idempotency_keys');
+  }
+
+  async get(key: string): Promise<IdempotencyRecord | undefined> {
+    const result = await this.db.query(
+      `SELECT status, request_name, claim_id, fingerprint, replay_scope, response,
+              response IS NOT NULL AS has_response,
+              created_at, completed_at
+         FROM ${this.table}
+        WHERE key = $1 AND expires_at > now()`,
+      [key],
+    );
+    const row = result.rows[0];
+    return row ? mapRow(key, row) : undefined;
+  }
+
+  async setIfAbsent(
+    key: string,
+    record: IdempotencyRecord,
+    ttlMs: number,
+  ): Promise<boolean> {
+    const result = await this.db.query(
+      `INSERT INTO ${this.table} AS current_record
+         (key, status, request_name, claim_id, fingerprint, replay_scope, response, created_at, completed_at, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now() + ($10 || ' milliseconds')::interval)
+       ON CONFLICT (key) DO UPDATE SET
+         status = EXCLUDED.status,
+         request_name = EXCLUDED.request_name,
+         claim_id = EXCLUDED.claim_id,
+         fingerprint = EXCLUDED.fingerprint,
+         replay_scope = EXCLUDED.replay_scope,
+         response = EXCLUDED.response,
+         created_at = EXCLUDED.created_at,
+         completed_at = EXCLUDED.completed_at,
+         expires_at = EXCLUDED.expires_at
+       WHERE current_record.expires_at <= now()
+       RETURNING key`,
+      [key, ...this.toValues(record, ttlMs)],
+    );
+    return result.rows.length > 0;
+  }
+
+  async completeIfOwned(
+    key: string,
+    claimId: string,
+    record: IdempotencyRecord,
+    ttlMs: number,
+  ): Promise<boolean> {
+    const result = await this.db.query(
+      `UPDATE ${this.table}
+          SET status = $3,
+              request_name = $4,
+              claim_id = $5,
+              fingerprint = $6,
+              replay_scope = $7,
+              response = $8,
+              created_at = $9,
+              completed_at = $10,
+              expires_at = now() + ($11 || ' milliseconds')::interval
+        WHERE key = $1
+          AND claim_id = $2
+          AND status = 'in_progress'
+          AND expires_at > now()
+        RETURNING key`,
+      [key, claimId, ...this.toValues(record, ttlMs)],
+    );
+    return result.rows.length > 0;
+  }
+
+  async deleteIfOwned(key: string, claimId: string): Promise<boolean> {
+    const result = await this.db.query(
+      `DELETE FROM ${this.table}
+        WHERE key = $1
+          AND claim_id = $2
+          AND expires_at > now()
+        RETURNING key`,
+      [key, claimId],
+    );
+    return result.rows.length > 0;
+  }
+
+  async set(
+    key: string,
+    record: IdempotencyRecord,
+    ttlMs: number,
+  ): Promise<void> {
+    await this.db.query(
+      `INSERT INTO ${this.table}
+         (key, status, request_name, claim_id, fingerprint, replay_scope, response, created_at, completed_at, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now() + ($10 || ' milliseconds')::interval)
+       ON CONFLICT (key) DO UPDATE SET
+         status = EXCLUDED.status,
+         request_name = EXCLUDED.request_name,
+         claim_id = EXCLUDED.claim_id,
+         fingerprint = EXCLUDED.fingerprint,
+         replay_scope = EXCLUDED.replay_scope,
+         response = EXCLUDED.response,
+         created_at = EXCLUDED.created_at,
+         completed_at = EXCLUDED.completed_at,
+         expires_at = EXCLUDED.expires_at`,
+      [key, ...this.toValues(record, ttlMs)],
+    );
+  }
+
+  async delete(key: string): Promise<void> {
+    await this.db.query(`DELETE FROM ${this.table} WHERE key = $1`, [key]);
+  }
+
+  private toValues(record: IdempotencyRecord, ttlMs: number): unknown[] {
+    return [
+      record.status,
+      record.requestName,
+      record.claimId ?? null,
+      record.fingerprint ?? null,
+      record.replayScope ?? null,
+      record.response === undefined ? null : JSON.stringify(record.response),
+      record.createdAt,
+      record.completedAt ?? null,
+      assertLeaseTtl(ttlMs),
+    ];
+  }
+}

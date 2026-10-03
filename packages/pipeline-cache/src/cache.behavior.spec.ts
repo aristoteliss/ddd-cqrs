@@ -1,0 +1,701 @@
+/* Copyright (C) 2026-present Aristotelis — see repository license. */
+
+import {
+  type IPipelineContext,
+  PIPELINE_BEHAVIOR_CONTRACT,
+} from '@cqrs-ddd/pipeline';
+import { type Cache, createCache } from 'cache-manager';
+import { Keyv } from 'keyv';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { CacheManagerAdapter } from './adapters/cache-manager.adapter.js';
+import {
+  CACHE_HIT_ITEM,
+  CACHE_KEY_ITEM,
+  CacheBehavior,
+} from './cache.behavior.js';
+import { createPartitionedCacheKeyFactory } from './helpers/cache-key.js';
+import type { CacheBehaviorOptions } from './interfaces/cache-options.interface.js';
+
+/**
+ * `CacheBehavior` has no default key. These tests exercise caching mechanics,
+ * so they key by principal, request type and payload; the contexts carry no
+ * tenant and no authorization scope.
+ */
+const TEST_KEY = createPartitionedCacheKeyFactory({
+  principal: (ctx) => (ctx.items.get('userId') as string | undefined) ?? 'u-1',
+  requireTenant: false,
+  requireScope: false,
+});
+
+function makeCtx(
+  options?: CacheBehaviorOptions,
+  overrides: Partial<IPipelineContext> = {},
+): IPipelineContext {
+  return {
+    correlationId: 'test-corr-id',
+    request: { id: 1 },
+    requestType: class TestRequest {},
+    requestName: 'GetUserQuery',
+    handlerType: overrides.handlerType ?? class TestHandler {},
+    handlerName: 'GetUserHandler',
+    requestKind: 'query',
+    startedAt: new Date('2026-01-01T00:00:00.000Z'),
+    response: undefined,
+    items: new Map(),
+    getBehaviorOptions: vi.fn().mockReturnValue({
+      key: TEST_KEY,
+      ...options,
+    }),
+    ...overrides,
+  } as unknown as IPipelineContext;
+}
+
+function makeCache(): Cache {
+  return createCache({ stores: [new Keyv()] });
+}
+
+describe('CacheBehavior', () => {
+  let cache: Cache;
+  let behavior: CacheBehavior;
+
+  beforeEach(() => {
+    cache = makeCache();
+    behavior = new CacheBehavior(cache);
+  });
+
+  it('does not mutate a shared logger and supplies its context per call', async () => {
+    const logger = { debug: vi.fn(), setContext: vi.fn() };
+    const sharedLoggerBehavior = new CacheBehavior(
+      cache,
+      undefined,
+      logger as never,
+    );
+
+    await sharedLoggerBehavior.handle(
+      makeCtx(),
+      vi.fn().mockResolvedValue('value'),
+    );
+
+    expect(logger.setContext).not.toHaveBeenCalled();
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.stringContaining('Cache miss'),
+      CacheBehavior.name,
+    );
+  });
+
+  it('prints its context once through the default Nest logger', async () => {
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
+    try {
+      await behavior.handle(makeCtx(), vi.fn().mockResolvedValue('value'));
+
+      expect(debug).toHaveBeenCalledWith(
+        expect.stringContaining('Cache miss'),
+        CacheBehavior.name,
+      );
+    } finally {
+      debug.mockRestore();
+    }
+  });
+
+  it('caches the result on a miss and serves it on the next hit', async () => {
+    const next = vi.fn().mockResolvedValue({ name: 'Ada' });
+
+    const first = await behavior.handle(makeCtx(), next);
+    const second = await behavior.handle(makeCtx(), next);
+
+    expect(first).toEqual({ name: 'Ada' });
+    expect(second).toEqual({ name: 'Ada' });
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns the same JSON form on the miss that stored it and on the hit', async () => {
+    class UserView {
+      constructor(
+        readonly name: string,
+        readonly createdAt: Date,
+      ) {}
+    }
+    const next = vi.fn().mockResolvedValue(new UserView('Ada', new Date(0)));
+
+    const miss = await behavior.handle(makeCtx(), next);
+    const hit = await behavior.handle(makeCtx(), next);
+
+    const expected = { name: 'Ada', createdAt: '1970-01-01T00:00:00.000Z' };
+    expect(miss).toStrictEqual(expected);
+    expect(hit).toStrictEqual(expected);
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns a result without a JSON form unchanged and does not cache it', async () => {
+    const logger = { debug: vi.fn(), warn: vi.fn() };
+    const cacheBehavior = new CacheBehavior(cache, undefined, logger as never);
+    const result = { count: 10n };
+    const next = vi.fn().mockResolvedValue(result);
+
+    await expect(cacheBehavior.handle(makeCtx(), next)).resolves.toBe(result);
+    await cacheBehavior.handle(makeCtx(), next);
+
+    expect(next).toHaveBeenCalledTimes(2);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('not JSON-serializable'),
+      CacheBehavior.name,
+    );
+  });
+
+  it('does not cache a result that JSON serializes to nothing', async () => {
+    const logger = { debug: vi.fn(), warn: vi.fn() };
+    const cacheBehavior = new CacheBehavior(cache, undefined, logger as never);
+    const result = () => 'computed';
+    const next = vi.fn().mockResolvedValue(result);
+
+    await expect(cacheBehavior.handle(makeCtx(), next)).resolves.toBe(result);
+    await cacheBehavior.handle(makeCtx(), next);
+
+    expect(next).toHaveBeenCalledTimes(2);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('not JSON-serializable'),
+      CacheBehavior.name,
+    );
+  });
+
+  it('returns JSON data after a failed cache read without attempting a write', async () => {
+    const set = vi.fn();
+    const cacheBehavior = new CacheBehavior({
+      get: vi.fn().mockRejectedValue(new Error('cache unavailable')),
+      set,
+    } as unknown as Cache);
+    const next = vi.fn().mockResolvedValue({ createdAt: new Date(0) });
+
+    await expect(cacheBehavior.handle(makeCtx(), next)).resolves.toStrictEqual({
+      createdAt: '1970-01-01T00:00:00.000Z',
+    });
+    expect(next).toHaveBeenCalledOnce();
+    expect(set).not.toHaveBeenCalled();
+  });
+
+  it('preserves an uncacheable result when diagnostic logging throws', async () => {
+    const logger = {
+      debug: vi.fn(() => {
+        throw new Error('logger unavailable');
+      }),
+      warn: vi.fn(() => {
+        throw new Error('logger unavailable');
+      }),
+    };
+    const cacheBehavior = new CacheBehavior(cache, undefined, logger as never);
+    const result = { count: 10n };
+    const next = vi.fn().mockResolvedValue(result);
+
+    await expect(cacheBehavior.handle(makeCtx(), next)).resolves.toBe(result);
+    expect(next).toHaveBeenCalledOnce();
+    expect(logger.warn).toHaveBeenCalledOnce();
+  });
+
+  it.each([true, false])(
+    'preserves the failure policy when the cache error logger throws (failOpen: %s)',
+    async (failOpen) => {
+      const storeError = new Error('cache unavailable');
+      const logger = {
+        warn: vi.fn(() => {
+          throw new Error('logger unavailable');
+        }),
+        error: vi.fn(() => {
+          throw new Error('logger unavailable');
+        }),
+      };
+      const cacheBehavior = new CacheBehavior(
+        {
+          get: vi.fn().mockRejectedValue(storeError),
+          set: vi.fn(),
+        } as unknown as Cache,
+        undefined,
+        logger as never,
+      );
+      const next = vi.fn().mockResolvedValue('result');
+      const outcome = cacheBehavior.handle(makeCtx({ failOpen }), next);
+
+      if (failOpen) {
+        await expect(outcome).resolves.toBe('result');
+        expect(next).toHaveBeenCalledOnce();
+      } else {
+        await expect(outcome).rejects.toBe(storeError);
+        expect(next).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it('fails open on a cache read error by default', async () => {
+    const storeError = new Error('redis unavailable');
+    const get = vi.fn().mockRejectedValue(storeError);
+    const set = vi.fn();
+    const logger = { warn: vi.fn(), error: vi.fn() };
+    const cacheBehavior = new CacheBehavior(
+      { get, set } as unknown as Cache,
+      undefined,
+      logger as never,
+    );
+    const context = makeCtx();
+    const next = vi.fn().mockResolvedValue('database result');
+
+    await expect(cacheBehavior.handle(context, next)).resolves.toBe(
+      'database result',
+    );
+    expect(context.items.get(CACHE_HIT_ITEM)).toBe(false);
+    expect(next).toHaveBeenCalledOnce();
+    expect(set).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Cache read error'),
+      CacheBehavior.name,
+    );
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('fails open on a cache write error by default', async () => {
+    const storeError = new Error('redis unavailable');
+    const logger = { warn: vi.fn(), error: vi.fn() };
+    const cacheBehavior = new CacheBehavior(
+      {
+        get: vi.fn().mockResolvedValue(undefined),
+        set: vi.fn().mockRejectedValue(storeError),
+      } as unknown as Cache,
+      undefined,
+      logger as never,
+    );
+    const next = vi.fn().mockResolvedValue('database result');
+
+    await expect(cacheBehavior.handle(makeCtx(), next)).resolves.toBe(
+      'database result',
+    );
+    expect(next).toHaveBeenCalledOnce();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Cache write error'),
+      CacheBehavior.name,
+    );
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('fails closed on a cache read error when configured', async () => {
+    const storeError = new Error('redis unavailable');
+    const logger = { warn: vi.fn(), error: vi.fn() };
+    const cacheBehavior = new CacheBehavior(
+      { get: vi.fn().mockRejectedValue(storeError) } as unknown as Cache,
+      undefined,
+      logger as never,
+    );
+    const next = vi.fn();
+
+    await expect(
+      cacheBehavior.handle(makeCtx({ failOpen: false }), next),
+    ).rejects.toBe(storeError);
+    expect(next).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('Cache read error'),
+      CacheBehavior.name,
+    );
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('fails closed after a cache write error when configured', async () => {
+    const storeError = new Error('redis unavailable');
+    const logger = { warn: vi.fn(), error: vi.fn() };
+    const cacheBehavior = new CacheBehavior(
+      {
+        get: vi.fn().mockResolvedValue(undefined),
+        set: vi.fn().mockRejectedValue(storeError),
+      } as unknown as Cache,
+      undefined,
+      logger as never,
+    );
+    const next = vi.fn().mockResolvedValue('database result');
+
+    await expect(
+      cacheBehavior.handle(makeCtx({ failOpen: false }), next),
+    ).rejects.toBe(storeError);
+    expect(next).toHaveBeenCalledOnce();
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('Cache write error'),
+      CacheBehavior.name,
+    );
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('never treats a downstream handler error as a cache-store error', async () => {
+    const handlerError = new Error('database failed');
+    const logger = { warn: vi.fn(), error: vi.fn() };
+    const cacheBehavior = new CacheBehavior(
+      {
+        get: vi.fn().mockResolvedValue(undefined),
+        set: vi.fn(),
+      } as unknown as Cache,
+      undefined,
+      logger as never,
+    );
+
+    await expect(
+      cacheBehavior.handle(makeCtx(), vi.fn().mockRejectedValue(handlerError)),
+    ).rejects.toBe(handlerError);
+    expect(logger.warn).not.toHaveBeenCalled();
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('fails closed on read error when backed by real cache-manager with failOpen: false', async () => {
+    const storeError = new Error('store read failed');
+    const store = {
+      get: vi.fn().mockRejectedValue(storeError),
+      set: vi.fn(),
+      delete: vi.fn(),
+      clear: vi.fn(),
+    };
+    const keyv = new Keyv({ store, throwOnErrors: true });
+    const realCache = createCache({ stores: [keyv] });
+    const cacheBehavior = new CacheBehavior(realCache);
+    const next = vi.fn().mockResolvedValue('value');
+
+    await expect(
+      cacheBehavior.handle(makeCtx({ failOpen: false }), next),
+    ).rejects.toThrow('store read failed');
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('fails open on read error when backed by real cache-manager with default options', async () => {
+    const storeError = new Error('store read failed');
+    const store = {
+      get: vi.fn().mockRejectedValue(storeError),
+      set: vi.fn(),
+      delete: vi.fn(),
+      clear: vi.fn(),
+    };
+    const keyv = new Keyv({ store, throwOnErrors: true });
+    const realCache = createCache({ stores: [keyv] });
+    const cacheBehavior = new CacheBehavior(realCache);
+    const next = vi.fn().mockResolvedValue('fallback value');
+
+    await expect(cacheBehavior.handle(makeCtx(), next)).resolves.toBe(
+      'fallback value',
+    );
+    expect(next).toHaveBeenCalledOnce();
+  });
+
+  it('records hit / miss and the resolved key on the context items', async () => {
+    const next = vi.fn().mockResolvedValue('value');
+
+    const missCtx = makeCtx();
+    await behavior.handle(missCtx, next);
+    expect(missCtx.items.get(CACHE_HIT_ITEM)).toBe(false);
+    expect(missCtx.items.get(CACHE_KEY_ITEM)).toBe(TEST_KEY(missCtx));
+
+    const hitCtx = makeCtx();
+    await behavior.handle(hitCtx, next);
+    expect(hitCtx.items.get(CACHE_HIT_ITEM)).toBe(true);
+  });
+
+  it('returns the value from the confirmed lookup without re-entering downstream behaviors', async () => {
+    const next = vi.fn().mockResolvedValue('fresh');
+    const cacheWithWrap = {
+      get: vi.fn().mockResolvedValue('stale'),
+      wrap: vi.fn(),
+    } as unknown as Cache;
+    const cacheBehavior = new CacheBehavior(cacheWithWrap);
+
+    const result = await cacheBehavior.handle(makeCtx({ ttl: 500 }), next);
+
+    expect(result).toBe('stale');
+    expect(next).not.toHaveBeenCalled();
+    expect(cacheWithWrap.wrap).not.toHaveBeenCalled();
+  });
+
+  it('passes through non-query requests by default', async () => {
+    const next = vi.fn().mockResolvedValue('value');
+
+    await behavior.handle(makeCtx(undefined, { requestKind: 'command' }), next);
+    await behavior.handle(makeCtx(undefined, { requestKind: 'command' }), next);
+
+    expect(next).toHaveBeenCalledTimes(2);
+  });
+
+  it('honors a custom kinds list', async () => {
+    const next = vi.fn().mockResolvedValue('value');
+    const options: CacheBehaviorOptions = { kinds: ['command'] };
+
+    await behavior.handle(makeCtx(options, { requestKind: 'command' }), next);
+    await behavior.handle(makeCtx(options, { requestKind: 'command' }), next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses a custom key factory', async () => {
+    const next = vi.fn().mockResolvedValue('value');
+    const options: CacheBehaviorOptions = { key: () => 'fixed-key' };
+
+    const ctx = makeCtx(options);
+    await behavior.handle(ctx, next);
+
+    expect(ctx.items.get(CACHE_KEY_ITEM)).toBe('fixed-key');
+    expect(await cache.get('fixed-key')).toBe('value');
+  });
+
+  it('partitions handler-authorized results by principal when the key is scoped', async () => {
+    const options: CacheBehaviorOptions = {
+      key: (ctx) => `${ctx.items.get('principalId')}:${ctx.requestName}:1`,
+    };
+    const alice = makeCtx(options);
+    alice.items.set('principalId', 'alice');
+    const bob = makeCtx(options);
+    bob.items.set('principalId', 'bob');
+    const next = vi
+      .fn()
+      .mockResolvedValueOnce({ email: 'alice@example.test' })
+      .mockResolvedValueOnce({ email: 'bob@example.test' });
+
+    expect(await behavior.handle(alice, next)).toEqual({
+      email: 'alice@example.test',
+    });
+    expect(await behavior.handle(bob, next)).toEqual({
+      email: 'bob@example.test',
+    });
+    expect(next).toHaveBeenCalledTimes(2);
+  });
+
+  it('skips caching when the condition returns false', async () => {
+    const next = vi.fn().mockResolvedValue('value');
+    const options: CacheBehaviorOptions = { condition: () => false };
+
+    await behavior.handle(makeCtx(options), next);
+    await behavior.handle(makeCtx(options), next);
+
+    expect(next).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not cache null or undefined results', async () => {
+    const next = vi.fn().mockResolvedValue(null);
+
+    await behavior.handle(makeCtx(), next);
+    await behavior.handle(makeCtx(), next);
+
+    expect(next).toHaveBeenCalledTimes(2);
+  });
+
+  it('respects a short ttl and re-invokes after expiry', async () => {
+    vi.useFakeTimers();
+    const next = vi.fn().mockResolvedValue('value');
+    const options: CacheBehaviorOptions = { ttl: 50 };
+
+    await behavior.handle(makeCtx(options), next);
+    vi.advanceTimersByTime(100);
+    await behavior.handle(makeCtx(options), next);
+
+    expect(next).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
+  it('produces a stable key regardless of property order', async () => {
+    const next = vi.fn().mockResolvedValue('value');
+
+    const ctxA = makeCtx(undefined, { request: { a: 1, b: 2 } });
+    const ctxB = makeCtx(undefined, { request: { b: 2, a: 1 } });
+
+    await behavior.handle(ctxA, next);
+    await behavior.handle(ctxB, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(ctxA.items.get(CACHE_KEY_ITEM)).toBe(ctxB.items.get(CACHE_KEY_ITEM));
+  });
+
+  it('merges module defaults under per-handler options', async () => {
+    const next = vi.fn().mockResolvedValue('value');
+    const withDefaults = new CacheBehavior(cache, { kinds: ['command'] });
+
+    await withDefaults.handle(
+      makeCtx(undefined, { requestKind: 'query' }),
+      next,
+    );
+    await withDefaults.handle(
+      makeCtx(undefined, { requestKind: 'query' }),
+      next,
+    );
+
+    expect(next).toHaveBeenCalledTimes(2);
+  });
+
+  it('accepts an already constructed CacheManagerAdapter instance', async () => {
+    const adapter = new CacheManagerAdapter({
+      get: vi.fn().mockResolvedValue('adapter-val'),
+      set: vi.fn(),
+    } as unknown as Cache);
+    const customBehavior = new CacheBehavior(adapter);
+    const next = vi.fn();
+    const res = await customBehavior.handle(makeCtx(), next);
+    expect(res).toBe('adapter-val');
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('handles non-Error store failure (string error) when failing open and failing closed', async () => {
+    const logger = { warn: vi.fn(), error: vi.fn() };
+    const customBehavior = new CacheBehavior(
+      {
+        get: vi.fn().mockRejectedValue('redis string failure'),
+      } as unknown as Cache,
+      undefined,
+      logger as never,
+    );
+    const next = vi.fn().mockResolvedValue('fresh');
+
+    const res = await customBehavior.handle(makeCtx({ failOpen: true }), next);
+    expect(res).toBe('fresh');
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('failing open: redis string failure'),
+      CacheBehavior.name,
+    );
+
+    await expect(
+      customBehavior.handle(makeCtx({ failOpen: false }), next),
+    ).rejects.toBe('redis string failure');
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('failing closed: redis string failure'),
+      CacheBehavior.name,
+    );
+  });
+
+  describe('PIPELINE_BEHAVIOR_CONTRACT', () => {
+    const contract = CacheBehavior[PIPELINE_BEHAVIOR_CONTRACT];
+
+    it('declares order constraint after CaslBehavior for queries', () => {
+      const order =
+        typeof contract?.order === 'function'
+          ? contract.order({
+              handlerType: class GetUsersHandler {},
+              handlerName: 'GetUsersHandler',
+              requestKind: 'query',
+              declarationSource: 'handler',
+              effectiveOptions: {},
+              handlerOptions: {},
+              globalOptions: undefined,
+              effectiveBehaviorTypes: [CacheBehavior],
+            })
+          : contract?.order;
+      expect(order?.after).toContain('CaslBehavior');
+    });
+
+    it('skips order constraint for non-cached request kinds', () => {
+      const order =
+        typeof contract?.order === 'function'
+          ? contract.order({
+              handlerType: class CreateUserHandler {},
+              handlerName: 'CreateUserHandler',
+              requestKind: 'command',
+              declarationSource: 'handler',
+              effectiveOptions: {},
+              handlerOptions: {},
+              globalOptions: undefined,
+              effectiveBehaviorTypes: [CacheBehavior],
+            })
+          : contract?.order;
+      expect(order).toBeUndefined();
+    });
+
+    it('returns diagnostic when explicit handler declaration lacks key factory for query', () => {
+      const diagnostics = contract?.validate?.({
+        handlerType: class GetUsersHandler {},
+        handlerName: 'GetUsersHandler',
+        requestKind: 'query',
+        declarationSource: 'handler',
+        effectiveOptions: {},
+        handlerOptions: {},
+        globalOptions: undefined,
+        effectiveBehaviorTypes: [CacheBehavior],
+      });
+
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics?.[0].behaviorName).toBe('CacheBehavior');
+      expect(diagnostics?.[0].message).toContain('explicit `key` factory');
+      expect(diagnostics?.[0].fix).toBe(
+        'Provide a key factory via createPartitionedCacheKeyFactory(...) in ' +
+          'the cache({ key }) entry or the CacheBehavior constructor defaults.',
+      );
+    });
+
+    it('names only functions this package exports in the missing-key fix', async () => {
+      const exported = await import('./index.js');
+      const diagnostics = contract?.validate?.({
+        handlerType: class GetUsersHandler {},
+        handlerName: 'GetUsersHandler',
+        requestKind: 'query',
+        declarationSource: 'handler',
+        effectiveOptions: {},
+        handlerOptions: {},
+        globalOptions: undefined,
+        effectiveBehaviorTypes: [CacheBehavior],
+      });
+
+      const named = [
+        ...(diagnostics?.[0].fix ?? '').matchAll(/([A-Za-z]\w*)\(\.\.\.\)/g),
+      ].map(([, name]) => name);
+      expect(named).toEqual(['createPartitionedCacheKeyFactory']);
+      for (const name of named) {
+        expect(exported).toHaveProperty(name);
+      }
+    });
+
+    it('does not return diagnostic when key factory is provided', () => {
+      const diagnostics = contract?.validate?.({
+        handlerType: class GetUsersHandler {},
+        handlerName: 'GetUsersHandler',
+        requestKind: 'query',
+        declarationSource: 'handler',
+        effectiveOptions: { key: () => 'valid-key' },
+        handlerOptions: { key: () => 'valid-key' },
+        globalOptions: undefined,
+        effectiveBehaviorTypes: [CacheBehavior],
+      });
+
+      expect(diagnostics).toBeUndefined();
+    });
+
+    it('does not return diagnostic for non-query request kinds by default', () => {
+      const diagnostics = contract?.validate?.({
+        handlerType: class CreateUserHandler {},
+        handlerName: 'CreateUserHandler',
+        requestKind: 'command',
+        declarationSource: 'handler',
+        effectiveOptions: {},
+        handlerOptions: {},
+        globalOptions: undefined,
+        effectiveBehaviorTypes: [CacheBehavior],
+      });
+
+      expect(diagnostics).toBeUndefined();
+    });
+
+    it('returns diagnostic when declarationSource is global for an active query without key', () => {
+      const diagnostics = contract?.validate?.({
+        handlerType: class GetUsersHandler {},
+        handlerName: 'GetUsersHandler',
+        requestKind: 'query',
+        declarationSource: 'global',
+        effectiveOptions: {},
+        handlerOptions: undefined,
+        globalOptions: {},
+        effectiveBehaviorTypes: [CacheBehavior],
+      });
+
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics?.[0].message).toContain('explicit `key` factory');
+    });
+
+    it('returns diagnostic when key is not a callable function', () => {
+      const diagnostics = contract?.validate?.({
+        handlerType: class GetUsersHandler {},
+        handlerName: 'GetUsersHandler',
+        requestKind: 'query',
+        declarationSource: 'handler',
+        effectiveOptions: { key: 'invalid-string' as never },
+        handlerOptions: { key: 'invalid-string' as never },
+        globalOptions: undefined,
+        effectiveBehaviorTypes: [CacheBehavior],
+      });
+
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics?.[0].message).toContain('must be a callable function');
+    });
+  });
+});

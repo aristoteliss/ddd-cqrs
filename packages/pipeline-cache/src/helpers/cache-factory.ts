@@ -1,0 +1,180 @@
+/* Copyright (C) 2026-present Aristotelis — see repository license. */
+
+import { createRequire } from 'node:module';
+import { type Cache, createCache } from 'cache-manager';
+import { Keyv, type KeyvStoreAdapter } from 'keyv';
+import type {
+  BuildCacheOptions,
+  CacheStoreConfig,
+  CacheStoreType,
+} from '../interfaces/cache-options.interface.js';
+
+type AdapterConstructor = new (...args: unknown[]) => KeyvStoreAdapter;
+
+const load = createRequire(import.meta.url);
+
+/** Maps declarative store types to their optional `@keyv/*` adapter package. */
+const ADAPTER_PACKAGES: Record<Exclude<CacheStoreType, 'memory'>, string> = {
+  redis: '@keyv/redis',
+  memcache: '@keyv/memcache',
+  sqlite: '@keyv/sqlite',
+  postgres: '@keyv/postgres',
+};
+
+/**
+ * Whether the requested adapter package itself could not be resolved.
+ *
+ * Only a resolution failure *for that exact package* counts. A `MODULE_NOT_FOUND`
+ * naming some other module means the adapter is installed but one of its own
+ * dependencies is not, and a native binding failure means it is installed but
+ * did not build.
+ */
+function isRequestedModuleMissing(error: unknown, pkg: string): boolean {
+  if (!(error instanceof Error)) return false;
+  if ((error as Error & { code?: unknown }).code !== 'MODULE_NOT_FOUND') {
+    return false;
+  }
+  return (
+    error.message.includes(`Cannot find module '${pkg}'`) ||
+    error.message.includes(`Cannot find module "${pkg}"`)
+  );
+}
+
+/** Whether the adapter is present but its native binary is missing or unusable. */
+function isNativeBindingFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return (
+    error.message.includes('bindings file') ||
+    error.message.includes(
+      'was compiled against a different Node.js version',
+    ) ||
+    error.message.includes('invalid ELF header')
+  );
+}
+
+/**
+ * Lazily resolve an optional `@keyv/*` adapter. The adapters are declared as
+ * optional peer dependencies, so they are only required when the matching store
+ * type is actually requested.
+ *
+ * Each failure keeps its own diagnosis, and every wrapper preserves `cause`:
+ *
+ * - the package cannot be resolved  → install it;
+ * - the package loaded but its native binary did not → rebuild it;
+ * - anything else → rethrown untouched, so the real root cause survives.
+ */
+function requireAdapter(pkg: string): AdapterConstructor {
+  let mod: { default?: AdapterConstructor } | AdapterConstructor;
+  try {
+    mod = load(pkg) as { default?: AdapterConstructor } | AdapterConstructor;
+  } catch (error) {
+    if (isRequestedModuleMissing(error, pkg)) {
+      throw new Error(
+        `[pipeline-cache] The optional '${pkg}' package is required for this store type. Install it with: pnpm add ${pkg}`,
+        { cause: error },
+      );
+    }
+
+    if (isNativeBindingFailure(error)) {
+      throw new Error(
+        `[pipeline-cache] '${pkg}' is installed but its native binding could not be loaded. ` +
+          `Rebuild it for this Node.js version (for example: pnpm rebuild ${pkg}); reinstalling the package alone will not help.`,
+        { cause: error },
+      );
+    }
+
+    // An installed adapter that failed for any other reason — a missing
+    // transitive dependency, a broken export, an initialization error. Its own
+    // message is the accurate one.
+    throw error;
+  }
+  return (
+    (mod as { default?: AdapterConstructor }).default ??
+    (mod as AdapterConstructor)
+  );
+}
+
+/** Construct the backing `Keyv` store adapter for a declarative config. */
+function createAdapterStore(config: CacheStoreConfig): KeyvStoreAdapter {
+  const { type, url, options } = config;
+  const Adapter = requireAdapter(
+    ADAPTER_PACKAGES[type as Exclude<CacheStoreType, 'memory'>],
+  );
+
+  if (type === 'postgres') {
+    return new Adapter({ uri: url, ...options });
+  }
+
+  return new Adapter(url, options);
+}
+
+/**
+ * Build a single package-owned `Keyv` instance from a declarative store
+ * configuration. Package-owned stores enable `throwOnErrors` so
+ * {@link CacheBehavior} can apply its own `failOpen` / fail-closed policy rather
+ * than having Keyv silently consume backend failures first.
+ */
+export function buildKeyv(config: CacheStoreConfig): Keyv {
+  if (config.type === 'memory') {
+    return new Keyv({
+      namespace: config.namespace,
+      ttl: config.ttl,
+      throwOnErrors: true,
+    });
+  }
+
+  return new Keyv({
+    store: createAdapterStore(config),
+    namespace: config.namespace,
+    ttl: config.ttl,
+    throwOnErrors: true,
+  });
+}
+
+/**
+ * Resolve the {@link BuildCacheOptions} into a ready-to-use `cache-manager`
+ * {@link Cache}. A pre-built `cache` wins, followed by pre-built `stores`,
+ * followed by declarative `store` configuration, falling back to an in-memory
+ * store when nothing is provided.
+ *
+ * Package-created stores use `throwOnErrors: true` so cache failures reach
+ * `CacheBehavior` and its configured failure policy. Caller-owned `cache` and
+ * `stores` are **not mutated**: if an application intentionally shares a Keyv
+ * instance with another subsystem, this package must not change that object's
+ * error semantics globally.
+ *
+ * @example Fully package-owned Redis cache
+ * ```ts
+ * const cache = buildCache({ store: { type: 'redis', url: redisUrl } });
+ * ```
+ *
+ * @example Caller-owned shared store — configuration remains caller-controlled
+ * ```ts
+ * const shared = new Keyv({ store: sharedRedis, throwOnErrors: false });
+ * const cache = buildCache({ stores: [shared] });
+ * // buildCache() will not mutate shared.throwOnErrors.
+ * ```
+ */
+export function buildCache(options: BuildCacheOptions): Cache {
+  if (options.cache) {
+    return options.cache;
+  }
+
+  let stores: Keyv[];
+  if (options.stores && options.stores.length > 0) {
+    stores = options.stores;
+  } else if (options.store) {
+    const configs = Array.isArray(options.store)
+      ? options.store
+      : [options.store];
+    stores = configs.map(buildKeyv);
+  } else {
+    stores = [new Keyv({ throwOnErrors: true })];
+  }
+
+  return createCache({
+    stores,
+    ttl: options.ttl,
+    nonBlocking: options.nonBlocking,
+  });
+}

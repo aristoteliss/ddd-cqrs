@@ -1,0 +1,110 @@
+/* Copyright (C) 2026-present Aristotelis — see repository license. */
+
+import type { IPipelineContext } from '@cqrs-ddd/pipeline';
+import type { IdempotencyRequestKind } from './idempotency-record.interface.js';
+
+/**
+ * Derives the digest of the authorization scope a request runs under.
+ *
+ * Returned value is compared, not interpreted: any deterministic string works,
+ * and it should cover every dimension whose change must stop a stored response
+ * from being replayed — the effective permission rules and the trusted context
+ * their conditions resolve against.
+ *
+ * Throw when the required context is missing rather than returning a placeholder;
+ * the behavior calls this **before** claiming the key, so a throw prevents the
+ * operation from being claimed at all. Returning `undefined` means "this request
+ * has no scope", which cannot be replayed against a record that has one.
+ */
+export type IdempotencyReplayScopeFactory = (
+  context: IPipelineContext,
+) => string | undefined;
+
+/**
+ * Derives the idempotency key for a request from the pipeline context. A common
+ * HTTP pattern is to copy the `Idempotency-Key` header into the CQRS command at
+ * the controller boundary and read it from `context.request`. An upstream
+ * behavior may alternatively place application metadata in `context.items`.
+ * Return `undefined` to skip deduplication for this request.
+ */
+export type IdempotencyKeyFactory = (
+  context: IPipelineContext,
+) => string | undefined;
+
+/**
+ * Per-handler idempotency options, shallow-merged over the constructor defaults.
+ *
+ * @example Tenant/principal-scoped command idempotency
+ * ```ts
+ * // Fails closed when the tenant or principal is missing and escapes every
+ * // segment; never build a key with a template string.
+ * const createOrderKey = createPartitionedIdempotencyKeyFactory({
+ *   action: 'order.create',
+ *   principal: (ctx) => ['user', ctx.items.get(CURRENT_USER_ID) as string],
+ *   operation: (ctx) => (ctx.request as CreateOrderCommand).idempotencyKey,
+ * });
+ *
+ * class CreateOrderHandler {
+ *   @pipeline.wrap({ kind: 'command' }, [IdempotencyBehavior, {
+ *     keyFactory: createOrderKey,
+ *     ttl: 24 * 60 * 60 * 1000,
+ *   }])
+ *   async handle(command: CreateOrderCommand) {}
+ * }
+ * ```
+ */
+export interface IdempotencyBehaviorOptions {
+  /**
+   * Derives the idempotency key from the request/context. **Required** for the
+   * behavior to do anything — without a key (or when it returns `undefined`)
+   * the handler runs normally. Include tenant/principal ownership whenever a
+   * replay would otherwise bypass handler-level authorization.
+   */
+  keyFactory?: IdempotencyKeyFactory;
+
+  /**
+   * How long a key is remembered, in milliseconds. After this window the key
+   * may be reused and a fresh execution occurs. Successful completion restarts
+   * the TTL for the replay record. Must be a positive safe integer. Default
+   * `86_400_000` (24h).
+   */
+  ttl?: number;
+
+  /**
+   * Which request kinds this policy applies to. Default `['command']` — queries
+   * are naturally idempotent and usually want `@cqrs-ddd/pipeline-cache`
+   * instead.
+   */
+  scope?: IdempotencyRequestKind[];
+
+  /**
+   * Hash the request payload and reject a later call that reuses the same key
+   * with a *different* body (`422`). Default `true`. Disable if your key already
+   * fully identifies the payload.
+   */
+  fingerprint?: boolean;
+
+  /**
+   * Binds replay to the caller's authorization scope while keeping the operation
+   * key stable.
+   *
+   * The digest is captured when the key is claimed and stored on the record. A
+   * later duplicate may only replay the stored response when its digest matches;
+   * a mismatch, or a record stored without one, raises
+   * `IdempotencyConflictError` with reason `replay_scope` (`409`). The record is
+   * neither deleted nor re-executed, so a permission change can never cause the
+   * side effect to run twice.
+   *
+   * Configure it for any operation whose response or effect depends on the
+   * caller's permissions. Without it, replay is bound only by the key and the
+   * payload fingerprint.
+   */
+  replayScopeFactory?: IdempotencyReplayScopeFactory;
+
+  /**
+   * When the handler throws, release the key so the client can safely retry
+   * (`true`, default). Set `false` to keep the key claimed and surface a
+   * conflict on retry (favors strict at-most-once over retryability).
+   */
+  releaseOnError?: boolean;
+}

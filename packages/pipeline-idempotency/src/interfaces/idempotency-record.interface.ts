@@ -1,0 +1,60 @@
+/* Copyright (C) 2026-present Aristotelis — see repository license. */
+
+/** Pipeline request kinds an idempotency policy can apply to. */
+export type IdempotencyRequestKind = 'command' | 'query' | 'event' | 'unknown';
+
+/** Lifecycle state of an idempotency key. */
+export type IdempotencyStatus = 'in_progress' | 'completed';
+
+/** Values that have one portable representation across all bundled stores. */
+export type JsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
+/**
+ * The durable record stored under an idempotency key. While a handler runs the
+ * record is `in_progress`; once it succeeds the record flips to `completed` and
+ * carries the captured {@link response} for replay.
+ */
+export interface IdempotencyRecord {
+  /** The idempotency key this record is stored under. */
+  key: string;
+  /** Whether the original request is still running or has completed. */
+  status: IdempotencyStatus;
+  /** The request type name, e.g. `CreateUserCommand`. */
+  requestName: string;
+  /**
+   * Unique owner token for the execution that claimed this record. Every claim
+   * `IdempotencyBehavior` makes sets it, and `completeIfOwned` and
+   * `deleteIfOwned` compare against it. It may be absent from a record written
+   * through the unconditional `set` or claimed outside the behavior; such a
+   * record can still be read and replayed, but no owner check matches it.
+   */
+  claimId?: string;
+  /**
+   * Stable hash of the original request payload. Used to detect a key being
+   * reused with a *different* body (a client bug or replay attack).
+   */
+  fingerprint?: string;
+  /**
+   * Digest of the authorization scope the original execution ran under, when the
+   * behavior is configured with a `replayScopeFactory`.
+   *
+   * Replay compares this against the current caller's scope and refuses on a
+   * mismatch, so a response authorized under one set of permissions is never
+   * returned to a caller who no longer holds them. It is deliberately **not**
+   * part of the key: a key that changed with permissions would let the same
+   * side effect execute again.
+   */
+  replayScope?: string;
+  /** JSON snapshot of the handler response, captured once completed. */
+  response?: JsonValue;
+  /** ISO-8601 timestamp the key was first claimed. */
+  createdAt: string;
+  /** ISO-8601 timestamp the original request completed, when applicable. */
+  completedAt?: string;
+}
