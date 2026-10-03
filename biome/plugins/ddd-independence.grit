@@ -1,0 +1,31 @@
+engine biome(1.0)
+language js(typescript)
+
+// AGENTS.md rule 2: `@cqrs-ddd/core` and `@cqrs-ddd/mikro-orm` stay usable without
+// pipeline behaviors, so they do not import `@cqrs-ddd/pipeline` or a
+// `@cqrs-ddd/pipeline-*` package. A request class tells the pipeline its kind through
+// the `Symbol.for('@cqrs-ddd/request-kind')` brand, which needs no import. Every
+// static form is matched through its module source, plus dynamic `import()` and
+// `require()`. Strings and comments are not imports.
+//
+// Scoped in biome.json. `message=` accepts only string literals, so the
+// diagnostic text is repeated per form.
+
+pattern pipeline_module() {
+  r"^['\"]@cqrs-ddd/pipeline(?:-[a-z0-9-]+)?(?:/.*)?['\"]$"
+}
+
+or {
+  JsModuleSource() as $source where {
+    $source <: pipeline_module(),
+    register_diagnostic(span=$source, message="@cqrs-ddd/core and @cqrs-ddd/mikro-orm do not depend on a pipeline package, so they stay usable without pipeline behaviors. Brand the request with the request-kind symbol instead.", severity="error")
+  },
+  JsImportCallExpression(arguments=$arguments) as $call where {
+    $arguments <: contains pipeline_module(),
+    register_diagnostic(span=$call, message="@cqrs-ddd/core and @cqrs-ddd/mikro-orm do not depend on a pipeline package, so they stay usable without pipeline behaviors. Brand the request with the request-kind symbol instead.", severity="error")
+  },
+  `require($module)` as $call where {
+    $module <: pipeline_module(),
+    register_diagnostic(span=$call, message="@cqrs-ddd/core and @cqrs-ddd/mikro-orm do not depend on a pipeline package, so they stay usable without pipeline behaviors. Brand the request with the request-kind symbol instead.", severity="error")
+  }
+}

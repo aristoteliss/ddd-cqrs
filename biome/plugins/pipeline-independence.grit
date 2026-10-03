@@ -1,0 +1,29 @@
+engine biome(1.0)
+language js(typescript)
+
+// AGENTS.md rule 2: a pipeline package (`@cqrs-ddd/pipeline`, `@cqrs-ddd/pipeline-*`)
+// stays usable without DDD, so it does not import `@cqrs-ddd/core` or
+// `@cqrs-ddd/mikro-orm`. The two sides meet through the
+// `Symbol.for('@cqrs-ddd/request-kind')` brand, which needs no import. Every static
+// form is matched through its module source, plus dynamic `import()` and
+// `require()`. Strings and comments are not imports.
+//
+// Scoped in biome.json. `message=` accepts only string literals, so the
+// diagnostic text is repeated per form.
+
+pattern ddd_module() { r"^['\"]@cqrs-ddd/(?:core|mikro-orm)(?:/.*)?['\"]$" }
+
+or {
+  JsModuleSource() as $source where {
+    $source <: ddd_module(),
+    register_diagnostic(span=$source, message="A pipeline package does not depend on @cqrs-ddd/core or @cqrs-ddd/mikro-orm, so it stays usable without DDD. Read the request kind from its brand or the pipeline context instead.", severity="error")
+  },
+  JsImportCallExpression(arguments=$arguments) as $call where {
+    $arguments <: contains ddd_module(),
+    register_diagnostic(span=$call, message="A pipeline package does not depend on @cqrs-ddd/core or @cqrs-ddd/mikro-orm, so it stays usable without DDD. Read the request kind from its brand or the pipeline context instead.", severity="error")
+  },
+  `require($module)` as $call where {
+    $module <: ddd_module(),
+    register_diagnostic(span=$call, message="A pipeline package does not depend on @cqrs-ddd/core or @cqrs-ddd/mikro-orm, so it stays usable without DDD. Read the request kind from its brand or the pipeline context instead.", severity="error")
+  }
+}

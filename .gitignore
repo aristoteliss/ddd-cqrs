@@ -1,0 +1,50 @@
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Runtime
+node_modules/
+dist/
+build/
+.cache/
+.tmp/
+
+# Coverage
+coverage/
+*.lcov
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# TypeScript
+*.tsbuildinfo
+
+# Generated only during package tarball creation
+packages/*/LICENSE
+packages/*/COMMERCIAL_LICENSE.txt
+
+# Editor
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# AI assistant workspace: local settings and local state stay out of the project,
+# the shared context-management files are tracked.
+.claude/*
+!.claude/codebase-map.md
+!.claude/tasks/
+.claude/state/
+__pycache__/
+
+# Documentation site: Astro cache and generated pages
+docs/.astro/
+docs/src/content/docs/api/

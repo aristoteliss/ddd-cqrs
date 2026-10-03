@@ -1,0 +1,25 @@
+packages:
+  - packages/*
+  - integration
+  - api
+  - docs
+
+allowBuilds:
+  '@scarf/scarf': false
+  better-sqlite3: false
+  cpu-features: false
+  esbuild: true
+  msgpackr-extract: false
+  protobufjs: false
+  sqlite3: false
+  ssh2: false
+
+onlyBuiltDependencies:
+  - esbuild
+
+peerDependencyRules:
+  ignoreMissing:
+    - '@keyv/memcache'
+    - '@keyv/postgres'
+    - '@keyv/redis'
+    - '@keyv/sqlite'

@@ -1,0 +1,113 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+  "files": {
+    "includes": [
+      "**",
+      "!!**/dist",
+      "!!**/coverage",
+      "!!**/.astro",
+      "!!**/.claude",
+      "!!**/.tmp",
+      "!!**/.vscode"
+    ]
+  },
+  "formatter": {
+    "indentStyle": "space",
+    "indentWidth": 2
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "complexity": {
+        "noStaticOnlyClass": "off"
+      },
+      "style": {
+        "useImportType": "off"
+      }
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single"
+    },
+    "parser": {
+      "unsafeParameterDecoratorsEnabled": true
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["**/*.spec.ts", "**/*.test.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noExplicitAny": "off",
+            "noTemplateCurlyInString": "off"
+          },
+          "style": {
+            "noNonNullAssertion": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/events/**"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noUselessConstructor": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["api/src/persistence/migrations/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noTemplateCurlyInString": "off"
+          }
+        }
+      }
+    }
+  ],
+  "plugins": [
+    {
+      "path": "./biome/plugins/test-suite.grit",
+      "includes": ["**/*.spec.ts", "**/*.test.ts"]
+    },
+    {
+      "path": "./biome/plugins/framework-independence.grit",
+      "includes": ["**/packages/**/*.ts"]
+    },
+    {
+      "path": "./biome/plugins/core-environment.grit",
+      "includes": ["**/packages/**/*.ts", "!**/*.spec.ts", "!**/*.test.ts"]
+    },
+    {
+      "path": "./biome/plugins/orm-independence.grit",
+      "includes": ["**/packages/core/**/*.ts"]
+    },
+    {
+      "path": "./biome/plugins/pipeline-independence.grit",
+      "includes": [
+        "**/packages/pipeline/**/*.ts",
+        "**/packages/pipeline-*/**/*.ts",
+        "**/packages/cqrs/**/*.ts",
+        "**/packages/common/**/*.ts"
+      ]
+    },
+    {
+      "path": "./biome/plugins/ddd-independence.grit",
+      "includes": ["**/packages/core/**/*.ts", "**/packages/mikro-orm/**/*.ts"]
+    },
+    {
+      "path": "./biome/plugins/aggregate-identity.grit",
+      "includes": [
+        "**/packages/core/application/**/*.ts",
+        "!**/*.spec.ts",
+        "!**/*.test.ts"
+      ]
+    }
+  ]
+}
