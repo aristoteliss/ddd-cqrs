@@ -1,6 +1,6 @@
 ---
 title: Overview
-description: What the @cqrs-ddd packages are, how they fit together and how they relate to nestjs-pipeline.
+description: What the @cqrs-ddd packages are and how they fit together.
 ---
 
 The `@cqrs-ddd` packages are TypeScript building blocks that depend on no framework. They
@@ -62,9 +62,3 @@ Neither family depends on the other. A `BaseCommand`, `BaseQuery` or `DomainEven
 decorated handler method needs no options: see
 [DDD without a framework](/ddd-cqrs/guides/ddd/).
 
-## In NestJS
-
-The [nestjs-pipeline](https://aristoteliss.github.io/nestjs-pipeline/) packages run these
-same behaviors in NestJS CQRS applications: they discover handlers, register behaviors in
-the NestJS container, and read `@UsePipeline` declarations. A behavior is written once,
-here, and serves both.

@@ -23,8 +23,7 @@ pnpm add @cqrs-ddd/uuidv7
 
 Requires Node.js 22.12 or later.
 
-Published as an ES module; a CommonJS application loads it with `require()`. Coming from
-0.3.x, see [Upgrading from 0.3.x](https://aristoteliss.github.io/nestjs-pipeline/upgrading/from-0-3/).
+Published as an ES module; a CommonJS application loads it with `require()`.
 
 ## API
 
@@ -88,27 +87,9 @@ const id = uuidv7();
 const createdAt = new Date(Number.parseInt(id.replace(/-/g, '').slice(0, 12), 16));
 ```
 
-## Migrating from @nestjs-pipeline/core 0.1.x
-
-`uuidv7` and `isUuidV7` were exported by `@nestjs-pipeline/core` 0.1.x, and `uuidv7`
-also by `@nestjs-pipeline/correlation` 0.1.x. Neither package exports them in 0.2.0.
-
-```typescript
-// Before (0.1.x)
-import { isUuidV7, uuidv7 } from '@nestjs-pipeline/core';
-import { uuidv7 } from '@nestjs-pipeline/correlation';
-
-// After (0.2.0)
-import { isUuidV7, uuidv7 } from '@cqrs-ddd/uuidv7';
-```
-
-The signatures and the output format are unchanged. Add `@cqrs-ddd/uuidv7` to your own
-`dependencies`: it is a dependency of the pipeline packages, not a re-export.
-
-
 ## License
 
 Dual-licensed under **AGPLv3** and a **Commercial License**. See the root
-[`LICENSE`](https://github.com/aristoteliss/nestjs-pipeline/blob/master/LICENSE) and
-[`COMMERCIAL_LICENSE.txt`](https://github.com/aristoteliss/nestjs-pipeline/blob/master/COMMERCIAL_LICENSE.txt)
+[`LICENSE`](https://github.com/aristoteliss/ddd-cqrs/blob/master/LICENSE) and
+[`COMMERCIAL_LICENSE.txt`](https://github.com/aristoteliss/ddd-cqrs/blob/master/COMMERCIAL_LICENSE.txt)
 for details.

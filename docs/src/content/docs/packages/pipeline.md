@@ -110,9 +110,8 @@ missing. The cache, idempotency and rate-limit packages build on them.
 ## Lower-level API
 
 `compilePipelinePlan()`, `createPipelineRunner()`, `validateBehaviorContracts()` and
-`pipelineStore` are the pieces `createPipeline()` is built from. Framework adapters such as
-[nestjs-pipeline](https://aristoteliss.github.io/nestjs-pipeline/) use them to run the same
-behaviors around their own handlers.
+`pipelineStore` are the pieces `createPipeline()` is built from. A framework adapter uses them to run the same
+behaviors around its own handlers.
 
 ## API reference
 

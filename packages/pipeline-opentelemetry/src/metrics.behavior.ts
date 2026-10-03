@@ -44,7 +44,7 @@ export interface MetricsBehaviorOptions {
    * Name of the OpenTelemetry meter the instruments are created on (shown in
    * your metrics backend, e.g. Prometheus / SigNoz / Datadog).
    *
-   * @default 'nestjs-pipeline'
+   * @default '@cqrs-ddd/pipeline-opentelemetry'
    */
   meterName?: string;
 
@@ -90,7 +90,7 @@ export interface MetricsBehaviorOptions {
   includeContextAttributes?: boolean;
 }
 
-const METER_NAME = 'nestjs-pipeline';
+const METER_NAME = '@cqrs-ddd/pipeline-opentelemetry';
 
 /** Histogram (milliseconds) of handler execution time. */
 const DURATION_METRIC = 'pipeline.handler.duration';

@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "The documentation site of the @cqrs-ddd packages.",
+  "homepage": "https://aristoteliss.github.io/ddd-cqrs/",
   "scripts": {
     "dev": "astro dev",
     "build:site": "astro build",

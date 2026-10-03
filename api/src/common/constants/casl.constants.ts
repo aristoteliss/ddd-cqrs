@@ -33,6 +33,6 @@ export function userCapabilitiesSubject(userId: string): object {
 
 /**
  * Operations / actions supported in CASL permission definitions.
- * Inherits standard CASL verbs (manage, create, read, update, delete) from @nestjs-pipeline/casl.
+ * Inherits standard CASL verbs (manage, create, read, update, delete) from @cqrs-ddd/pipeline-casl.
  */
 export const APP_ACTIONS = CASL_ACTIONS;

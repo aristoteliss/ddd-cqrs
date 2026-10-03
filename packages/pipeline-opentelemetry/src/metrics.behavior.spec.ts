@@ -82,10 +82,12 @@ describe('MetricsBehavior', () => {
     );
   });
 
-  it('uses the default meter name "nestjs-pipeline" when no options are provided', async () => {
+  it('uses the default meter name "@cqrs-ddd/pipeline-opentelemetry" when no options are provided', async () => {
     await behavior.handle(makeCtx(), vi.fn().mockResolvedValue(null));
 
-    expect(metrics.getMeter).toHaveBeenCalledWith('nestjs-pipeline');
+    expect(metrics.getMeter).toHaveBeenCalledWith(
+      '@cqrs-ddd/pipeline-opentelemetry',
+    );
   });
 
   it('uses the custom meterName from getBehaviorOptions when provided', async () => {

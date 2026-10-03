@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.5.0",
   "description": "The users API on @cqrs-ddd: Express and Fastify routes with Zod, the CQRS buses and pipelines, DDD aggregates and decorated repositories",
+  "homepage": "https://aristoteliss.github.io/ddd-cqrs/guides/http/#in-the-example-application",
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

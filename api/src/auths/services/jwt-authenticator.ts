@@ -49,7 +49,7 @@ type VerificationKey = {
  * JWT_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A...\n-----END PUBLIC KEY-----"
  * JWT_PUBLIC_KEY_ALG="RS256"
  * JWT_ISSUER="users-api"
- * JWT_AUDIENCE="nestjs-pipeline"
+ * JWT_AUDIENCE="ddd-cqrs-api"
  * ```
  */
 export class JwtAuthenticator {

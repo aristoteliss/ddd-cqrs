@@ -44,7 +44,7 @@ export interface TraceBehaviorOptions {
   /**
    * Name of the OpenTelemetry tracer used to create spans.
    *
-   * @default 'nestjs-pipeline'
+   * @default '@cqrs-ddd/pipeline-opentelemetry'
    */
   tracerName?: string;
 
@@ -118,7 +118,7 @@ export interface TraceBehaviorOptions {
   includeContextAttributes?: boolean;
 }
 
-const TRACER_NAME = 'nestjs-pipeline';
+const TRACER_NAME = '@cqrs-ddd/pipeline-opentelemetry';
 
 /**
  * Pipeline behavior that wraps a handler in an OpenTelemetry span.

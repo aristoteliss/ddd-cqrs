@@ -4,8 +4,9 @@ Framework-neutral packages of the `@cqrs-ddd` organization: Domain-Driven Design
 primitives, small dependency-free utilities, and pipeline behaviors (validation,
 authorization, caching, idempotency, rate limiting, resilience, audit, dead letters,
 feature flags, telemetry). Every package runs in a plain Node.js application, without a
-framework or a dependency-injection container. The `@nestjs-pipeline/*` packages
-integrate them with NestJS.
+framework or a dependency-injection container.
+
+**Documentation:** [site](https://aristoteliss.github.io/ddd-cqrs/) · [getting started](https://aristoteliss.github.io/ddd-cqrs/getting-started/) · [API reference](https://aristoteliss.github.io/ddd-cqrs/api/)
 
 ## Repository layout
 

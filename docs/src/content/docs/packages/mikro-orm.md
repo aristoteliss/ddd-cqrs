@@ -35,11 +35,10 @@ on no framework: it works in a plain Node service and in a NestJS application.
 pnpm add @cqrs-ddd/mikro-orm @cqrs-ddd/core @mikro-orm/core
 ```
 
-Requires Node.js 22.17 or later, as MikroORM 7 does. `@cqrs-ddd/core` `^0.4.2` and `@mikro-orm/core` `^7.2.1` are peer
+Requires Node.js 22.17 or later, as MikroORM 7 does. `@cqrs-ddd/core` `^0.5.0` and `@mikro-orm/core` `^7.2.1` are peer
 dependencies; add the MikroORM driver you use, such as `@mikro-orm/postgresql`.
 
-Published as an ES module; a CommonJS application loads it with `require()`. Coming from
-0.3.x, see [Upgrading from 0.3.x](https://aristoteliss.github.io/nestjs-pipeline/upgrading/from-0-3/).
+Published as an ES module; a CommonJS application loads it with `require()`.
 
 ## Entity manager source
 
@@ -306,5 +305,5 @@ text, where it cannot be passed as a parameter.
 ## License
 
 Dual-licensed under **AGPL-3.0-or-later** or a **Commercial License**. See
-[`LICENSE`](https://github.com/aristoteliss/nestjs-pipeline/blob/master/LICENSE) and [`COMMERCIAL_LICENSE.txt`](https://github.com/aristoteliss/nestjs-pipeline/blob/master/COMMERCIAL_LICENSE.txt)
+[`LICENSE`](https://github.com/aristoteliss/ddd-cqrs/blob/master/LICENSE) and [`COMMERCIAL_LICENSE.txt`](https://github.com/aristoteliss/ddd-cqrs/blob/master/COMMERCIAL_LICENSE.txt)
 at the repository root.

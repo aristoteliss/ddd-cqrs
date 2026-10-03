@@ -29,8 +29,7 @@ pnpm add @cqrs-ddd/safe-stringify
 
 Requires Node.js 22.12 or later.
 
-Published as an ES module; a CommonJS application loads it with `require()`. Coming from
-0.3.x, see [Upgrading from 0.3.x](https://aristoteliss.github.io/nestjs-pipeline/upgrading/from-0-3/).
+Published as an ES module; a CommonJS application loads it with `require()`.
 
 ## Strict serializer
 
@@ -144,33 +143,9 @@ The strict serializer's output and these key formats are part of the package con
 changing them would orphan every stored cache entry, rate-limit bucket and idempotency
 fingerprint. The package's golden-output specs pin them.
 
-## Migrating from @nestjs-pipeline/core 0.1.x
-
-`@nestjs-pipeline/core` 0.1.x did not export any serializer or key-segment helper from its
-entry point: `safeStringify` and `safeSanitize` lived in its internal
-`dist/helpers/safeStringify` module, and `stableStringify`, `toStrictJsonValue`,
-`redactValue`, `DEFAULT_REDACT_KEYS`, `REDACTED` and the key-segment helpers did not exist.
-Code that deep-imported the internal module moves to this package:
-
-```typescript
-// Before (0.1.x, an internal path)
-import { safeSanitize, safeStringify } from '@nestjs-pipeline/core/dist/helpers/safeStringify';
-
-safeStringify(value, new Set(['token', 'ctx.sessionUser']), 2);
-
-// After (0.2.0)
-import { safeSanitize, safeStringify } from '@cqrs-ddd/safe-stringify';
-
-safeStringify(value, { excludeKeys: ['token', 'ctx.sessionUser'] }, 2);
-```
-
-- The `Set<string>` second argument is still accepted and means `excludeKeys`.
-- `safeStringify(undefined)` now returns `'undefined'` instead of `undefined`.
-- Use `stableStringify`, not `safeStringify`, for any key or fingerprint you build.
-
 ## License
 
 Dual-licensed under **AGPLv3** and a **Commercial License**. See the root
-[`LICENSE`](https://github.com/aristoteliss/nestjs-pipeline/blob/master/LICENSE) and
-[`COMMERCIAL_LICENSE.txt`](https://github.com/aristoteliss/nestjs-pipeline/blob/master/COMMERCIAL_LICENSE.txt)
+[`LICENSE`](https://github.com/aristoteliss/ddd-cqrs/blob/master/LICENSE) and
+[`COMMERCIAL_LICENSE.txt`](https://github.com/aristoteliss/ddd-cqrs/blob/master/COMMERCIAL_LICENSE.txt)
 for details.

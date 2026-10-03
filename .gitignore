@@ -48,3 +48,9 @@ __pycache__/
 # Documentation site: Astro cache and generated pages
 docs/.astro/
 docs/src/content/docs/api/
+
+# Archify local generator toolchain and build receipts
+.agents/skills/archify*
+docs/public/architecture/*.finalize*.json
+docs/public/architecture/*.browser-check.json
+docs/public/architecture/*.delivery.json

@@ -3,6 +3,8 @@
 The site of the `@cqrs-ddd` packages, built with [Starlight](https://starlight.astro.build/).
 It is private and never published to npm.
 
+**Published at:** [https://aristoteliss.github.io/ddd-cqrs/](https://aristoteliss.github.io/ddd-cqrs/)
+
 ## Where the content comes from
 
 | Section | Source |

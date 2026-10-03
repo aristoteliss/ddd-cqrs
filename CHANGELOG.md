@@ -2,9 +2,7 @@
 
 ## 0.5.0
 
-The first release from this repository. Every package is released at 0.5.0, first under
-the `next` dist-tag. The DDD packages and the utilities keep the API of 0.4.2; the
-pipeline packages and the application runtime are new.
+The first release. Every package is released at 0.5.0, first under the `next` dist-tag.
 
 ### Added
 
@@ -38,16 +36,3 @@ pipeline packages and the application runtime are new.
   behavior package, MikroORM repositories and BullMQ jobs, and end-to-end suites on both
   frameworks.
 
-### Changed
-
-- The packages live in https://github.com/aristoteliss/ddd-cqrs; each package's
-  `repository`, `homepage` and `bugs` point there and to the new site.
-
-### Compared with the `@nestjs-pipeline` packages
-
-The behaviors are those of `@nestjs-pipeline/*` 0.4.2 without NestJS: a behavior is a
-plain class with constructor defaults, the modules and exception filters stay in the
-NestJS plugin (each package maps its errors in `/http`),
-and `@cqrs-ddd/pipeline-correlation` keeps only the `grpc()` preset of
-`CorrelationFrom` (the `amqp`, `kafka` and `nats` presets read NestJS microservice
-contexts and stay in `@nestjs-pipeline/correlation`).

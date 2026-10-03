@@ -31,7 +31,6 @@ application through structural compatibility: see [Using it from NestJS](#using-
 - [Tenant-scoped cache keys](#tenant-scoped-cache-keys)
 - [HTTP status mapping](#http-status-mapping)
 - [Using it from NestJS](#using-it-from-nestjs)
-- [Moving from ddd/core](#moving-from-dddcore)
 - [Known limits](#known-limits)
 - [License](#license)
 
@@ -47,8 +46,7 @@ Requires Node.js 22.12 or later. It installs `@cqrs-ddd/uuidv7` and
 `@cqrs-ddd/safe-stringify`, which have no dependencies. To persist with MikroORM, add
 `@cqrs-ddd/mikro-orm` and `@mikro-orm/core` 7.
 
-Published as an ES module; a CommonJS application loads it with `require()`. Coming from
-0.3.x, see [Upgrading from 0.3.x](https://aristoteliss.github.io/nestjs-pipeline/upgrading/from-0-3/).
+Published as an ES module; a CommonJS application loads it with `require()`.
 
 ## Entry points
 
@@ -680,41 +678,6 @@ The application writes the rest of the glue:
 - an exception filter that maps its own errors, then calls `domainErrorHttpStatus`;
 - a `logger` for the cache decorators, such as `new Logger('UserCache')`.
 
-## Moving from ddd/core
-
-The unpublished workspace package `@nestjs-pipeline/ddd-core` (directory `ddd/core`) maps
-onto this package as follows. It depended on NestJS and MikroORM; this package depends on
-neither, and the MikroORM parts are in `@cqrs-ddd/mikro-orm`.
-
-| `ddd/core` | `@cqrs-ddd/core` |
-| --- | --- |
-| `import { … } from '@nestjs-pipeline/ddd-core'` | the layer entry points: `@cqrs-ddd/core/domain`, `/application`, `/persistence`, `/http` |
-| `@Mutate()` on a mutation method, which called `onUpdate()` | `@ApplyMutation({ event })`, which also records the event, plus `@Mutable` fields written through `applyPatch()` |
-| `DomainOutcome`, `RootDomainOutcome` returned by `handle()` | `handle()` returns the aggregate, or a result with an `aggregate` property; its buffered events are published |
-| `CommandBaseHandler(eventBus: EventBus)` from `@nestjs/cqrs` | `CommandBaseHandler(eventBus: IDomainEventPublisher)`; a NestJS `EventBus` still fits |
-| `CacheableEntity`, `ICacheKey`, `entity.cacheKey` (`prefix + id`) | `RootEntity` with a static `aggregateName`, keys built with `cacheKey(User.aggregateName, { id })`, always tenant-scoped |
-| `CacheableEntity.fromStringify(data, fromJSON)` | `RootEntity.from(value)` or the aggregate's own `fromJSON` |
-| `ICommandRepository.save(domainOutcome)` | `ICommandRepository.save(entity)`, and `IWriteSideAggregateRepository.findById(id)` for loading |
-| `@Cache(setKeyFn, deleteKeysFn)` | `@Cache({ setKey, deleteKeys, invalidateKeys, ttl, isNewer, barrierTtl, logger })`, usually through `@PersistedWrite` |
-| `@FromCache(keyFn, hydrateFn)`, hydrating when `query.hydrate` is set | `@FromCache({ keyFn, hydrateFn, … })` with an `IVersionedCache`; hits are always rehydrated when a hydrator applies |
-| `QueryRepository(cache)` | `QueryRepository(cache, { hydrateFn, serializeFn? })` |
-| `ICache` in `persistence/cache.interface` | `ICache` and `IVersionedCache` in `@cqrs-ddd/core/application` |
-| `UnixTimestampType` | `UnixTimestampType` in `@cqrs-ddd/mikro-orm` |
-| `RootEntity` with an abstract `afterUpdate()` | `afterUpdate()` is an optional hook; `RootEntity` extends `AggregateRoot` and adds `version`, `getExpectedVersion()`, the event buffer and private hydration setters |
-
-The old imports and the new ones side by side:
-
-```typescript
-// ddd/core
-import { CacheableEntity, CommandBaseHandler, Mutate, RootDomainOutcome } from '@nestjs-pipeline/ddd-core';
-
-// @cqrs-ddd/core
-import { ApplyMutation, Mutable, RootEntity } from '@cqrs-ddd/core/domain';
-import { CommandBaseHandler } from '@cqrs-ddd/core/application';
-import { cacheKey, PersistedWrite } from '@cqrs-ddd/core/persistence';
-import { AggregateRepository, optimisticUpdate, UnixTimestampType } from '@cqrs-ddd/mikro-orm';
-```
-
 ## Known limits
 
 - Persistence and event publication are not atomic. A crash between the write and
@@ -738,5 +701,5 @@ import { AggregateRepository, optimisticUpdate, UnixTimestampType } from '@cqrs-
 ## License
 
 Dual-licensed under **AGPL-3.0-or-later** or a **Commercial License**. See
-[`LICENSE`](https://github.com/aristoteliss/nestjs-pipeline/blob/master/LICENSE) and [`COMMERCIAL_LICENSE.txt`](https://github.com/aristoteliss/nestjs-pipeline/blob/master/COMMERCIAL_LICENSE.txt)
+[`LICENSE`](https://github.com/aristoteliss/ddd-cqrs/blob/master/LICENSE) and [`COMMERCIAL_LICENSE.txt`](https://github.com/aristoteliss/ddd-cqrs/blob/master/COMMERCIAL_LICENSE.txt)
 at the repository root.

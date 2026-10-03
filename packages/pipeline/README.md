@@ -3,8 +3,7 @@
 A framework-neutral pipeline engine: wrap plain functions and class methods with
 behaviors such as logging, validation, authorization, caching or idempotency. No
 framework, no dependency-injection container and no CQRS infrastructure are required;
-the `@cqrs-ddd/pipeline-<name>` packages provide the behaviors, and the
-`@nestjs-pipeline/*` packages run the same behaviors in NestJS.
+the `@cqrs-ddd/pipeline-<name>` packages provide the behaviors.
 
 **Documentation:** [guide](https://aristoteliss.github.io/ddd-cqrs/packages/pipeline/) · [API reference](https://aristoteliss.github.io/ddd-cqrs/api/cqrs-ddd/pipeline/) · [all packages](https://aristoteliss.github.io/ddd-cqrs/)
 

@@ -21,8 +21,7 @@ pnpm add @cqrs-ddd/untyped
 
 Requires Node.js 22.12 or later. No dependencies, no framework.
 
-Published as an ES module; a CommonJS application loads it with `require()`. Coming from
-0.3.x, see [Upgrading from 0.3.x](https://aristoteliss.github.io/nestjs-pipeline/upgrading/from-0-3/).
+Published as an ES module; a CommonJS application loads it with `require()`.
 
 ## API
 
@@ -72,24 +71,9 @@ function describe(command: Command): string {
 }
 ```
 
-## Migrating from @nestjs-pipeline/core 0.1.x
-
-`untyped` was exported by `@nestjs-pipeline/core` 0.1.x and is no longer exported there
-in 0.2.0.
-
-```typescript
-// Before (0.1.x)
-import { untyped } from '@nestjs-pipeline/core';
-
-// After (0.2.0)
-import { untyped } from '@cqrs-ddd/untyped';
-```
-
-The signature is unchanged. Add `@cqrs-ddd/untyped` to your own `dependencies`.
-
 ## License
 
 Dual-licensed under **AGPLv3** and a **Commercial License**. See the root
-[`LICENSE`](https://github.com/aristoteliss/nestjs-pipeline/blob/master/LICENSE) and
-[`COMMERCIAL_LICENSE.txt`](https://github.com/aristoteliss/nestjs-pipeline/blob/master/COMMERCIAL_LICENSE.txt)
+[`LICENSE`](https://github.com/aristoteliss/ddd-cqrs/blob/master/LICENSE) and
+[`COMMERCIAL_LICENSE.txt`](https://github.com/aristoteliss/ddd-cqrs/blob/master/COMMERCIAL_LICENSE.txt)
 for details.

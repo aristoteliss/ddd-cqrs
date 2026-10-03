@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.5.0",
   "description": "Framework-neutral DDD, CQRS and pipeline behavior packages",
+  "homepage": "https://aristoteliss.github.io/ddd-cqrs/",
   "license": "SEE LICENSE IN LICENSE",
   "scripts": {
     "build": "pnpm -r build",

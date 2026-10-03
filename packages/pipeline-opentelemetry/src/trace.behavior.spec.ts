@@ -70,7 +70,9 @@ describe('TraceBehavior', () => {
 
   it('uses the default tracer name when no options are provided', async () => {
     await behavior.handle(makeCtx(), vi.fn().mockResolvedValue(null));
-    expect(trace.getTracer).toHaveBeenCalledWith('nestjs-pipeline');
+    expect(trace.getTracer).toHaveBeenCalledWith(
+      '@cqrs-ddd/pipeline-opentelemetry',
+    );
   });
 
   it('uses the custom tracerName from behavior options', async () => {

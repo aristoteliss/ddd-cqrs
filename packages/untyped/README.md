@@ -18,7 +18,7 @@ pnpm add @cqrs-ddd/untyped
 
 Requires Node.js 22.12 or later. No dependencies, no framework.
 
-Published as an ES module; a CommonJS application loads it with `require()`. Coming from 0.3.x, see [Upgrading from 0.3.x](https://aristoteliss.github.io/nestjs-pipeline/upgrading/from-0-3/).
+Published as an ES module; a CommonJS application loads it with `require()`.
 
 ## License
 

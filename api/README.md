@@ -5,6 +5,8 @@ plain Express or Fastify routes, validated with Zod at the edge, run as commands
 queries on the `@cqrs-ddd/cqrs` buses through the pipeline behaviors, with the domain on
 `@cqrs-ddd/core` and repositories on MikroORM.
 
+**Documentation:** [the application in the HTTP guide](https://aristoteliss.github.io/ddd-cqrs/guides/http/#in-the-example-application) · [all packages](https://aristoteliss.github.io/ddd-cqrs/)
+
 There is no framework container. `src/app.ts` builds every object with `new`, so each
 dependency is visible in one file and checked by the compiler.
 
@@ -239,6 +241,3 @@ still runs the real authentication and authorization. The PostgreSQL suites star
 own PostgreSQL container. They need a running Docker-compatible runtime; an
 infrastructure failure fails the suite instead of skipping it.
 
-The suites carry the assertions of the NestJS users-api they replace, on the same
-endpoints and bodies. The tests that asserted NestJS itself, such as provider bindings,
-request scopes and module registration, have no counterpart here.

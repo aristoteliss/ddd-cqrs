@@ -1,0 +1,165 @@
+{
+  "schemaVersion": 1,
+  "ok": false,
+  "command": "finalize",
+  "status": "fail",
+  "type": "architecture",
+  "quality": "showcase",
+  "specification": {
+    "path": "/home/aristotelis/Source/ddd-cqrs/.archify/architecture-full-repo-20261003-192530/candidate.json",
+    "sha256": "163fa19bf5e422ed5685231b0f9aebdb74f626920fd92e70844e1e2cc51cc631",
+    "bytes": 7458
+  },
+  "artifact": {
+    "path": "/home/aristotelis/Source/ddd-cqrs/.archify/architecture-full-repo-20261003-192530/architecture.html"
+  },
+  "gates": {
+    "validate": "fail",
+    "deliver": "not-run",
+    "check": "not-run",
+    "browser-check": "not-run"
+  },
+  "failedStage": "validate",
+  "diagnostics": [
+    {
+      "code": "composition/ambiguous-corridor",
+      "severity": "error",
+      "message": "[composition/ambiguous-corridor] showcase architecture connections[6] id \"pipeline_to_cache\" \"pipeline_engine\" -> \"pipe_cache\" shares a 18px corridor with connections[9] id \"pipeline_to_ops\" \"pipeline_engine\" -> \"pipe_ops\" at [1045, 314] -> [1045, 332] (segments 1 and 1; minimum 8px) — if the authored fromSide/toSide are not required by the user, remove them so the renderer can re-plan; otherwise preserve that intent and adjust route/via or fromSide/toSide so distinct connections do not visually merge.",
+      "subject": {
+        "diagramType": "architecture",
+        "collection": "connections",
+        "index": 6,
+        "id": "pipeline_to_cache",
+        "from": "pipeline_engine",
+        "to": "pipe_cache"
+      },
+      "evidence": {
+        "otherRelationship": {
+          "diagramType": "architecture",
+          "collection": "connections",
+          "index": 9,
+          "id": "pipeline_to_ops",
+          "from": "pipeline_engine",
+          "to": "pipe_ops"
+        },
+        "overlapLengthPx": 18,
+        "minimumPx": 8,
+        "from": [
+          1045,
+          314
+        ],
+        "to": [
+          1045,
+          332
+        ],
+        "segmentIndex": 1,
+        "otherSegmentIndex": 1
+      },
+      "supportedFixes": [
+        "if the authored fromSide/toSide are not required by the user, remove them so the renderer can re-plan; otherwise preserve that intent and adjust route/via or fromSide/toSide so distinct connections do not visually merge"
+      ]
+    },
+    {
+      "code": "composition/label-gap",
+      "severity": "error",
+      "message": "Label \"dispatch(cmd/query)\" has only 70px between \"api_host\" and \"cqrs_buses\"; it needs at least 118px to stay beside its route — increase that clear gap or place the connected nodes on another readable row, preserving the label.",
+      "subject": {
+        "diagramType": "architecture",
+        "collection": "connections",
+        "id": "api_to_cqrs",
+        "from": "api_host",
+        "to": "cqrs_buses"
+      },
+      "evidence": {
+        "clearGapPx": 70,
+        "minimumGapPx": 118,
+        "labelWidthPx": 101.2,
+        "obstacles": [
+          "api_host",
+          "cqrs_buses"
+        ]
+      },
+      "supportedFixes": [
+        "increase the clear gap between the connected nodes to at least 118px",
+        "reposition the connected nodes together while preserving the full relationship label"
+      ]
+    },
+    {
+      "code": "composition/label-gap",
+      "severity": "error",
+      "message": "Label \"executes pipeline\" has only 70px between \"cqrs_buses\" and \"pipeline_engine\"; it needs at least 108px to stay beside its route — increase that clear gap or place the connected nodes on another readable row, preserving the label.",
+      "subject": {
+        "diagramType": "architecture",
+        "collection": "connections",
+        "id": "cqrs_to_pipeline",
+        "from": "cqrs_buses",
+        "to": "pipeline_engine"
+      },
+      "evidence": {
+        "clearGapPx": 70,
+        "minimumGapPx": 108,
+        "labelWidthPx": 91.6,
+        "obstacles": [
+          "cqrs_buses",
+          "pipeline_engine"
+        ]
+      },
+      "supportedFixes": [
+        "increase the clear gap between the connected nodes to at least 108px",
+        "reposition the connected nodes together while preserving the full relationship label"
+      ]
+    },
+    {
+      "code": "composition/label-gap",
+      "severity": "error",
+      "message": "Label \"persisted via\" has only 60px between \"core_domain\" and \"mikro_orm_adapter\"; it needs at least 89px to stay beside its route — increase that clear gap or place the connected nodes on another readable row, preserving the label.",
+      "subject": {
+        "diagramType": "architecture",
+        "collection": "connections",
+        "id": "core_to_orm",
+        "from": "core_domain",
+        "to": "mikro_orm_adapter"
+      },
+      "evidence": {
+        "clearGapPx": 60,
+        "minimumGapPx": 89,
+        "labelWidthPx": 72.4,
+        "obstacles": [
+          "core_domain",
+          "mikro_orm_adapter"
+        ]
+      },
+      "supportedFixes": [
+        "increase the clear gap between the connected nodes to at least 89px",
+        "reposition the connected nodes together while preserving the full relationship label"
+      ]
+    }
+  ],
+  "diagnosticSummary": {
+    "total": 4,
+    "shown": 4,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "/home/aristotelis/Source/ddd-cqrs/.archify/architecture-full-repo-20261003-192530/architecture.finalize.json",
+    "summaryReceipt": "/home/aristotelis/Source/ddd-cqrs/.archify/architecture-full-repo-20261003-192530/architecture.finalize-summary.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.0.1",
+    "availableVersion": "3.0.1",
+    "releaseNotes": null,
+    "checkedAt": "2026-10-03T16:27:52.108Z",
+    "source": "network",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 375,
+  "nextAction": {
+    "action": "edit-in-place",
+    "candidate": "/home/aristotelis/Source/ddd-cqrs/.archify/architecture-full-repo-20261003-192530/candidate.json",
+    "constraint": "Preserve all semantics and user-fixed geometry. Use references/architecture-layout-repair.md to choose a local repair or connected-scene reflow; edit the existing candidate.",
+    "then": "finalize-once"
+  }
+}

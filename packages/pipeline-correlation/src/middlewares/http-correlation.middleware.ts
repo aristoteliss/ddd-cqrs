@@ -18,7 +18,7 @@ const HTTP_FIELD_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
  * HTTP middleware that extracts a correlation ID from the incoming request header and
  * runs the rest of the request with it ({@link runWithCorrelationId}), so pipelines
  * that the request starts take it. Its `use(req, res, next)` fits Node's `http`
- * server, Express and Connect; `@nestjs-pipeline/correlation` registers it in NestJS.
+ * server, Express and Connect.
  *
  * The header name defaults to `x-correlation-id`. If `header` is omitted or is any
  * non-string value (including `false`), the default header is used.

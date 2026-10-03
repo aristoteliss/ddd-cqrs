@@ -53,7 +53,7 @@ const pipeline = createPipeline({
 
 | Option | Meaning | Default |
 | --- | --- | --- |
-| `tracerName` | the tracer's instrumentation scope name | `'nestjs-pipeline'` |
+| `tracerName` | the tracer's instrumentation scope name | `'@cqrs-ddd/pipeline-opentelemetry'` |
 | `enabled` | open a span for this operation | `true` |
 | `spanName` | a string, or a function of the context | `{requestKind}.{requestName}`, such as `query.getPrice` |
 | `attributeFactory` | extra span attributes from the context | none |
@@ -69,7 +69,7 @@ const pipeline = createPipeline({
 
 | Option | Meaning | Default |
 | --- | --- | --- |
-| `meterName` | the meter's instrumentation scope name | `'nestjs-pipeline'` |
+| `meterName` | the meter's instrumentation scope name | `'@cqrs-ddd/pipeline-opentelemetry'` |
 | `enabled` | record metrics for this operation | `true` |
 | `attributeFactory` | extra labels from the context; keep them low-cardinality | none |
 | `includeContextAttributes` | add the request-local attribute bag to the labels | `false` |

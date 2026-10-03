@@ -30,7 +30,7 @@ const OPERATION_KEY_VERSION = 'v1';
  * principal is missing. It carries nothing about permissions — an operation key
  * that changed when permissions changed would let the same side effect run a
  * second time. Bind replay to the caller's authorization with
- * `requireAbilityDigest` of `@nestjs-pipeline/casl` instead.
+ * `requireAbilityDigest` of `@cqrs-ddd/pipeline-casl` instead.
  *
  * @example
  * ```ts
