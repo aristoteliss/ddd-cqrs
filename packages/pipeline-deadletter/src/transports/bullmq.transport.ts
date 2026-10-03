@@ -1,0 +1,65 @@
+/* Copyright (C) 2026-present Aristotelis — see repository license. */
+
+import type {
+  DeadLetterRecord,
+  DeadLetterTransport,
+} from '../interfaces/dead-letter-transport.interface.js';
+
+/**
+ * Minimal structural shape of a BullMQ `Queue`. Declared locally so this package
+ * does not hard-depend on `bullmq` — a real `Queue` satisfies it. Add the queue
+ * as a peer in your app: `pnpm add bullmq`.
+ */
+export interface BullMqQueueLike {
+  add(name: string, data: unknown, opts?: unknown): Promise<unknown>;
+}
+
+/** Options for {@link BullMqDeadLetterTransport}. */
+export interface BullMqDeadLetterTransportOptions {
+  /** Job name added to the queue for each dead letter. Default `'dead-letter'`. */
+  jobName?: string;
+  /**
+   * BullMQ `JobsOptions` for the dead-letter job. Defaults keep failures
+   * inspectable: `{ removeOnComplete: false, removeOnFail: false, attempts: 1 }`.
+   */
+  jobOptions?: unknown;
+}
+
+const DEFAULT_JOB_OPTIONS = {
+  removeOnComplete: false,
+  removeOnFail: false,
+  attempts: 1,
+};
+
+/**
+ * Bundled {@link DeadLetterTransport} backed by a **BullMQ** queue.
+ *
+ * Each dead letter is added as a job; a worker (or Bull Board) can then inspect,
+ * alert on, or replay it. The constructor takes any object matching
+ * {@link BullMqQueueLike}, so a real `bullmq` `Queue` works directly. Nothing
+ * selects this transport implicitly; pass an instance to the
+ * {@link DeadLetterBehavior} constructor.
+ *
+ * @example
+ * ```ts
+ * import { Queue } from 'bullmq';
+ * const queue = new Queue('dead-letters', { connection: { host, port } });
+ * const transport = new BullMqDeadLetterTransport(queue);
+ * ```
+ */
+export class BullMqDeadLetterTransport implements DeadLetterTransport {
+  private readonly jobName: string;
+  private readonly jobOptions: unknown;
+
+  constructor(
+    private readonly queue: BullMqQueueLike,
+    options: BullMqDeadLetterTransportOptions = {},
+  ) {
+    this.jobName = options.jobName ?? 'dead-letter';
+    this.jobOptions = options.jobOptions ?? DEFAULT_JOB_OPTIONS;
+  }
+
+  async send(record: DeadLetterRecord): Promise<void> {
+    await this.queue.add(this.jobName, record, this.jobOptions);
+  }
+}

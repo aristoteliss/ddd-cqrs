@@ -1,0 +1,25 @@
+/* Copyright (C) 2026-present Aristotelis — see repository license. */
+
+import type { PipelineBehaviorTuple } from '@cqrs-ddd/pipeline';
+import { DeadLetterBehavior } from '../dead-letter.behavior.js';
+import type { DeadLetterBehaviorOptions } from '../interfaces/dead-letter-options.interface.js';
+
+export type DeadLetterIntentOptions = DeadLetterBehaviorOptions;
+
+/**
+ * Returns a dead-letter behavior entry for `pipeline.wrap()` or `createPipeline({ globalBehaviors })`.
+ * @param options Per-handler dead-letter options; omitted fields use behavior defaults.
+ * @returns The behavior class and options tuple.
+ * @example
+ * ```ts
+ * export const onUserCreated = pipeline.wrap(
+ *   { name: 'onUserCreated', kind: 'event' },
+ *   deadLetter({ redactKeys: ['refreshToken'], rethrow: false }),
+ * )(sendWelcomeEmail);
+ * ```
+ */
+export function deadLetter(
+  options: DeadLetterIntentOptions = {},
+): PipelineBehaviorTuple<DeadLetterBehavior, DeadLetterBehaviorOptions> {
+  return [DeadLetterBehavior, options];
+}

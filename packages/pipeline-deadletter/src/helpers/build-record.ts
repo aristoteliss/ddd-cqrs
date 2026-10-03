@@ -1,0 +1,85 @@
+/* Copyright (C) 2026-present Aristotelis — see repository license. */
+
+import { type IPipelineContext } from '@cqrs-ddd/pipeline';
+import {
+  DEFAULT_REDACT_KEYS,
+  REDACTED,
+  redactValue,
+} from '@cqrs-ddd/safe-stringify';
+import { uuidv7 } from '@cqrs-ddd/uuidv7';
+import type { DeadLetterBehaviorOptions } from '../interfaces/dead-letter-options.interface.js';
+import type { DeadLetterRecord } from '../interfaces/dead-letter-transport.interface.js';
+
+/** Redact a payload using a custom redactor or key-based masking. */
+function sanitizePayload(
+  payload: unknown,
+  options: DeadLetterBehaviorOptions,
+): unknown {
+  if (options.redact) return options.redact(payload);
+  const keys = options.redactKeys
+    ? [...DEFAULT_REDACT_KEYS, ...options.redactKeys]
+    : DEFAULT_REDACT_KEYS;
+  return redactValue(payload, keys);
+}
+
+/** Whether key-based redaction masked a value anywhere in `value`. */
+function containsRedacted(
+  value: unknown,
+  seen = new WeakSet<object>(),
+): boolean {
+  if (value === REDACTED) return true;
+  if (typeof value !== 'object' || value === null || seen.has(value)) {
+    return false;
+  }
+  seen.add(value);
+  const entries =
+    value instanceof Map ? [...value.values()] : Object.values(value);
+  return entries.some((entry) => containsRedacted(entry, seen));
+}
+
+/**
+ * Build a transport-neutral {@link DeadLetterRecord} from a failed pipeline run.
+ *
+ * Non-`Error` throws are normalized to a record with `name: 'unknown'` so the
+ * transport always receives a well-formed shape.
+ *
+ * @param context - The pipeline context of the failed request.
+ * @param error - The thrown value (any type).
+ * @param options - Effective behavior options (stack inclusion, metadata, redaction).
+ */
+export function buildDeadLetterRecord(
+  context: IPipelineContext,
+  error: unknown,
+  options: DeadLetterBehaviorOptions = {},
+): DeadLetterRecord {
+  const isError = error instanceof Error;
+  const userMetadata = options.metadata?.(context);
+  const payload = sanitizePayload(context.request, options);
+
+  return {
+    id: uuidv7(),
+    correlationId: context.correlationId,
+    tenantId: context.tenantId,
+    requestKind: context.requestKind,
+    requestName: context.requestName,
+    handlerName: context.handlerName,
+    payload,
+    error: {
+      name: isError ? error.name : 'unknown',
+      message: isError ? error.message : String(error),
+      stack:
+        options.includeStack === false || !isError ? undefined : error.stack,
+    },
+    failedAt: new Date().toISOString(),
+    metadata:
+      userMetadata || context.tenantId
+        ? {
+            ...(userMetadata ?? {}),
+            ...(context.tenantId ? { tenantId: context.tenantId } : {}),
+          }
+        : undefined,
+    attempts: 0,
+    status: 'open',
+    payloadRedacted: options.redact !== undefined || containsRedacted(payload),
+  };
+}

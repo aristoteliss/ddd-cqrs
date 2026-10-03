@@ -1,0 +1,89 @@
+/* Copyright (C) 2026-present Aristotelis — see repository license. */
+
+/** Request kinds as classified by the pipeline. */
+export type AuditRequestKind = 'command' | 'query' | 'event' | 'unknown';
+
+/** Whether the audited operation succeeded or threw. */
+export type AuditOutcome = 'success' | 'failure';
+
+/** Relative importance of an audited action, for filtering / alerting. */
+export type AuditSeverity = 'low' | 'medium' | 'high' | 'critical';
+
+/**
+ * The principal that triggered the audited action — resolved from the pipeline
+ * context (e.g. read from `context.items` populated by an upstream auth
+ * behavior). `id` is conventional; arbitrary extra fields are allowed.
+ */
+export interface AuditActor {
+  /** Stable identifier of the actor (user id, service account, api key id). */
+  id?: string;
+  [key: string]: unknown;
+}
+
+/** Serializable description of a failure captured in an audit record. */
+export interface AuditError {
+  /** Error class name (e.g. `ForbiddenException`), or `'unknown'` for non-Error throws. */
+  name: string;
+  /** Error message. */
+  message: string;
+  /** Stack trace, unless suppressed via `includeStack: false`. */
+  stack?: string;
+}
+
+/**
+ * A single audit-trail entry for one pipeline operation (who did what, when,
+ * and with what outcome), forwarded to an
+ * {@link AuditSink}.
+ *
+ * Unlike a dead letter (failures only), an audit record is written for **both**
+ * successful and failed operations, so denied/rejected attempts are captured too.
+ */
+export interface AuditRecord {
+  /** Unique id for this entry (UUIDv7, so ids sort in start order). */
+  id: string;
+  /** Correlation ID of the pipeline run (for cross-system tracing). */
+  correlationId: string;
+  /** Active tenant identifier if execution occurred within a multi-tenant context. */
+  tenantId?: string;
+  /** Logical action name, e.g. `user.create`. Defaults to the request name. */
+  action: string;
+  /** Severity of the action. Defaults to `'medium'` (`'low'` for queries). */
+  severity: AuditSeverity;
+  /** Whether the operation succeeded or failed. */
+  outcome: AuditOutcome;
+  /** The principal that performed the action, if resolvable. */
+  actor?: AuditActor;
+  /** Whether the request was a command, query, event, or unknown. */
+  requestKind: AuditRequestKind;
+  /** Request class name, e.g. `CreateUserCommand`. */
+  requestName: string;
+  /** Handler class name, e.g. `CreateUserHandler`. */
+  handlerName: string;
+  /** The request payload (redacted), unless `captureRequest: false`. */
+  payload?: unknown;
+  /** The handler response (redacted), only when `captureResponse: true`. */
+  response?: unknown;
+  /** Error details — present only when `outcome` is `'failure'`. */
+  error?: AuditError;
+  /** Wall-clock duration of the operation in milliseconds. */
+  durationMs: number;
+  /** ISO-8601 timestamp of when the operation started. */
+  timestamp: string;
+  /** Metadata from the `metadata` factory, plus `tenantId` when present. */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * The record written before the handler runs, when the sink implements
+ * {@link AuditSink.begin}. Its `outcome` stays `'pending'` until the final
+ * {@link AuditRecord}, written under the same `id`, replaces it. A record still
+ * pending after the process stopped marks an attempt whose outcome is unknown:
+ * the handler may or may not have completed.
+ */
+export type AuditStartRecord = Omit<
+  AuditRecord,
+  'outcome' | 'response' | 'error' | 'durationMs'
+> & {
+  /** Always `'pending'`: the operation has not finished. */
+  outcome: 'pending';
+};

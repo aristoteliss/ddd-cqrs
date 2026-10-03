@@ -1,0 +1,108 @@
+/* Copyright (C) 2026-present Aristotelis — see repository license. */
+
+import type { IPipelineContext } from '@cqrs-ddd/pipeline';
+import type {
+  AuditActor,
+  AuditRequestKind,
+  AuditSeverity,
+} from './audit-record.interface.js';
+
+/** Resolves the acting principal from the pipeline context. */
+export type AuditActorFactory = (
+  context: IPipelineContext,
+) => AuditActor | undefined;
+
+/** Produces extra, request-aware metadata to attach to an audit record. */
+export type AuditMetadataFactory = (
+  context: IPipelineContext,
+) => Record<string, unknown>;
+
+/** Custom redactor replacing a raw payload/response with a safe-to-store value. */
+export type AuditRedactor = (value: unknown) => unknown;
+
+/**
+ * Per-handler (and constructor-default) options for {@link AuditBehavior}.
+ *
+ * Supplied per handler via `pipeline.wrap(options, [AuditBehavior, { ... }])`,
+ * shallow-merged over the constructor defaults (handler keys win).
+ *
+ * @example Audit a sensitive login command
+ * ```ts
+ * class LoginHandler {
+ *   @pipeline.wrap({ kind: 'command' }, [AuditBehavior, {
+ *     action: 'auth.login',
+ *     severity: 'medium',
+ *     redactKeys: ['code'],
+ *     actor: (ctx) => {
+ *       const command = ctx.request as LoginCommand;
+ *       return { id: command.email, email: command.email };
+ *     },
+ *   }])
+ *   async handle(command: LoginCommand) {}
+ * }
+ * ```
+ */
+export interface AuditBehaviorOptions {
+  /**
+   * Logical action name recorded on the entry (e.g. `user.create`).
+   * Default: `context.requestName`.
+   */
+  action?: string;
+  /**
+   * Severity recorded on the entry. Default: `'medium'`, or `'low'` for queries.
+   */
+  severity?: AuditSeverity;
+  /**
+   * Resolve the acting principal — typically reads an id from `context.items`
+   * set by an upstream auth behavior, e.g.
+   * `actor: (c) => ({ id: c.items.get('currentUserId') })`.
+   */
+  actor?: AuditActorFactory;
+  /**
+   * Record the (redacted) request payload. Default `true`. Set `false` for
+   * high-volume or sensitive handlers where the action alone is enough.
+   */
+  captureRequest?: boolean;
+  /**
+   * Record the (redacted) handler response. Default `false` — responses are
+   * often large and rarely needed for an audit trail.
+   */
+  captureResponse?: boolean;
+  /**
+   * Request kinds to audit. Default `['command']`: queries change nothing, and
+   * a domain event follows a command that is already audited. Example:
+   * `['command', 'query']` to also audit reads.
+   */
+  captureKinds?: AuditRequestKind[];
+  /**
+   * Case-insensitive payload/response field names whose values are masked with
+   * `'[REDACTED]'` before storage. Merged with the built-in defaults
+   * (`password`, `token`, `secret`, …). Set `redact` for full control.
+   */
+  redactKeys?: string[];
+  /**
+   * Full custom redaction of the payload/response, replacing the built-in
+   * key-masking. Receives the raw value, returns the safe-to-store value.
+   */
+  redact?: AuditRedactor;
+  /** Produce extra metadata to merge into the audit record. */
+  metadata?: AuditMetadataFactory;
+  /**
+   * Write a pending start record before the handler runs, when the sink
+   * implements `begin`. Default `true`. Set `false` to save that write when a
+   * lost record is acceptable.
+   */
+  recordStart?: boolean;
+  /**
+   * Include the error stack trace on failure records. Default `true`.
+   */
+  includeStack?: boolean;
+  /**
+   * When record construction (actor/metadata/redactor factories) or the sink itself throws,
+   * allow the request to continue (`true`, default) or fail a successful request with the
+   * audit error (`false`). A handler error is always rethrown unchanged, and an audit failure
+   * on that path is only logged. Fail-open favors availability; fail-closed favors a
+   * guaranteed audit trail.
+   */
+  failOpen?: boolean;
+}

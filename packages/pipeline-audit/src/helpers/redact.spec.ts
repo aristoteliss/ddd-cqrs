@@ -1,0 +1,191 @@
+/* Copyright (C) 2026-present Aristotelis — see repository license. */
+
+import { describe, expect, it } from 'vitest';
+import { DEFAULT_REDACT_KEYS, REDACTED, redactValue } from './redact.js';
+
+describe('redactValue', () => {
+  it('masks default sensitive keys', () => {
+    const result = redactValue({
+      username: 'jane',
+      password: 'hunter2',
+      token: 'abc',
+    });
+
+    expect(result).toEqual({
+      username: 'jane',
+      password: REDACTED,
+      token: REDACTED,
+    });
+  });
+
+  it('matches keys case-insensitively', () => {
+    const result = redactValue({ Password: 'x', AUTHORIZATION: 'Bearer y' });
+
+    expect(result).toEqual({ Password: REDACTED, AUTHORIZATION: REDACTED });
+  });
+
+  it('recurses into nested objects and arrays', () => {
+    const result = redactValue({
+      user: { name: 'jane', secret: 's' },
+      tokens: [{ token: 't1' }, { token: 't2' }],
+    });
+
+    expect(result).toEqual({
+      user: { name: 'jane', secret: REDACTED },
+      tokens: [{ token: REDACTED }, { token: REDACTED }],
+    });
+  });
+
+  it('redacts enumerable properties on CQRS-style class instances', () => {
+    class LoginCommand {
+      constructor(
+        readonly email: string,
+        readonly password: string,
+        readonly nested: { token: string },
+      ) {}
+    }
+
+    const result = redactValue(
+      new LoginCommand('user@example.test', 'secret', { token: 'jwt' }),
+    );
+
+    expect(result).toEqual({
+      email: 'user@example.test',
+      password: REDACTED,
+      nested: { token: REDACTED },
+    });
+  });
+
+  it('returns primitives unchanged', () => {
+    expect(redactValue('plain')).toBe('plain');
+    expect(redactValue(42)).toBe(42);
+    expect(redactValue(null)).toBeNull();
+    expect(redactValue(undefined)).toBeUndefined();
+  });
+
+  it('does not mutate the input', () => {
+    const input = { password: 'secret', nested: { pwd: 'p' } };
+
+    redactValue(input);
+
+    expect(input).toEqual({ password: 'secret', nested: { pwd: 'p' } });
+  });
+
+  it('honors a custom key list instead of the defaults', () => {
+    const result = redactValue({ password: 'kept', email: 'a@b.test' }, [
+      'email',
+    ]);
+
+    expect(result).toEqual({ password: 'kept', email: REDACTED });
+  });
+
+  it('deep-clones non-plain objects such as Date', () => {
+    const date = new Date('2026-01-01T00:00:00.000Z');
+
+    const result = redactValue({ when: date }) as { when: Date };
+
+    expect(result.when).not.toBe(date);
+    expect(result.when).toEqual(date);
+  });
+
+  it('preserves repeated references that are not cyclic', () => {
+    const shared = { password: 'secret', value: 1 };
+    const result = redactValue({ first: shared, second: shared }) as {
+      first: Record<string, unknown>;
+      second: Record<string, unknown>;
+    };
+
+    expect(result.first).toEqual({ password: REDACTED, value: 1 });
+    expect(result.second).toEqual({ password: REDACTED, value: 1 });
+  });
+
+  it('does not misclassify a repeated non-plain object as circular', () => {
+    const date = new Date('2026-01-01T00:00:00.000Z');
+    const result = redactValue({ first: date, second: date }) as {
+      first: unknown;
+      second: unknown;
+    };
+
+    expect(result.first).toEqual(date);
+    expect(result.second).toEqual(date);
+    expect(result.first).not.toBe(date);
+    expect(result.second).not.toBe(date);
+  });
+
+  it('redacts sensitive Map entries and Error properties', () => {
+    const map = new Map<string, unknown>([
+      ['token', 'map-secret'],
+      ['profile', { password: 'nested-secret', name: 'Ada' }],
+    ]);
+    const error = new Error('failure') as Error & { token: string };
+    error.token = 'error-secret';
+
+    const result = redactValue({ map, error }) as {
+      map: Map<string, unknown>;
+      error: Error & { token: string };
+    };
+
+    expect(result.map).not.toBe(map);
+    expect(result.map.get('token')).toBe(REDACTED);
+    expect(result.map.get('profile')).toEqual({
+      password: REDACTED,
+      name: 'Ada',
+    });
+    expect(result.error).not.toBe(error);
+    expect(result.error.token).toBe(REDACTED);
+  });
+
+  it('guards against cyclic references', () => {
+    const cyclic: Record<string, unknown> = { name: 'jane' };
+    cyclic.self = cyclic;
+
+    const result = redactValue(cyclic) as Record<string, unknown>;
+
+    expect(result.name).toBe('jane');
+    expect(result.self).toBe('[Circular]');
+  });
+
+  it('preserves and redacts an own __proto__ property as ordinary data', () => {
+    const input = { name: 'jane' } as Record<string, unknown>;
+    Object.defineProperty(input, '__proto__', {
+      enumerable: true,
+      value: { password: 'secret' },
+    });
+
+    const result = redactValue(input) as Record<string, unknown>;
+
+    expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+    expect(Object.getOwnPropertyDescriptor(result, '__proto__')).toBeDefined();
+    expect(Reflect.get(result, '__proto__')).toEqual({ password: REDACTED });
+  });
+
+  it('preserves an Error own __proto__ property without changing its prototype', () => {
+    const error = new Error('failure');
+    Object.defineProperty(error, '__proto__', {
+      enumerable: true,
+      value: { token: 'secret' },
+    });
+
+    const result = redactValue(error) as Error & Record<string, unknown>;
+
+    expect(Object.getPrototypeOf(result)).toBe(Error.prototype);
+    expect(Object.hasOwn(result, '__proto__')).toBe(true);
+    expect(Reflect.get(result, '__proto__')).toEqual({ token: REDACTED });
+  });
+
+  it('preserves enumerable symbol-keyed own properties', () => {
+    const scope = Symbol('scope');
+    const input = { id: 1, [scope]: { token: 'secret' } };
+
+    const result = redactValue(input) as Record<PropertyKey, unknown>;
+
+    expect(Object.getOwnPropertySymbols(result)).toEqual([scope]);
+    expect(result[scope]).toEqual({ token: REDACTED });
+  });
+
+  it('exposes a stable set of default keys', () => {
+    expect(DEFAULT_REDACT_KEYS).toContain('password');
+    expect(DEFAULT_REDACT_KEYS).toContain('authorization');
+    expect(DEFAULT_REDACT_KEYS).toContain('creditCard');
+  });
+});

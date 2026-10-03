@@ -1,0 +1,70 @@
+{
+  "name": "@cqrs-ddd/pipeline-audit",
+  "version": "0.5.0",
+  "description": "Audit records for @cqrs-ddd/pipeline: who did what, in which tenant, with redacted payloads, to a log or PostgreSQL sink",
+  "author": "Aristotelis",
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "keywords": [
+    "pipeline",
+    "cqrs",
+    "audit",
+    "audit-trail",
+    "audit-log",
+    "compliance",
+    "security",
+    "redaction",
+    "behavior"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aristoteliss/ddd-cqrs.git",
+    "directory": "packages/pipeline-audit"
+  },
+  "homepage": "https://aristoteliss.github.io/ddd-cqrs/packages/pipeline-audit/",
+  "bugs": {
+    "url": "https://github.com/aristoteliss/ddd-cqrs/issues"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "LICENSE",
+    "COMMERCIAL_LICENSE.txt"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "build:watch": "tsc -p tsconfig.build.json --watch",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo",
+    "rebuild": "pnpm run clean && pnpm run build",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "pnpm run rebuild"
+  },
+  "peerDependencies": {
+    "@cqrs-ddd/pipeline": "workspace:^"
+  },
+  "devDependencies": {
+    "@cqrs-ddd/pipeline": "workspace:*",
+    "@vitest/coverage-v8": "^5.0.3",
+    "vitest": "^5.0.3"
+  },
+  "dependencies": {
+    "@cqrs-ddd/safe-stringify": "workspace:^",
+    "@cqrs-ddd/uuidv7": "workspace:^"
+  }
+}

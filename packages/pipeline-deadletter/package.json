@@ -1,0 +1,72 @@
+{
+  "name": "@cqrs-ddd/pipeline-deadletter",
+  "version": "0.5.0",
+  "description": "Dead letters for @cqrs-ddd/pipeline: captures failed commands and events with their context to a queue or table, and redrives them",
+  "author": "Aristotelis",
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "keywords": [
+    "pipeline",
+    "cqrs",
+    "dead-letter",
+    "dlq",
+    "redrive",
+    "bullmq",
+    "rabbitmq",
+    "postgres",
+    "retry",
+    "resilience",
+    "behavior"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aristoteliss/ddd-cqrs.git",
+    "directory": "packages/pipeline-deadletter"
+  },
+  "homepage": "https://aristoteliss.github.io/ddd-cqrs/packages/pipeline-deadletter/",
+  "bugs": {
+    "url": "https://github.com/aristoteliss/ddd-cqrs/issues"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "LICENSE",
+    "COMMERCIAL_LICENSE.txt"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "build:watch": "tsc -p tsconfig.build.json --watch",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo",
+    "rebuild": "pnpm run clean && pnpm run build",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "pnpm run rebuild"
+  },
+  "peerDependencies": {
+    "@cqrs-ddd/pipeline": "workspace:^"
+  },
+  "devDependencies": {
+    "@cqrs-ddd/pipeline": "workspace:*",
+    "@vitest/coverage-v8": "^5.0.3",
+    "vitest": "^5.0.3"
+  },
+  "dependencies": {
+    "@cqrs-ddd/safe-stringify": "workspace:^",
+    "@cqrs-ddd/uuidv7": "workspace:^"
+  }
+}

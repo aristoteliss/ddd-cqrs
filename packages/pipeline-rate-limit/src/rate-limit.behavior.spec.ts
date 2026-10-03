@@ -1,0 +1,431 @@
+/* Copyright (C) 2026-present Aristotelis — see repository license. */
+
+import {
+  type IPipelineBehaviorContract,
+  type IPipelineContext,
+  PIPELINE_BEHAVIOR_CONTRACT,
+} from '@cqrs-ddd/pipeline';
+import { RateLimiterMemory } from 'rate-limiter-flexible';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { RateLimitExceededError } from './errors/rate-limit-exceeded.error.js';
+import type { RateLimitBehaviorOptions } from './interfaces/rate-limit-options.interface.js';
+import type {
+  RateLimiterLike,
+  RateLimiterResLike,
+} from './interfaces/rate-limiter.interface.js';
+import {
+  RATE_LIMIT_ITEM,
+  RATE_LIMIT_KEY_ITEM,
+  RateLimitBehavior,
+} from './rate-limit.behavior.js';
+
+function okRes(over: Partial<RateLimiterResLike> = {}): RateLimiterResLike {
+  return {
+    msBeforeNext: 1000,
+    remainingPoints: 9,
+    consumedPoints: 1,
+    isFirstInDuration: false,
+    ...over,
+  };
+}
+
+function makeCtx(overrides: Partial<IPipelineContext> = {}): IPipelineContext {
+  return {
+    correlationId: 'corr-123',
+    request: { ip: '10.0.0.1' },
+    requestType: class CreateUserCommand {},
+    requestName: 'CreateUserCommand',
+    handlerType: class CreateUserHandler {},
+    handlerName: 'CreateUserHandler',
+    requestKind: 'command',
+    startedAt: new Date('2026-01-01T00:00:00.000Z'),
+    response: undefined,
+    items: new Map(),
+    getBehaviorOptions: vi.fn().mockReturnValue({
+      keyFactory: (c: IPipelineContext) => c.requestName,
+    }),
+    ...overrides,
+  } as unknown as IPipelineContext;
+}
+
+/**
+ * These tests cover point cost, limiter wiring and failure policy rather than
+ * partitioning, so they pass a request-name bucket as the required keyFactory.
+ */
+const GLOBAL_BUCKET: RateLimitBehaviorOptions = {
+  keyFactory: (ctx) => ctx.requestName,
+};
+
+function withOptions(
+  ctx: IPipelineContext,
+  options: RateLimitBehaviorOptions,
+): IPipelineContext {
+  vi.mocked(ctx.getBehaviorOptions).mockReturnValue({
+    ...GLOBAL_BUCKET,
+    ...options,
+  } as unknown as ReturnType<IPipelineContext['getBehaviorOptions']>);
+  return ctx;
+}
+
+describe('RateLimitBehavior', () => {
+  const consume = vi.fn();
+  const limiter: RateLimiterLike = { consume, points: 10 };
+
+  beforeEach(() => {
+    consume.mockReset();
+  });
+
+  it('does not mutate a shared logger and supplies its context per call', async () => {
+    consume.mockRejectedValue(new Error('store unavailable'));
+    const logger = {
+      warn: vi.fn(),
+      error: vi.fn(),
+      setContext: vi.fn(),
+    };
+    const behavior = new RateLimitBehavior(limiter, undefined, logger as never);
+
+    await behavior.handle(makeCtx(), vi.fn().mockResolvedValue('ok'));
+
+    expect(logger.setContext).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('failing open'),
+      RateLimitBehavior.name,
+    );
+  });
+
+  it('prints its context once through the default Nest logger', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      consume.mockRejectedValue(new Error('store unavailable'));
+      const behavior = new RateLimitBehavior(limiter);
+
+      await behavior.handle(makeCtx(), vi.fn().mockResolvedValue('ok'));
+
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('failing open'),
+        RateLimitBehavior.name,
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('consumes 1 point by default under a request-name keyFactory and proceeds', async () => {
+    consume.mockResolvedValue(okRes());
+    const behavior = new RateLimitBehavior(limiter);
+    const ctx = makeCtx();
+    const next = vi.fn().mockResolvedValue('handled');
+
+    const result = await behavior.handle(ctx, next);
+
+    expect(consume).toHaveBeenCalledWith('CreateUserCommand', 1);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(result).toBe('handled');
+    expect(ctx.items.get(RATE_LIMIT_KEY_ITEM)).toBe('CreateUserCommand');
+    expect(ctx.items.get(RATE_LIMIT_ITEM)).toMatchObject({
+      remainingPoints: 9,
+    });
+  });
+
+  it('applies keyFactory, keyPrefix, and a custom point cost', async () => {
+    consume.mockResolvedValue(okRes());
+    const behavior = new RateLimitBehavior(limiter);
+    const ctx = withOptions(makeCtx(), {
+      points: 5,
+      keyPrefix: 'api',
+      keyFactory: (c) => `${c.requestName}:${(c.request as { ip: string }).ip}`,
+    });
+
+    await behavior.handle(ctx, vi.fn().mockResolvedValue('ok'));
+
+    expect(consume).toHaveBeenCalledWith('api:CreateUserCommand:10.0.0.1', 5);
+  });
+
+  it.each([-1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1])(
+    'rejects invalid point cost %s before consuming',
+    async (points) => {
+      const behavior = new RateLimitBehavior(limiter);
+      const next = vi.fn();
+
+      await expect(
+        behavior.handle(withOptions(makeCtx(), { points }), next),
+      ).rejects.toThrow(
+        `Rate-limit points for CreateUserHandler must be a non-negative safe integer, received ${String(points)}.`,
+      );
+      expect(consume).not.toHaveBeenCalled();
+      expect(next).not.toHaveBeenCalled();
+    },
+  );
+
+  it('computes the cost per request when points is a function', async () => {
+    consume.mockResolvedValue(okRes());
+    const behavior = new RateLimitBehavior(limiter);
+    const ctx = withOptions(makeCtx({ request: { rows: [1, 2, 3] } }), {
+      points: (c) => (c.request as { rows: unknown[] }).rows.length,
+    });
+
+    await behavior.handle(ctx, vi.fn().mockResolvedValue('ok'));
+
+    expect(consume).toHaveBeenCalledWith('CreateUserCommand', 3);
+  });
+
+  it('rejects a computed cost that is not a non-negative safe integer', async () => {
+    const behavior = new RateLimitBehavior(limiter);
+    const next = vi.fn();
+
+    await expect(
+      behavior.handle(withOptions(makeCtx(), { points: () => 2.5 }), next),
+    ).rejects.toThrow(TypeError);
+    expect(consume).not.toHaveBeenCalled();
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('charges nothing for a cost of 0: no key, no limiter call', async () => {
+    const behavior = new RateLimitBehavior(limiter);
+    const keyFactory = vi.fn(() => 'unused');
+    const next = vi.fn().mockResolvedValue('ok');
+
+    for (const points of [0, () => 0]) {
+      const ctx = withOptions(makeCtx(), { points, keyFactory });
+      await expect(behavior.handle(ctx, next)).resolves.toBe('ok');
+      expect(ctx.items.has(RATE_LIMIT_KEY_ITEM)).toBe(false);
+    }
+    expect(keyFactory).not.toHaveBeenCalled();
+    expect(consume).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledTimes(2);
+  });
+
+  it('throws RateLimitExceededError when the limiter rejects with a result', async () => {
+    consume.mockRejectedValue(
+      okRes({ msBeforeNext: 2500, remainingPoints: 0 }),
+    );
+    const behavior = new RateLimitBehavior(limiter);
+    const ctx = makeCtx();
+    const next = vi.fn();
+
+    const error = await behavior.handle(ctx, next).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(RateLimitExceededError);
+    expect(error).toMatchObject({
+      key: 'CreateUserCommand',
+      requestName: 'CreateUserCommand',
+      msBeforeNext: 2500,
+      retryAfterSeconds: 3,
+      remainingPoints: 0,
+      limit: 10,
+      points: 1,
+    });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('fails open on a store error by default (allows the request)', async () => {
+    consume.mockRejectedValue(new Error('redis down'));
+    const behavior = new RateLimitBehavior(limiter);
+    const next = vi.fn().mockResolvedValue('handled');
+
+    const result = await behavior.handle(makeCtx(), next);
+
+    expect(result).toBe('handled');
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed on a store error when failOpen=false', async () => {
+    const boom = new Error('redis down');
+    consume.mockRejectedValue(boom);
+    const behavior = new RateLimitBehavior(limiter);
+    const ctx = withOptions(makeCtx(), { failOpen: false });
+    const next = vi.fn();
+
+    await expect(behavior.handle(ctx, next)).rejects.toBe(boom);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('uses a per-handler limiter override', async () => {
+    const overrideConsume = vi.fn().mockResolvedValue(okRes());
+    const behavior = new RateLimitBehavior(limiter);
+    const ctx = withOptions(makeCtx(), {
+      limiter: { consume: overrideConsume },
+    });
+
+    await behavior.handle(ctx, vi.fn().mockResolvedValue('ok'));
+
+    expect(overrideConsume).toHaveBeenCalledTimes(1);
+    expect(consume).not.toHaveBeenCalled();
+  });
+
+  it('merges module defaults under per-handler options (handler wins)', async () => {
+    consume.mockResolvedValue(okRes());
+    const behavior = new RateLimitBehavior(limiter, { points: 3 });
+    const ctx = withOptions(makeCtx(), { points: 7 });
+
+    await behavior.handle(ctx, vi.fn().mockResolvedValue('ok'));
+
+    expect(consume).toHaveBeenCalledWith('CreateUserCommand', 7);
+  });
+
+  it('integrates with a real RateLimiterMemory (3rd call is throttled)', async () => {
+    const realLimiter = new RateLimiterMemory({ points: 2, duration: 60 });
+    const behavior = new RateLimitBehavior(realLimiter);
+    const next = vi.fn().mockResolvedValue('ok');
+
+    await behavior.handle(makeCtx(), next);
+    await behavior.handle(makeCtx(), next);
+
+    await expect(behavior.handle(makeCtx(), next)).rejects.toBeInstanceOf(
+      RateLimitExceededError,
+    );
+    expect(next).toHaveBeenCalledTimes(2);
+  });
+
+  it('handles non-Error store failure when failing open and failing closed', async () => {
+    consume.mockRejectedValue('redis timeout string');
+    const logger = {
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    const behavior = new RateLimitBehavior(limiter, undefined, logger as never);
+    const next = vi.fn().mockResolvedValue('ok');
+
+    // Fail open with string error
+    const openCtx = withOptions(makeCtx(), { failOpen: true });
+    const result = await behavior.handle(openCtx, next);
+    expect(result).toBe('ok');
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('failing open: redis timeout string'),
+      RateLimitBehavior.name,
+    );
+
+    // Fail closed with string error
+    const closedCtx = withOptions(makeCtx(), { failOpen: false });
+    await expect(behavior.handle(closedCtx, next)).rejects.toBe(
+      'redis timeout string',
+    );
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('failing closed: redis timeout string'),
+      RateLimitBehavior.name,
+    );
+  });
+
+  it('falls back to module defaults when context returns no handler options', async () => {
+    consume.mockResolvedValue(okRes());
+    const behavior = new RateLimitBehavior(limiter, {
+      keyFactory: (c) => `default:${c.requestName}`,
+      points: 4,
+    });
+    const ctx = makeCtx({
+      getBehaviorOptions: vi.fn().mockReturnValue(undefined),
+    });
+
+    await behavior.handle(ctx, vi.fn().mockResolvedValue('ok'));
+
+    expect(consume).toHaveBeenCalledWith('default:CreateUserCommand', 4);
+  });
+
+  describe('PIPELINE_BEHAVIOR_CONTRACT', () => {
+    const contract = (
+      RateLimitBehavior as unknown as Record<symbol, IPipelineBehaviorContract>
+    )[PIPELINE_BEHAVIOR_CONTRACT];
+
+    it('returns diagnostic when handler declares intent without keyFactory', () => {
+      const diagnostics = contract?.validate?.({
+        handlerType: class CreateUserHandler {},
+        handlerName: 'CreateUserHandler',
+        requestKind: 'command',
+        declarationSource: 'handler',
+        effectiveOptions: {},
+        handlerOptions: {},
+        globalOptions: undefined,
+        effectiveBehaviorTypes: [RateLimitBehavior],
+      });
+
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics?.[0].behaviorName).toBe('RateLimitBehavior');
+      expect(diagnostics?.[0].message).toContain('explicit `keyFactory`');
+      expect(diagnostics?.[0].fix).toContain('Provide keyFactory');
+    });
+
+    it('does not return diagnostic when keyFactory is provided', () => {
+      const diagnostics = contract?.validate?.({
+        handlerType: class CreateUserHandler {},
+        handlerName: 'CreateUserHandler',
+        requestKind: 'command',
+        declarationSource: 'handler',
+        effectiveOptions: { keyFactory: () => 'user-1' },
+        handlerOptions: { keyFactory: () => 'user-1' },
+        globalOptions: undefined,
+        effectiveBehaviorTypes: [RateLimitBehavior],
+      });
+
+      expect(diagnostics).toBeUndefined();
+    });
+
+    it('returns diagnostic when declarationSource is global without keyFactory', () => {
+      const diagnostics = contract?.validate?.({
+        handlerType: class CreateUserHandler {},
+        handlerName: 'CreateUserHandler',
+        requestKind: 'command',
+        declarationSource: 'global',
+        effectiveOptions: {},
+        handlerOptions: undefined,
+        globalOptions: {},
+        effectiveBehaviorTypes: [RateLimitBehavior],
+      });
+
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics?.[0].message).toContain('explicit `keyFactory`');
+    });
+
+    it.each([
+      [-1, '-1'],
+      [1.5, '1.5'],
+      ['2', '2'],
+    ])('returns diagnostic for invalid fixed points %s', (points, shown) => {
+      const diagnostics = contract?.validate?.({
+        handlerType: class CreateUserHandler {},
+        handlerName: 'CreateUserHandler',
+        requestKind: 'command',
+        declarationSource: 'handler',
+        effectiveOptions: { keyFactory: () => 'k', points: points as never },
+        handlerOptions: { keyFactory: () => 'k', points: points as never },
+        globalOptions: undefined,
+        effectiveBehaviorTypes: [RateLimitBehavior],
+      });
+
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics?.[0].message).toBe(
+        `RateLimitBehavior points must be a non-negative safe integer or a function, received ${shown}`,
+      );
+    });
+
+    it.each([0, 5, () => 1])('accepts points %s', (points) => {
+      const diagnostics = contract?.validate?.({
+        handlerType: class CreateUserHandler {},
+        handlerName: 'CreateUserHandler',
+        requestKind: 'command',
+        declarationSource: 'handler',
+        effectiveOptions: { keyFactory: () => 'k', points },
+        handlerOptions: { keyFactory: () => 'k', points },
+        globalOptions: undefined,
+        effectiveBehaviorTypes: [RateLimitBehavior],
+      });
+
+      expect(diagnostics).toBeUndefined();
+    });
+
+    it('returns diagnostic when keyFactory is not a callable function', () => {
+      const diagnostics = contract?.validate?.({
+        handlerType: class CreateUserHandler {},
+        handlerName: 'CreateUserHandler',
+        requestKind: 'command',
+        declarationSource: 'handler',
+        effectiveOptions: { keyFactory: 'not-a-function' as never },
+        handlerOptions: { keyFactory: 'not-a-function' as never },
+        globalOptions: undefined,
+        effectiveBehaviorTypes: [RateLimitBehavior],
+      });
+
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics?.[0].message).toContain('must be a callable function');
+    });
+  });
+});

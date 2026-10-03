@@ -1,0 +1,235 @@
+/* Copyright (C) 2026-present Aristotelis — see repository license. */
+
+import type { Constructor, PipelineLogger } from '@cqrs-ddd/pipeline';
+import {
+  type IPipelineBehavior,
+  type IPipelineBehaviorContract,
+  type IPipelineBehaviorOptionsResolver,
+  type IPipelineContext,
+  type NextDelegate,
+  PIPELINE_BEHAVIOR_CONTRACT,
+  type PipelineBehaviorDiagnostic,
+  type PipelineBehaviorValidationContext,
+} from '@cqrs-ddd/pipeline';
+import { ResilienceConfigurationError } from './errors/resilience-configuration.error.js';
+import {
+  type AnyPolicy,
+  buildResiliencePolicy,
+} from './helpers/policy-factory.js';
+import {
+  runWithResilienceAbortSignal,
+  runWithResilienceRequest,
+} from './helpers/resilience-context.js';
+import type { ResilienceBehaviorOptions } from './interfaces/resilience-options.interface.js';
+
+interface ResilienceSafetyIssue {
+  message: string;
+  fix: string;
+}
+
+function getResilienceSafetyIssues(
+  options: ResilienceBehaviorOptions | undefined,
+  requestKind: 'command' | 'query' | 'event' | 'unknown',
+): ResilienceSafetyIssue[] {
+  if (!options || options.policy) return [];
+
+  const issues: ResilienceSafetyIssue[] = [];
+  const dependencyLayers = options as {
+    circuitBreaker?: unknown;
+    fallback?: unknown;
+  };
+  if (
+    dependencyLayers.circuitBreaker !== undefined ||
+    dependencyLayers.fallback !== undefined
+  ) {
+    issues.push({
+      message:
+        'circuitBreaker and fallback are not applied around a whole handler; they belong to a named policy of an outbound dependency',
+      fix: 'Declare them as a named policy, new ResiliencePolicies({ <name>: { ... } }), and run the outbound call through it.',
+    });
+  }
+
+  const classifiesErrors =
+    typeof options.handle === 'function' || options.handleAllErrors === true;
+  if (options.retry && !classifiesErrors) {
+    issues.push({
+      message: 'retry requires handle(error) or explicit handleAllErrors: true',
+      fix: 'Specify handle: (err) => boolean or handleAllErrors: true in ResilienceBehavior options.',
+    });
+  }
+
+  if (
+    options.retry &&
+    requestKind !== 'query' &&
+    options.retry.replaySafe !== true
+  ) {
+    issues.push({
+      message: `retry on non-query handler (${requestKind}) replays downstream work; commands/events must set retry.replaySafe: true`,
+      fix: 'Set retry: { ...retry, replaySafe: true } after verifying handler side effects are idempotent or transactional.',
+    });
+  }
+
+  if (
+    options.timeout &&
+    requestKind !== 'query' &&
+    options.timeout.strategy !== 'cooperative' &&
+    options.timeout.replaySafe !== true
+  ) {
+    issues.push({
+      message: `aggressive timeout on non-query handler (${requestKind}) answers the caller while the handler keeps running, so a retry can overlap its side effects`,
+      fix: "Use timeout: { ...timeout, strategy: 'cooperative' } and pass getResilienceAbortSignal() to cancellable work, or set timeout.replaySafe: true after verifying overlapping executions are safe.",
+    });
+  }
+
+  return issues;
+}
+
+/**
+ * Pipeline behavior that wraps each command / query / event handler in a
+ * cockatiel resilience policy — the layers that make sense around a whole
+ * handler: retry, timeout and bulkhead.
+ *
+ * A circuit breaker and a fallback belong to an outbound dependency, not to a
+ * handler: declare them on a named policy (`new ResiliencePolicies({ ... })`)
+ * and use it in the adapter through {@link ResiliencePolicies}. The behavior
+ * contract rejects them here.
+ *
+ * Resolution of the effective options for a handler where this behavior is
+ * attached:
+ * 1. Application-wide defaults, the first constructor argument.
+ * 2. Per-handler options from `pipeline.wrap(options, [ResilienceBehavior, { ... }])`,
+ *    shallow-merged on top of the defaults (handler keys win).
+ *
+ * Policies are built **lazily on first invocation and cached per handler**, so
+ * a stateful layer (bulkhead) correctly shares state across
+ * every request to that handler. When no options resolve, the behavior caches
+ * that result and passes subsequent invocations directly to `next()` without
+ * constructing or executing a cockatiel policy.
+ *
+ * ### Replay / error-classification safety
+ *
+ * A handler-level retry calls `next()` again, which means the complete
+ * downstream pipeline and handler are replayed. To avoid accidental duplicate
+ * side effects, command/event retries must explicitly set
+ * `retry.replaySafe: true`. A retry must also define which errors are transient via `handle(error)`, unless the caller
+ * intentionally opts into `handleAllErrors: true`. An `aggressive` timeout
+ * (the default strategy) on a command/event answers the caller while the
+ * handler keeps running, so it requires `strategy: 'cooperative'` or
+ * `timeout.replaySafe: true`.
+ *
+ * Timeout and bulkhead-only policies do not require an error classifier because
+ * they do not decide which application errors are retryable.
+ * A custom pre-built Cockatiel `policy` also bypasses the declarative safety
+ * checks because the caller owns its semantics directly.
+ */
+export class ResilienceBehavior
+  implements
+    IPipelineBehavior,
+    IPipelineBehaviorOptionsResolver<ResilienceBehaviorOptions>
+{
+  static readonly [PIPELINE_BEHAVIOR_CONTRACT]: IPipelineBehaviorContract = {
+    validate: (
+      context: PipelineBehaviorValidationContext,
+    ): PipelineBehaviorDiagnostic[] | undefined => {
+      const options = context.effectiveOptions as
+        | ResilienceBehaviorOptions
+        | undefined;
+      const issues = getResilienceSafetyIssues(options, context.requestKind);
+      if (issues.length === 0) return undefined;
+
+      return issues.map((issue) => ({
+        handlerName: context.handlerName,
+        behaviorName: ResilienceBehavior.name,
+        message: issue.message,
+        fix: issue.fix,
+      }));
+    },
+  };
+
+  private readonly logger: PipelineLogger;
+  /**
+   * Per-handler policy cache. `null` means "resolved, but nothing configured"
+   * (pass-through), distinct from `undefined` ("not yet resolved").
+   */
+  private readonly policyCache = new Map<Constructor, AnyPolicy | null>();
+
+  constructor(
+    private readonly defaultOptions?: ResilienceBehaviorOptions,
+    logger?: PipelineLogger,
+  ) {
+    this.logger = logger ?? console;
+  }
+
+  async handle(
+    context: IPipelineContext,
+    next: NextDelegate,
+  ): Promise<unknown> {
+    const policy = this.resolvePolicy(context);
+    if (!policy) return next();
+
+    // The policy is shared across every request that reaches this handler, so
+    // the request's own labels travel with the execution rather than being
+    // captured when the policy was built.
+    return runWithResilienceRequest(
+      { requestName: context.requestName, handlerName: context.handlerName },
+      () =>
+        policy.execute((policyContext) => {
+          // Cockatiel supplies the effective AbortSignal (including timeout
+          // cancellation) to each execute callback. Bind it to this attempt's
+          // async execution so an aggressive timeout followed by a retry cannot
+          // replace the signal still observed by work from the timed-out attempt.
+          return runWithResilienceAbortSignal(policyContext.signal, next);
+        }),
+    );
+  }
+
+  /** Resolves, validates, and caches the composed policy for the handler in `context`. */
+  private resolvePolicy(context: IPipelineContext): AnyPolicy | null {
+    const cached = this.policyCache.get(context.handlerType);
+    if (cached !== undefined) return cached;
+
+    const handlerOptions =
+      context.getBehaviorOptions<ResilienceBehaviorOptions>(ResilienceBehavior);
+    const effective = this.resolveEffectiveOptions(handlerOptions);
+
+    this.assertSafeConfiguration(context, effective);
+
+    const policy = effective
+      ? buildResiliencePolicy(effective, {
+          logger: this.logger,
+          requestName: context.requestName,
+          handlerName: context.handlerName,
+        })
+      : null;
+
+    this.policyCache.set(context.handlerType, policy);
+    return policy;
+  }
+
+  /**
+   * Rejects ambiguous whole-handler resilience configurations before Cockatiel
+   * policy creation. This turns replay/error-classification assumptions into an
+   * explicit application decision instead of a hidden default.
+   */
+  private assertSafeConfiguration(
+    context: IPipelineContext,
+    options: ResilienceBehaviorOptions | undefined,
+  ): void {
+    const issues = getResilienceSafetyIssues(options, context.requestKind);
+    if (issues.length > 0) {
+      throw new ResilienceConfigurationError(
+        context.requestName,
+        context.requestKind,
+        issues[0].message,
+      );
+    }
+  }
+
+  /** Shallow-merges pipeline-level options over the constructor defaults. */
+  resolveEffectiveOptions(
+    options?: ResilienceBehaviorOptions,
+  ): ResilienceBehaviorOptions | undefined {
+    if (!this.defaultOptions && !options) return undefined;
+    return { ...this.defaultOptions, ...options };
+  }
+}

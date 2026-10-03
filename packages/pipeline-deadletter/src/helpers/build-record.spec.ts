@@ -1,0 +1,168 @@
+/* Copyright (C) 2026-present Aristotelis — see repository license. */
+
+import type { IPipelineContext } from '@cqrs-ddd/pipeline';
+import { describe, expect, it } from 'vitest';
+import { buildDeadLetterRecord } from './build-record.js';
+
+describe('buildDeadLetterRecord', () => {
+  const mockContext: IPipelineContext = {
+    correlationId: 'corr-123',
+    request: { userId: 'u1' },
+    requestType: class TestRequest {},
+    requestName: 'CreateUserCommand',
+    handlerType: class TestHandler {},
+    handlerName: 'CreateUserHandler',
+    requestKind: 'command',
+    startedAt: new Date(),
+    response: undefined,
+    items: new Map(),
+    getBehaviorOptions: () => undefined,
+  };
+
+  it('builds record from Error instance including stack trace by default', () => {
+    const error = new Error('database connection failed');
+    const record = buildDeadLetterRecord(mockContext, error);
+
+    expect(record.correlationId).toBe('corr-123');
+    expect(record.requestKind).toBe('command');
+    expect(record.requestName).toBe('CreateUserCommand');
+    expect(record.handlerName).toBe('CreateUserHandler');
+    expect(record.payload).toEqual({ userId: 'u1' });
+    expect(record.error.name).toBe('Error');
+    expect(record.error.message).toBe('database connection failed');
+    expect(record.error.stack).toBeDefined();
+    expect(record.failedAt).toBeDefined();
+  });
+
+  it('omits stack trace when includeStack is false', () => {
+    const error = new Error('validation error');
+    const record = buildDeadLetterRecord(mockContext, error, {
+      includeStack: false,
+    });
+
+    expect(record.error.message).toBe('validation error');
+    expect(record.error.stack).toBeUndefined();
+  });
+
+  it('normalizes non-Error thrown values to name "unknown"', () => {
+    const record = buildDeadLetterRecord(mockContext, 'string error message');
+
+    expect(record.error.name).toBe('unknown');
+    expect(record.error.message).toBe('string error message');
+    expect(record.error.stack).toBeUndefined();
+  });
+
+  it('enriches record with custom metadata factory', () => {
+    const error = new Error('fail');
+    const record = buildDeadLetterRecord(mockContext, error, {
+      metadata: (ctx) => ({
+        tenantId: 'tenant-42',
+        requestStarted: ctx.startedAt.toISOString(),
+      }),
+    });
+
+    expect(record.metadata).toEqual({
+      tenantId: 'tenant-42',
+      requestStarted: mockContext.startedAt.toISOString(),
+    });
+  });
+
+  it('redacts default sensitive keys and custom redactKeys in payload', () => {
+    const error = new Error('fail');
+    const ctxWithSecrets: IPipelineContext = {
+      ...mockContext,
+      request: {
+        email: 'alice@example.test',
+        password: 'super-secret-password',
+        code: '123456',
+        nested: {
+          token: 'jwt-token-val',
+        },
+      },
+    };
+
+    const record = buildDeadLetterRecord(ctxWithSecrets, error, {
+      redactKeys: ['code'],
+    });
+
+    expect(record.payload).toEqual({
+      email: 'alice@example.test',
+      password: '[REDACTED]',
+      code: '[REDACTED]',
+      nested: {
+        token: '[REDACTED]',
+      },
+    });
+  });
+
+  it('supports custom redact function', () => {
+    const error = new Error('fail');
+    const ctx: IPipelineContext = {
+      ...mockContext,
+      request: { raw: 'sensitive-payload' },
+    };
+
+    const record = buildDeadLetterRecord(ctx, error, {
+      redact: (p: any) => ({ ...p, sanitized: true, raw: '***' }),
+    });
+
+    expect(record.payload).toEqual({
+      raw: '***',
+      sanitized: true,
+    });
+  });
+
+  it('captures tenantId on the record and preserves it in metadata', () => {
+    const error = new Error('fail');
+    const ctxWithTenant: IPipelineContext = {
+      ...mockContext,
+      tenantId: 'tenant-99',
+    };
+
+    const record = buildDeadLetterRecord(ctxWithTenant, error);
+    expect(record.tenantId).toBe('tenant-99');
+    expect(record.metadata).toEqual({ tenantId: 'tenant-99' });
+  });
+
+  it('flags whether redaction changed the payload, through maps and cycles', () => {
+    const context = (request: unknown) =>
+      ({
+        correlationId: 'c',
+        requestKind: 'event',
+        requestName: 'E',
+        handlerName: 'H',
+        request,
+      }) as never;
+    const cyclic: Record<string, unknown> = { name: 'n' };
+    cyclic.self = cyclic;
+
+    expect(
+      buildDeadLetterRecord(context({ name: 'n' }), new Error('e')),
+    ).toMatchObject({
+      attempts: 0,
+      status: 'open',
+      payloadRedacted: false,
+    });
+    expect(
+      buildDeadLetterRecord(context(cyclic), new Error('e')).payloadRedacted,
+    ).toBe(false);
+    expect(
+      buildDeadLetterRecord(context({ password: 'p' }), new Error('e'))
+        .payloadRedacted,
+    ).toBe(true);
+    expect(
+      buildDeadLetterRecord(
+        context(new Map([['k', { token: 't' }]])),
+        new Error('e'),
+      ).payloadRedacted,
+    ).toBe(true);
+    expect(
+      buildDeadLetterRecord(context({ name: 'n' }), new Error('e'), {
+        redact: (payload) => payload,
+      }).payloadRedacted,
+    ).toBe(true);
+    expect(buildDeadLetterRecord(context({}), new Error('e')).id).toMatch(
+      /^[0-9a-f-]{36}$/,
+    );
+  });
+});

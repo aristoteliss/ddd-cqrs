@@ -1,0 +1,423 @@
+/* Copyright (C) 2026-present Aristotelis — see repository license. */
+
+import { EventEmitter } from 'node:events';
+import { describe, expect, it, vi } from 'vitest';
+import type { DeadLetterRecord } from '../interfaces/dead-letter-transport.interface.js';
+import { BullMqDeadLetterTransport } from './bullmq.transport.js';
+import {
+  createDeadLetterTableSql,
+  PostgresDeadLetterTransport,
+} from './postgres.transport.js';
+import { RabbitMqDeadLetterTransport } from './rabbitmq.transport.js';
+
+const record: DeadLetterRecord = {
+  id: '0199a1b2-0000-7000-8000-000000000001',
+  correlationId: 'corr-1',
+  requestKind: 'command',
+  requestName: 'CreateUserCommand',
+  handlerName: 'CreateUserHandler',
+  payload: { username: 'neo' },
+  error: { name: 'Error', message: 'boom' },
+  failedAt: '2026-01-01T00:00:00.000Z',
+  metadata: { tenant: 'acme' },
+  attempts: 0,
+  status: 'open',
+  payloadRedacted: false,
+};
+
+describe('BullMqDeadLetterTransport', () => {
+  it('adds a job with the default name and options', async () => {
+    const add = vi.fn().mockResolvedValue(undefined);
+    await new BullMqDeadLetterTransport({ add }).send(record);
+
+    expect(add).toHaveBeenCalledWith('dead-letter', record, {
+      removeOnComplete: false,
+      removeOnFail: false,
+      attempts: 1,
+    });
+  });
+
+  it('honors a custom job name and options', async () => {
+    const add = vi.fn().mockResolvedValue(undefined);
+    await new BullMqDeadLetterTransport(
+      { add },
+      { jobName: 'dlq', jobOptions: { attempts: 3 } },
+    ).send(record);
+
+    expect(add).toHaveBeenCalledWith('dlq', record, { attempts: 3 });
+  });
+});
+
+describe('RabbitMqDeadLetterTransport', () => {
+  it('rejects a normal channel before publishing anything', () => {
+    const publish = vi.fn().mockReturnValue(true);
+
+    expect(() => new RabbitMqDeadLetterTransport({ publish } as never)).toThrow(
+      'requires an amqplib ConfirmChannel',
+    );
+    expect(publish).not.toHaveBeenCalled();
+  });
+
+  it('publishes a persistent JSON message with sane defaults', async () => {
+    const publish = vi.fn().mockReturnValue(true);
+    const waitForConfirms = vi.fn().mockResolvedValue(undefined);
+    await new RabbitMqDeadLetterTransport({ publish, waitForConfirms }).send(
+      record,
+    );
+
+    const [exchange, routingKey, content, options] = publish.mock.calls[0];
+    expect(exchange).toBe('');
+    expect(routingKey).toBe('dead-letter');
+    expect(JSON.parse((content as Buffer).toString())).toEqual(record);
+    expect(options).toMatchObject({
+      persistent: true,
+      contentType: 'application/json',
+      correlationId: 'corr-1',
+    });
+    expect(waitForConfirms).toHaveBeenCalledOnce();
+  });
+
+  it('routes to a custom exchange/routingKey', async () => {
+    const publish = vi.fn().mockReturnValue(true);
+    const waitForConfirms = vi.fn().mockResolvedValue(undefined);
+    await new RabbitMqDeadLetterTransport(
+      { publish, waitForConfirms },
+      { exchange: 'dlx', routingKey: 'failed' },
+    ).send(record);
+
+    const [exchange, routingKey] = publish.mock.calls[0];
+    expect(exchange).toBe('dlx');
+    expect(routingKey).toBe('failed');
+  });
+
+  it('does not report success until the broker confirms the publish', async () => {
+    let confirm: (() => void) | undefined;
+    const waitForConfirms = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          confirm = resolve;
+        }),
+    );
+    const pending = new RabbitMqDeadLetterTransport({
+      publish: vi.fn().mockReturnValue(true),
+      waitForConfirms,
+    }).send(record);
+    let settled = false;
+    void pending.finally(() => {
+      settled = true;
+    });
+
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    confirm?.();
+    await expect(pending).resolves.toBeUndefined();
+  });
+
+  it('rejects when the broker nacks the publish', async () => {
+    const nack = new Error('message nacked');
+    const pending = new RabbitMqDeadLetterTransport({
+      publish: vi.fn().mockReturnValue(true),
+      waitForConfirms: vi.fn().mockRejectedValue(nack),
+    }).send(record);
+
+    await expect(pending).rejects.toBe(nack);
+  });
+
+  it('waits for drain when publish reports backpressure', async () => {
+    const publish = vi.fn().mockReturnValue(false);
+    const events = new EventEmitter();
+    const once = vi.fn(events.once.bind(events));
+    const removeListener = vi.fn(events.removeListener.bind(events));
+    const pending = new RabbitMqDeadLetterTransport({
+      publish,
+      waitForConfirms: vi.fn().mockResolvedValue(undefined),
+      once,
+      removeListener,
+    }).send(record);
+    queueMicrotask(() => events.emit('drain'));
+
+    await expect(pending).resolves.toBeUndefined();
+    expect(once).toHaveBeenCalledTimes(3);
+    expect(events.listenerCount('close')).toBe(0);
+    expect(events.listenerCount('error')).toBe(0);
+  });
+
+  it('rejects when the channel closes before drain', async () => {
+    const events = new EventEmitter();
+    const pending = new RabbitMqDeadLetterTransport({
+      publish: vi.fn().mockReturnValue(false),
+      waitForConfirms: vi.fn().mockResolvedValue(undefined),
+      once: events.once.bind(events),
+      removeListener: events.removeListener.bind(events),
+    }).send(record);
+    queueMicrotask(() => events.emit('close'));
+
+    await expect(pending).rejects.toThrow(/closed while waiting/);
+    expect(events.listenerCount('drain')).toBe(0);
+    expect(events.listenerCount('error')).toBe(0);
+  });
+
+  it('rejects with a descriptive error when the channel emits error without one', async () => {
+    const events = new EventEmitter();
+    const pending = new RabbitMqDeadLetterTransport({
+      publish: vi.fn().mockReturnValue(false),
+      waitForConfirms: vi.fn().mockResolvedValue(undefined),
+      once: events.once.bind(events),
+      removeListener: events.removeListener.bind(events),
+    }).send(record);
+    queueMicrotask(() => events.emit('error'));
+
+    await expect(pending).rejects.toThrow(
+      /failed while waiting for publish backpressure to drain/,
+    );
+    expect(events.listenerCount('drain')).toBe(0);
+    expect(events.listenerCount('close')).toBe(0);
+  });
+
+  it('settles on the first lifecycle event when a channel keeps firing listeners it cannot detach', async () => {
+    const listeners = new Map<string, (error?: Error) => void>();
+    const removeListener = vi.fn();
+    const pending = new RabbitMqDeadLetterTransport({
+      publish: vi.fn().mockReturnValue(false),
+      waitForConfirms: vi.fn().mockResolvedValue(undefined),
+      once: (event, listener) => listeners.set(event, listener),
+      removeListener,
+    }).send(record);
+    queueMicrotask(() => {
+      listeners.get('drain')?.();
+      listeners.get('close')?.();
+      listeners.get('error')?.(new Error('late failure'));
+    });
+
+    await expect(pending).resolves.toBeUndefined();
+    expect(removeListener).toHaveBeenCalledTimes(3);
+  });
+
+  it('rejects when the channel errors before drain', async () => {
+    const events = new EventEmitter();
+    const failure = new Error('channel failed');
+    const pending = new RabbitMqDeadLetterTransport({
+      publish: vi.fn().mockReturnValue(false),
+      waitForConfirms: vi.fn().mockResolvedValue(undefined),
+      once: events.once.bind(events),
+      removeListener: events.removeListener.bind(events),
+    }).send(record);
+    queueMicrotask(() => events.emit('error', failure));
+
+    await expect(pending).rejects.toBe(failure);
+    expect(events.listenerCount('drain')).toBe(0);
+    expect(events.listenerCount('close')).toBe(0);
+  });
+
+  it('rejects when RabbitMQ channel reports backpressure without EventEmitter methods', async () => {
+    const channel = {
+      publish: vi.fn().mockReturnValue(false),
+      waitForConfirms: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const transport = new RabbitMqDeadLetterTransport(channel as any);
+    await expect(transport.send(record)).rejects.toThrow(
+      /RabbitMQ channel reported backpressure but does not expose EventEmitter lifecycle methods/,
+    );
+  });
+});
+
+describe('PostgresDeadLetterTransport', () => {
+  it('inserts a parameterized row into the default table', async () => {
+    const query = vi.fn().mockResolvedValue({ rowCount: 1 });
+    await new PostgresDeadLetterTransport({ query }).send(record);
+
+    const [sql, values] = query.mock.calls[0];
+    expect(sql).toContain('INSERT INTO dead_letters');
+    expect(values).toEqual([
+      '0199a1b2-0000-7000-8000-000000000001',
+      'corr-1',
+      'command',
+      'CreateUserCommand',
+      'CreateUserHandler',
+      JSON.stringify({ username: 'neo' }),
+      JSON.stringify(record.error),
+      JSON.stringify({ tenant: 'acme' }),
+      '2026-01-01T00:00:00.000Z',
+      0,
+      'open',
+      false,
+    ]);
+  });
+
+  it('accepts a schema-qualified table', async () => {
+    const query = vi.fn().mockResolvedValue({});
+    await new PostgresDeadLetterTransport(
+      { query },
+      {
+        table: 'audit.dead_letters',
+      },
+    ).send(record);
+
+    expect(query.mock.calls[0][0]).toContain('INSERT INTO audit.dead_letters');
+  });
+
+  it('rejects unsafe table identifiers (SQL injection guard)', () => {
+    const query = vi.fn();
+    expect(
+      () =>
+        new PostgresDeadLetterTransport(
+          { query },
+          {
+            table: 'dl; DROP TABLE users; --',
+          },
+        ),
+    ).toThrow(/Invalid dead-letter table name/);
+  });
+
+  it('createDeadLetterTableSql emits CREATE TABLE for a valid name', () => {
+    expect(createDeadLetterTableSql()).toContain(
+      'CREATE TABLE IF NOT EXISTS dead_letters',
+    );
+    expect(() => createDeadLetterTableSql('bad name')).toThrow(
+      /Invalid dead-letter table name/,
+    );
+  });
+
+  it('binds a NUL character or a lone surrogate as U+FFFD, which jsonb accepts', async () => {
+    const query = vi.fn().mockResolvedValue({ rowCount: 1 });
+    await new PostgresDeadLetterTransport({ query }).send({
+      ...record,
+      payload: { note: 'a\u0000b' },
+      error: { name: 'Error', message: 'lone \udc00' },
+      metadata: { 'k\u0000': 1 },
+    });
+
+    const [, values] = query.mock.calls[0];
+    expect(JSON.parse(values[5])).toEqual({ note: 'a\ufffdb' });
+    expect(JSON.parse(values[6])).toEqual({
+      name: 'Error',
+      message: 'lone \ufffd',
+    });
+    expect(JSON.parse(values[7])).toEqual({ 'k\ufffd': 1 });
+  });
+
+  it('inserts null metadata when metadata is undefined in Postgres record', async () => {
+    const query = vi.fn().mockResolvedValue({ rowCount: 1 });
+    const recordWithoutMeta: DeadLetterRecord = {
+      ...record,
+      metadata: undefined,
+    };
+    await new PostgresDeadLetterTransport({ query }).send(recordWithoutMeta);
+
+    const [, values] = query.mock.calls[0];
+    expect(values[7]).toBeNull();
+  });
+
+  it('binds a JSON null payload when the record payload is undefined', async () => {
+    const query = vi.fn().mockResolvedValue({ rowCount: 1 });
+    await new PostgresDeadLetterTransport({ query }).send({
+      ...record,
+      payload: undefined,
+    });
+
+    const [, values] = query.mock.calls[0];
+    expect(values[5]).toBe('null');
+  });
+});
+
+describe('PostgresDeadLetterTransport as a store', () => {
+  const row = {
+    id: 'dl-1',
+    correlation_id: 'corr-1',
+    request_kind: 'event',
+    request_name: 'UserCreatedEvent',
+    handler_name: 'SendWelcomeEmailHandler',
+    payload: { userId: 'u-1' },
+    error: { name: 'Error', message: 'boom' },
+    metadata: { tenantId: 't-1' },
+    failed_at: new Date('2026-01-01T00:00:00.000Z'),
+    attempts: 2,
+    status: 'resolved',
+    payload_redacted: false,
+    last_error: { name: 'Error', message: 'again' },
+    resolved_at: new Date('2026-01-02T00:00:00.000Z'),
+  };
+
+  it('reads a record by id, mapping every column', async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [row] });
+
+    const record = await new PostgresDeadLetterTransport({ query }).get('dl-1');
+
+    expect(query.mock.calls[0]).toEqual([
+      'SELECT * FROM dead_letters WHERE id = $1',
+      ['dl-1'],
+    ]);
+    expect(record).toEqual({
+      id: 'dl-1',
+      correlationId: 'corr-1',
+      tenantId: 't-1',
+      requestKind: 'event',
+      requestName: 'UserCreatedEvent',
+      handlerName: 'SendWelcomeEmailHandler',
+      payload: { userId: 'u-1' },
+      error: { name: 'Error', message: 'boom' },
+      failedAt: '2026-01-01T00:00:00.000Z',
+      metadata: { tenantId: 't-1' },
+      attempts: 2,
+      status: 'resolved',
+      payloadRedacted: false,
+      lastError: { name: 'Error', message: 'again' },
+      resolvedAt: '2026-01-02T00:00:00.000Z',
+    });
+  });
+
+  it('maps a minimal row and returns undefined for a missing id', async () => {
+    const minimal = {
+      ...row,
+      metadata: null,
+      last_error: null,
+      resolved_at: null,
+      status: 'open',
+    };
+    const store = new PostgresDeadLetterTransport({
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({ rows: [minimal] })
+        .mockResolvedValueOnce({}),
+    });
+
+    const record = await store.get('dl-1');
+    expect(record).not.toHaveProperty('tenantId');
+    expect(record).not.toHaveProperty('metadata');
+    expect(record).not.toHaveProperty('lastError');
+    expect(record).not.toHaveProperty('resolvedAt');
+    await expect(store.get('missing')).resolves.toBeUndefined();
+  });
+
+  it('lists records by status and request name, oldest first, with a default limit', async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [row] });
+    const store = new PostgresDeadLetterTransport({ query });
+
+    await expect(
+      store.list({ status: 'open', requestName: 'UserCreatedEvent', limit: 5 }),
+    ).resolves.toHaveLength(1);
+    await store.list();
+
+    expect(query.mock.calls[0]?.[0]).toContain('ORDER BY id');
+    expect(query.mock.calls[0]?.[1]).toEqual(['open', 'UserCreatedEvent', 5]);
+    expect(query.mock.calls[1]?.[1]).toEqual([null, null, 100]);
+  });
+
+  it('counts an attempt with its error, and marks a record resolved', async () => {
+    const query = vi.fn().mockResolvedValue({});
+    const store = new PostgresDeadLetterTransport({ query });
+
+    await store.recordAttempt('dl-1', { name: 'Error', message: 'again' });
+    await store.markResolved('dl-1');
+
+    expect(query.mock.calls[0]).toEqual([
+      'UPDATE dead_letters SET attempts = attempts + 1, last_error = $2 WHERE id = $1',
+      ['dl-1', JSON.stringify({ name: 'Error', message: 'again' })],
+    ]);
+    expect(query.mock.calls[1]).toEqual([
+      "UPDATE dead_letters SET status = 'resolved', resolved_at = now() WHERE id = $1",
+      ['dl-1'],
+    ]);
+  });
+});
