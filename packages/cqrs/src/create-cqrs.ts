@@ -8,7 +8,6 @@ import type {
 import { CommandBus } from './command.bus.js';
 import { commandOf, eventsOf, queryOf } from './decorators.js';
 import { EventBus } from './event.bus.js';
-import { EventPublisher } from './event.publisher.js';
 import { QueryBus } from './query.bus.js';
 import {
   behaviorResolver,
@@ -41,7 +40,6 @@ export interface Cqrs {
   readonly commandBus: CommandBus;
   readonly queryBus: QueryBus;
   readonly eventBus: EventBus;
-  readonly eventPublisher: EventPublisher;
   readonly unhandledExceptionBus: UnhandledExceptionBus;
   /**
    * Registers handler instances: classes decorated with `@CommandHandler`,
@@ -92,7 +90,6 @@ export function createCqrs(options: CqrsOptions = {}): Cqrs {
     commandBus: new CommandBus(handlers.commands),
     queryBus: new QueryBus(handlers.queries),
     eventBus,
-    eventPublisher: new EventPublisher(eventBus),
     unhandledExceptionBus,
     register(...instances) {
       const entries = instances.map((instance) => {

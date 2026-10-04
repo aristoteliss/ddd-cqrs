@@ -22,6 +22,14 @@ export type {
 export { MissingPartitionError } from './errors/missing-partition.error.js';
 export * from './errors/missing-pipeline-item.error.js';
 export {
+  type AnyClass,
+  type DualClassDecorator,
+  type HandlerPipeline,
+  pipelineOf,
+  SkipPipeline,
+  UsePipeline,
+} from './handler-pipeline.js';
+export {
   type BehaviorEntryAccumulators,
   behaviorEntryType,
   normalizeBehaviorEntries,

@@ -8,7 +8,7 @@ sidebar:
 Propagates a correlation id, the id that ties a piece of work to the request or message
 that caused it, through a Node.js application:
 
-- `HttpCorrelationMiddleware` takes it from an incoming HTTP header, or creates one;
+- `httpCorrelation()` takes it from an incoming HTTP header, or creates one;
 - `@WithCorrelation()` takes it from a queue job, a message or a notification, on the
   consumer method, in both TypeScript decorator modes;
 - `correlationSource` hands it to pipelines, and `correlationHeaders()` and
@@ -27,17 +27,17 @@ import { createPipeline } from '@cqrs-ddd/pipeline';
 import {
   correlationSource,
   getCorrelationId,
-  HttpCorrelationMiddleware,
+  httpCorrelation,
 } from '@cqrs-ddd/pipeline-correlation';
 
 const pipeline = createPipeline({ sources: { correlationId: correlationSource } });
 
-const correlation = new HttpCorrelationMiddleware();
-app.use((req, res, next) => correlation.use(req, res, next));
+app.use(httpCorrelation());
 app.get('/ping', (_req, res) => res.send(getCorrelationId()));
 ```
 
-The middleware's `use(req, res, next)` fits Node's `http` server, Express and Connect.
+The middleware `httpCorrelation()` returns, `(req, res, next)`, fits Node's `http` server,
+Express and Connect.
 
 ## The HTTP middleware
 

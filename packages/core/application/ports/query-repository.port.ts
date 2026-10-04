@@ -15,7 +15,6 @@ import { IQueryOptions } from '../query.options.js';
  * @example
  * ```ts
  * constructor(
- *   @Inject(QUERY_REPOSITORY.getUser)
  *   private readonly users: IQueryRepository<GetUserQuery, User | null>,
  * ) {}
  *

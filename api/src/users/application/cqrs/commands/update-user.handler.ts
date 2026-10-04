@@ -5,8 +5,8 @@ import {
   IWriteSideAggregateRepository,
 } from '@cqrs-ddd/core/application';
 import { EntityNotFoundException } from '@cqrs-ddd/core/domain';
-import { CommandHandler, EventBus, UsePipeline } from '@cqrs-ddd/cqrs';
-import { type IPipelineContext } from '@cqrs-ddd/pipeline';
+import { CommandHandler, EventBus } from '@cqrs-ddd/cqrs';
+import { type IPipelineContext, UsePipeline } from '@cqrs-ddd/pipeline';
 import { AUDIT_SEVERITY, audit } from '@cqrs-ddd/pipeline-audit';
 import { CaslAuthorizer, requires } from '@cqrs-ddd/pipeline-casl';
 import {

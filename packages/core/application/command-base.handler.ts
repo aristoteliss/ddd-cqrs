@@ -32,9 +32,9 @@ function isAggregate(obj: unknown): obj is IAggregateRoot {
  *    uncommitted domain events are published through the {@link IDomainEventPublisher},
  *    with the aggregate as the dispatcher context, and cleared after publication.
  *
- * It is framework-neutral. With NestJS CQRS, decorate the subclass with
- * `@CommandHandler` and pass the injected `EventBus`, which satisfies
- * {@link IDomainEventPublisher}; Nest calls {@link execute} as the handler entry point.
+ * It is framework-neutral. With `@cqrs-ddd/cqrs`, decorate the subclass with
+ * `@CommandHandler` and pass `cqrs.eventBus`, which satisfies
+ * {@link IDomainEventPublisher}; the command bus calls {@link execute}.
  *
  * @typeParam TCommand - The concrete command type this handler processes.
  * @typeParam TResult - The handler's return type (e.g. aggregate entity or result carrying aggregate).
@@ -44,7 +44,6 @@ function isAggregate(obj: unknown): obj is IAggregateRoot {
  * @CommandHandler(CreateUserCommand)
  * export class CreateUserHandler extends CommandBaseHandler<CreateUserCommand, User> {
  *   constructor(
- *     @Inject(COMMAND_REPOSITORY.createUser)
  *     private readonly commandRepository: ICommandRepository<User, UserSnapshot>,
  *     protected readonly eventBus: EventBus,
  *   ) {
@@ -64,7 +63,6 @@ function isAggregate(obj: unknown): obj is IAggregateRoot {
  * @CommandHandler(CreateAuthCommand)
  * export class CreateAuthHandler extends CommandBaseHandler<CreateAuthCommand, CreateAuthResult> {
  *   constructor(
- *     @Inject(COMMAND_REPOSITORY.createAuth)
  *     private readonly commandRepository: ICommandRepository<Auth, null>,
  *     protected readonly eventBus: EventBus,
  *   ) {
@@ -92,7 +90,7 @@ export abstract class CommandBaseHandler<
    * Constructs the handler with the publisher of domain events.
    *
    * @param eventBus - The publisher used to dispatch domain events, such as the
-   *   NestJS CQRS `EventBus`.
+   *   `EventBus` of `@cqrs-ddd/cqrs`.
    */
   protected constructor(protected readonly eventBus: IDomainEventPublisher) {}
 
@@ -109,13 +107,11 @@ export abstract class CommandBaseHandler<
   abstract handle(command: TCommand): Promise<TResult>;
 
   /**
-   * Handler entry point, invoked by the command bus (for example the NestJS CQRS
-   * `CommandBus`).
+   * Handler entry point, invoked by the command bus.
    *
    * Delegates to {@link handle} and automatically publishes any uncommitted domain
    * events if the result is an aggregate root (or an object containing one as
-   * `aggregate`). The publisher receives the aggregate as its dispatcher context,
-   * as NestJS's `EventPublisher` passes it on `commit()`.
+   * `aggregate`). The publisher receives the aggregate as its dispatcher context.
    *
    * The events are handed to the publisher and cleared from the aggregate, then
    * `execute()` awaits what `publishAll()` returned: an asynchronous publisher

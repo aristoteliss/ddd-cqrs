@@ -13,7 +13,7 @@ export interface Subscription {
  *
  * @example
  * ```ts
- * const subscription = app.get(UnhandledExceptionBus).subscribe(({ cause, exception }) =>
+ * const subscription = cqrs.unhandledExceptionBus.subscribe(({ cause, exception }) =>
  *   alerts.notify(cause.constructor.name, exception),
  * );
  * subscription.unsubscribe();

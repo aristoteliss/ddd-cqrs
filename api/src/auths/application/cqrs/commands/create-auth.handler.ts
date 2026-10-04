@@ -5,8 +5,8 @@ import {
   ICommandRepository,
   requireTenant,
 } from '@cqrs-ddd/core/application';
-import { CommandHandler, EventBus, UsePipeline } from '@cqrs-ddd/cqrs';
-import { type IPipelineContext } from '@cqrs-ddd/pipeline';
+import { CommandHandler, EventBus } from '@cqrs-ddd/cqrs';
+import { type IPipelineContext, UsePipeline } from '@cqrs-ddd/pipeline';
 import { AUDIT_SEVERITY, audit } from '@cqrs-ddd/pipeline-audit';
 import { metrics } from '@cqrs-ddd/pipeline-opentelemetry';
 import {

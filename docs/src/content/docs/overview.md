@@ -50,7 +50,7 @@ use.
 
 [`@cqrs-ddd/cqrs`](/ddd-cqrs/packages/cqrs/) runs commands, queries and events through
 their handlers and a pipeline per handler: `@CommandHandler`, `@QueryHandler` and
-`@EventsHandler` mark the handlers, `@UsePipeline` declares their behaviors, and
+`@EventsHandler` mark the handlers, `@UsePipeline` of the pipeline declares their behaviors, and
 `createCqrs()` builds the buses. There is no container: the application builds its
 handlers with `new` and registers them. See [CQRS without NestJS](/ddd-cqrs/guides/cqrs/);
 the repository's `api/` is a complete application built this way.

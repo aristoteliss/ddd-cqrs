@@ -5,7 +5,7 @@
  * a failed cache write or a miswired repository.
  *
  * Pass one through the `logger` option to route these warnings into an
- * application's logging. `console` and a NestJS `Logger` both fit. Without it,
+ * application's logging. `console` and a pino logger both fit. Without it,
  * warnings go to `console.warn` with a `[CacheDecorator]`-style prefix. A logger
  * that throws never changes a repository result.
  *
@@ -13,7 +13,7 @@
  * ```ts
  * @Cache<User, UserSnapshot>({
  *   setKey: (user) => cacheKey(User.aggregateName, { id: user.id }),
- *   logger: new Logger('UserCache'), // NestJS
+ *   logger: console,
  * })
  * ```
  */

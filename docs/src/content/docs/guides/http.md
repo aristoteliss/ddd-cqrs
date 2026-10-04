@@ -26,19 +26,19 @@ const { commandBus: commands, queryBus: queries } = cqrs;
 
 Behaviors read the tenant and the correlation id from `AsyncLocalStorage`, through the
 `sources` given to `createCqrs()`. One middleware sets both for everything the
-request runs: `HttpCorrelationMiddleware` takes the correlation id from the
+request runs: `httpCorrelation()` takes the correlation id from the
 `x-correlation-id` header or creates one, and `runWithTenant()` sets the tenant the
 request authenticated for.
 
 ```ts
-import { HttpCorrelationMiddleware } from '@cqrs-ddd/pipeline-correlation';
+import { httpCorrelation } from '@cqrs-ddd/pipeline-correlation';
 import { runWithTenant } from '@cqrs-ddd/pipeline-tenant';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-const correlation = new HttpCorrelationMiddleware();
+const correlation = httpCorrelation();
 
 function requestContext(req: IncomingMessage, res: ServerResponse, next: () => void) {
-  correlation.use(req, res, () => runWithTenant(tenantOf(req), next));
+  correlation(req, res, () => runWithTenant(tenantOf(req), next));
 }
 ```
 

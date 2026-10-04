@@ -1,7 +1,7 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { HttpCorrelationMiddleware } from '@cqrs-ddd/pipeline-correlation';
+import { httpCorrelation } from '@cqrs-ddd/pipeline-correlation';
 import type { Logger } from 'pino';
 import { pinoHttp } from 'pino-http';
 
@@ -27,12 +27,7 @@ export function requestContext(
   steps: readonly Middleware[] = [],
 ): Middleware {
   const log = pinoHttp({ logger }) as unknown as Middleware;
-  const correlation = new HttpCorrelationMiddleware();
-  const chain: Middleware[] = [
-    log,
-    (req, res, next) => correlation.use(req, res, next),
-    ...steps,
-  ];
+  const chain: Middleware[] = [log, httpCorrelation(), ...steps];
   return (req, res, next) => {
     const step = (index: number) => (error?: unknown) => {
       if (error !== undefined) return next(error);

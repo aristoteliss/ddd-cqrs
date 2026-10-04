@@ -8,15 +8,11 @@ import {
   type NextDelegate,
   PIPELINE_BEHAVIOR_CONTRACT,
   type PipelineBehaviorDiagnostic,
-} from '@cqrs-ddd/pipeline';
-import { beforeEach, describe, expect, it } from 'vitest';
-import {
-  CommandHandler,
-  EventsHandler,
-  QueryHandler,
   SkipPipeline,
   UsePipeline,
-} from './decorators.js';
+} from '@cqrs-ddd/pipeline';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { CommandHandler, EventsHandler, QueryHandler } from './decorators.js';
 import { type PipelineSettings, toDispatch } from './dispatch.js';
 
 const trail: string[] = [];

@@ -12,7 +12,8 @@ The first release. Every package is released at 0.5.0, first under the `next` di
   or decorates a method, with TypeScript's standard decorators or `experimentalDecorators`.
   Behavior contracts are checked when a function is wrapped. `LoggingBehavior` and
   `logging()` are included, and `pinoLogger(pino)` adapts a pino logger to every logger
-  parameter.
+  parameter. `@UsePipeline` and `@SkipPipeline` declare the behaviors of a handler class,
+  and `pipelineOf()` reads them for a handler runtime.
 - Behavior packages, each a plain class with an entry helper: `@cqrs-ddd/pipeline-zod`,
   `-casl`, `-cache`, `-idempotency`, `-rate-limit`, `-resilience`, `-feature-flags`,
   `-audit`, `-deadletter` and `-opentelemetry`. Packages whose errors have an HTTP meaning
@@ -20,10 +21,9 @@ The first release. Every package is released at 0.5.0, first under the `next` di
   an `/http` entry point.
 - Context packages: `@cqrs-ddd/pipeline-tenant`, `@cqrs-ddd/pipeline-correlation` and
   `@cqrs-ddd/pipeline-job-context`, with context sources for `createPipeline({ sources })`.
-- `@cqrs-ddd/cqrs`: `@CommandHandler`, `@QueryHandler`, `@EventsHandler`, `@UsePipeline`
-  and `@SkipPipeline` on handler classes, and `createCqrs()`, which builds the
-  `CommandBus`, `QueryBus`, `EventBus`, `EventPublisher` and `UnhandledExceptionBus` and
-  registers handler instances, each with its pipeline. No container: the application
+- `@cqrs-ddd/cqrs`: `@CommandHandler`, `@QueryHandler` and `@EventsHandler` on handler
+  classes, and `createCqrs()`, which builds the `CommandBus`, `QueryBus`, `EventBus` and
+  `UnhandledExceptionBus` and registers handler instances, each with its pipeline. No container: the application
   builds its handlers with `new`.
 - `createZodMapper(schema)` in `@cqrs-ddd/pipeline-zod`: parses input into a command at
   the HTTP edge and throws `ZodValidationError`.

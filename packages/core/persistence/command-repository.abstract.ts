@@ -15,11 +15,10 @@ import { ICommandRepository } from '../application/ports/command-repository.port
  *
  * @example Creating a command repository with the Cache decorator
  * ```typescript
- * @Injectable()
  * export class CreateUserCommandRepository extends CommandRepository<User, UserSnapshot> {
  *   constructor(
- *     @Inject(CACHE_TOKEN) protected readonly cache: ICache<UserSnapshot>,
- *     @Inject(MIKRO_ORM_CLIENT) private readonly store: MikroOrmStore,
+ *     protected readonly cache: ICache<UserSnapshot>,
+ *     private readonly store: MikroOrmStore,
  *   ) {
  *     super(cache);
  *   }

@@ -11,12 +11,8 @@ import {
   isTransientOperationError,
   TransientOperationError,
 } from '@cqrs-ddd/core/domain';
-import {
-  CommandHandler,
-  createCqrs,
-  pipelineOf,
-  UsePipeline,
-} from '@cqrs-ddd/cqrs';
+import { CommandHandler, createCqrs } from '@cqrs-ddd/cqrs';
+import { pipelineOf, UsePipeline } from '@cqrs-ddd/pipeline';
 import { AuditBehavior, audit } from '@cqrs-ddd/pipeline-audit';
 import { ResilienceBehavior, resilience } from '@cqrs-ddd/pipeline-resilience';
 import { beforeEach, describe, expect, it } from 'vitest';

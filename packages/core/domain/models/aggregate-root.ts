@@ -46,8 +46,7 @@ export abstract class AggregateRoot<EventBase extends IEvent = IEvent>
 
   /**
    * Called by apply() for each event while autoCommit is enabled; a no-op that
-   * returns `undefined` unless overridden or connected to a publisher (for
-   * example NestJS's `EventPublisher.mergeObjectContext`).
+   * returns `undefined` unless overridden or connected to a publisher.
    *
    * @param _event - The event to publish.
    * @param _dispatcherContext - Passed through to the publisher, such as `{ transaction }`.
@@ -88,7 +87,8 @@ export abstract class AggregateRoot<EventBase extends IEvent = IEvent>
    *
    * @example
    * ```ts
-   * const order = publisher.mergeObjectContext(Order.place(id));
+   * const order = Order.place(id);
+   * order.publishAll = (events) => eventBus.publishAll(events);
    * await order.commit({ transaction });
    * ```
    */

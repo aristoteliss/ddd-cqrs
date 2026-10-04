@@ -1,20 +1,18 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
-import type { Command } from './classes.js';
 import type { RequestType } from './decorators.js';
 import { type Dispatch, nearest } from './dispatch.js';
 import { CommandHandlerNotFoundException } from './errors.js';
 import type { ICommand } from './interfaces.js';
 
 /**
- * Sends a command to its one handler, through the handler's pipeline.
- * `CqrsFactory.create()` builds it; `app.get(CommandBus)` and handler constructors
- * receive it.
+ * Sends a command to its one handler, through the handler's pipeline. `createCqrs()`
+ * builds it.
  *
  * @example
  * ```ts
- * const commandBus = app.get(CommandBus);
- * const id = await commandBus.execute(new CreateUserCommand('ann'));
+ * const { commandBus } = createCqrs();
+ * const id = await commandBus.execute<CreateUserCommand, string>(new CreateUserCommand('ann'));
  * ```
  */
 export class CommandBus<C extends ICommand = ICommand> {
@@ -27,8 +25,7 @@ export class CommandBus<C extends ICommand = ICommand> {
 
   /**
    * Runs the handler of the command's class, or of its nearest parent class that has
-   * one, and resolves with what the handler returns. A `Command<R>` gives the result
-   * type.
+   * one, and resolves with what the handler returns, typed as `R`.
    *
    * @throws CommandHandlerNotFoundException (as a rejection) when no class in the
    *   command's chain has a handler.
@@ -37,12 +34,10 @@ export class CommandBus<C extends ICommand = ICommand> {
    * await commandBus.execute(new CreateUserCommand('ann'));
    * ```
    */
-  execute<R>(command: Command<R>): Promise<R>;
-  execute<T extends C, R = unknown>(command: T): Promise<R>;
-  async execute(command: ICommand): Promise<unknown> {
+  async execute<T extends C, R = unknown>(command: T): Promise<R> {
     const type = command.constructor;
     const run = nearest(this.handlers, type);
     if (!run) throw new CommandHandlerNotFoundException(type.name);
-    return run(command);
+    return (await run(command)) as R;
   }
 }

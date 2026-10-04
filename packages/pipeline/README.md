@@ -1,7 +1,8 @@
 # @cqrs-ddd/pipeline
 
 A framework-neutral pipeline engine: wrap plain functions and class methods with
-behaviors such as logging, validation, authorization, caching or idempotency. No
+behaviors such as logging, validation, authorization, caching or idempotency, and declare
+the behaviors of handler classes with `@UsePipeline` and `@SkipPipeline`. No
 framework, no dependency-injection container and no CQRS infrastructure are required;
 the `@cqrs-ddd/pipeline-<name>` packages provide the behaviors.
 

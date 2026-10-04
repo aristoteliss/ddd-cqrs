@@ -15,8 +15,8 @@ application builds its handlers with `new` and registers them, in one place.
 | `@nestjs/cqrs` | `@cqrs-ddd` |
 | --- | --- |
 | `@CommandHandler`, `@QueryHandler`, `@EventsHandler` | the same, from `@cqrs-ddd/cqrs` |
-| `ICommandHandler`, `IQueryHandler`, `IEventHandler`, `Command<R>`, `Query<R>` | the same |
-| `CommandBus`, `QueryBus`, `EventBus`, `EventPublisher`, `UnhandledExceptionBus` | the same, from `createCqrs()` |
+| `ICommandHandler`, `IQueryHandler`, `IEventHandler` | the same |
+| `CommandBus`, `QueryBus`, `EventBus`, `UnhandledExceptionBus` | the same, from `createCqrs()` |
 
 ## What the application does itself
 
@@ -46,5 +46,6 @@ no `pipe` or `ofType`.
 **Shutdown.** `close()` waits for the event handlers still running, so a test or a
 shutdown ends after the work it caused.
 
-**Not provided.** Sagas and `ofType`, `AsyncContext`, custom command, query and event
-publishers.
+**Not provided.** Sagas and `ofType`, `AsyncContext`, `EventPublisher` and its merged
+aggregates, `Command<R>` and `Query<R>`, and custom command, query and event publishers.
+An aggregate of `@cqrs-ddd/core` publishes its events through `CommandBaseHandler`.

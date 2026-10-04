@@ -6,8 +6,7 @@
  * pass-through that only forwards to a repository.
  */
 
-import { pipelineOf } from '@cqrs-ddd/cqrs';
-import { getBehaviorId } from '@cqrs-ddd/pipeline';
+import { getBehaviorId, pipelineOf } from '@cqrs-ddd/pipeline';
 import { CaslBehavior } from '@cqrs-ddd/pipeline-casl';
 import { describe, expect, it } from 'vitest';
 import { GetUserPermissionRulesHandler } from '../src/auths/application/cqrs/queries/get-user-permission-rules.handler.js';

@@ -10,7 +10,6 @@ import {
   CommandHandler,
   createCqrs,
   EventBus,
-  EventPublisher,
   EventsHandler,
   QueryHandler,
 } from '@cqrs-ddd/cqrs';
@@ -26,12 +25,6 @@ class RenameUserCommand extends BaseCommand {
     readonly id: string,
     readonly name: string,
   ) {
-    super();
-  }
-}
-
-class InviteUserCommand extends BaseCommand {
-  constructor(readonly name: string) {
     super();
   }
 }
@@ -79,15 +72,6 @@ class RenameUserHandler extends CommandBaseHandler<RenameUserCommand, User> {
   }
 }
 
-@CommandHandler(InviteUserCommand)
-class InviteUserHandler {
-  constructor(private readonly publisher: EventPublisher) {}
-
-  async execute(command: InviteUserCommand) {
-    this.publisher.mergeObjectContext(new User()).rename(command.name).commit();
-  }
-}
-
 @QueryHandler(GetUserQuery)
 class GetUserHandler {
   async execute(query: GetUserQuery) {
@@ -109,7 +93,6 @@ async function start() {
   });
   cqrs.register(
     new RenameUserHandler(cqrs.eventBus),
-    new InviteUserHandler(cqrs.eventPublisher),
     new GetUserHandler(),
     new Notify(),
   );
@@ -142,14 +125,6 @@ describe('@cqrs-ddd/core through the @cqrs-ddd/cqrs buses', () => {
     expect(correlations.get('UserRenamedEvent')).toBe(
       correlations.get('RenameUserCommand'),
     );
-  });
-
-  it('publishes on commit() an aggregate merged with the EventPublisher', async () => {
-    const app = await start();
-    await app.commandBus.execute(new InviteUserCommand('Bob'));
-    await app.close();
-
-    expect(trace).toContain('notify Bob');
   });
 
   it('runs a BaseQuery through its handler and pipeline', async () => {

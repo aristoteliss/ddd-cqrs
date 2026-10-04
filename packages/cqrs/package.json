@@ -1,7 +1,7 @@
 {
   "name": "@cqrs-ddd/cqrs",
   "version": "0.5.0",
-  "description": "Command, query and event buses with handler decorators, @UsePipeline and modules, the API of NestJS CQRS without NestJS",
+  "description": "Command, query and event buses with handler decorators and a pipeline per handler, built by createCqrs() with no framework and no container",
   "author": "Aristotelis",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",

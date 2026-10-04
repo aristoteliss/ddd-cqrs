@@ -3,7 +3,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { RequestType } from './decorators.js';
 import { EventBus, type EventSubscriber } from './event.bus.js';
-import { EventPublisher } from './event.publisher.js';
 import type { UnhandledExceptionInfo } from './interfaces.js';
 import { UnhandledExceptionBus } from './unhandled-exception.bus.js';
 
@@ -200,51 +199,5 @@ describe('UnhandledExceptionBus', () => {
     bus.publish({ cause: new UserDeleted(), exception: 'a' });
     expect(seen).toEqual(['a']);
     expect(() => vi.runAllTimers()).toThrow(broken);
-  });
-});
-
-describe('EventPublisher', () => {
-  class Order {
-    private readonly events: UserCreated[] = [];
-    constructor(readonly id: string) {}
-    place() {
-      this.events.push(new UserCreated(this.id));
-    }
-    publishAll(_events: UserCreated[]): unknown {
-      return undefined;
-    }
-    commit() {
-      this.publishAll(this.events.splice(0));
-    }
-  }
-
-  it('connects an aggregate instance to the bus', async () => {
-    const { bus } = setup([[UserCreated, [subscriber('Ship')]]]);
-    const publisher = new EventPublisher(bus);
-    const order = new Order('o-1');
-    expect(publisher.mergeObjectContext(order)).toBe(order);
-
-    order.place();
-    order.commit();
-    (order as Order & { publish(e: UserCreated): void }).publish(
-      new UserCreated('o-2'),
-    );
-    await bus.drain();
-    expect(trail).toEqual(['Ship o-1', 'Ship o-2']);
-  });
-
-  it('connects every instance of an aggregate class to the bus', async () => {
-    const { bus } = setup([[UserCreated, [subscriber('Ship')]]]);
-    const Merged = new EventPublisher(bus).mergeClassContext(Order);
-    const order = new Merged('o-1');
-    expect(order).toBeInstanceOf(Order);
-
-    order.place();
-    order.commit();
-    (order as Order & { publish(e: UserCreated): void }).publish(
-      new UserCreated('o-2'),
-    );
-    await bus.drain();
-    expect(trail).toEqual(['Ship o-1', 'Ship o-2']);
   });
 });

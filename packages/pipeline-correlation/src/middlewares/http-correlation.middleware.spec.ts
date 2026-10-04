@@ -3,7 +3,7 @@
 import { IncomingMessage, ServerResponse } from 'node:http';
 import { describe, expect, it, vi } from 'vitest';
 import { getCorrelationId } from '../correlation.store.js';
-import { HttpCorrelationMiddleware } from './http-correlation.middleware.js';
+import { httpCorrelation } from './http-correlation.middleware.js';
 
 function fakeRequest(headers: Record<string, string> = {}): IncomingMessage {
   return { headers } as unknown as IncomingMessage;
@@ -11,13 +11,13 @@ function fakeRequest(headers: Record<string, string> = {}): IncomingMessage {
 
 const fakeResponse = {} as ServerResponse;
 
-describe('HttpCorrelationMiddleware', () => {
+describe('httpCorrelation', () => {
   it('extracts x-correlation-id header by default', () => {
-    const middleware = new HttpCorrelationMiddleware();
+    const middleware = httpCorrelation();
     const req = fakeRequest({ 'x-correlation-id': 'abc-123' });
 
     let captured: string | undefined;
-    middleware.use(req, fakeResponse, () => {
+    middleware(req, fakeResponse, () => {
       captured = getCorrelationId();
     });
 
@@ -25,22 +25,22 @@ describe('HttpCorrelationMiddleware', () => {
   });
 
   it('calls next when the header is missing', () => {
-    const middleware = new HttpCorrelationMiddleware();
+    const middleware = httpCorrelation();
     const req = fakeRequest({});
     const next = vi.fn();
 
-    middleware.use(req, fakeResponse, next);
+    middleware(req, fakeResponse, next);
     expect(next).toHaveBeenCalledOnce();
   });
 
   it('uses a custom header name from options', () => {
-    const middleware = new HttpCorrelationMiddleware({
+    const middleware = httpCorrelation({
       header: 'x-request-id',
     });
     const req = fakeRequest({ 'x-request-id': 'custom-456' });
 
     let captured: string | undefined;
-    middleware.use(req, fakeResponse, () => {
+    middleware(req, fakeResponse, () => {
       captured = getCorrelationId();
     });
 
@@ -48,13 +48,13 @@ describe('HttpCorrelationMiddleware', () => {
   });
 
   it('normalizes a custom header name because Node request headers are lowercase', () => {
-    const middleware = new HttpCorrelationMiddleware({
+    const middleware = httpCorrelation({
       header: 'X-Request-ID',
     });
     const req = fakeRequest({ 'x-request-id': 'custom-456' });
 
     let captured: string | undefined;
-    middleware.use(req, fakeResponse, () => {
+    middleware(req, fakeResponse, () => {
       captured = getCorrelationId();
     });
 
@@ -62,11 +62,11 @@ describe('HttpCorrelationMiddleware', () => {
   });
 
   it('defaults to x-correlation-id when options has no header field', () => {
-    const middleware = new HttpCorrelationMiddleware({});
+    const middleware = httpCorrelation({});
     const req = fakeRequest({ 'x-correlation-id': 'default-789' });
 
     let captured: string | undefined;
-    middleware.use(req, fakeResponse, () => {
+    middleware(req, fakeResponse, () => {
       captured = getCorrelationId();
     });
 
@@ -76,20 +76,20 @@ describe('HttpCorrelationMiddleware', () => {
   it.each(['', ' ', 'bad header', 'x-header\r\ninjected'])(
     'rejects invalid configured header name %j',
     (header) => {
-      expect(() => new HttpCorrelationMiddleware({ header })).toThrow(
+      expect(() => httpCorrelation({ header })).toThrow(
         'Invalid correlation HTTP header name',
       );
     },
   );
 
   it('extracts the first value when header is an array of strings', () => {
-    const middleware = new HttpCorrelationMiddleware();
+    const middleware = httpCorrelation();
     const req = {
       headers: { 'x-correlation-id': ['first-id', 'second-id'] },
     } as unknown as IncomingMessage;
 
     let captured: string | undefined;
-    middleware.use(req, fakeResponse, () => {
+    middleware(req, fakeResponse, () => {
       captured = getCorrelationId();
     });
 
@@ -97,11 +97,11 @@ describe('HttpCorrelationMiddleware', () => {
   });
 
   it('ignores empty whitespace-only headers when trimIncoming is true', () => {
-    const middleware = new HttpCorrelationMiddleware({ trimIncoming: true });
+    const middleware = httpCorrelation({ trimIncoming: true });
     const req = fakeRequest({ 'x-correlation-id': '   \t  ' });
 
     let captured: string | undefined;
-    middleware.use(req, fakeResponse, () => {
+    middleware(req, fakeResponse, () => {
       captured = getCorrelationId();
     });
 

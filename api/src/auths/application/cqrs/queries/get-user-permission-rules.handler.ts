@@ -1,7 +1,8 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
 import type { IQueryRepository } from '@cqrs-ddd/core/application';
-import { type IQueryHandler, QueryHandler, UsePipeline } from '@cqrs-ddd/cqrs';
+import { type IQueryHandler, QueryHandler } from '@cqrs-ddd/cqrs';
+import { UsePipeline } from '@cqrs-ddd/pipeline';
 import { type Capability, requires } from '@cqrs-ddd/pipeline-casl';
 import {
   APP_ACTIONS,

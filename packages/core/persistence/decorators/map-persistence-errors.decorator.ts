@@ -50,7 +50,6 @@ export type UniqueErrors<TEntity, TConstraint extends string = never> = {
  *
  * @example Mapping unique constraints in a create repository
  * ```typescript
- * @Injectable()
  * export class CreateUserCommandRepository extends CommandRepository<User, UserSnapshot> {
  *   @Cache<User, UserSnapshot>((u) => `users:${u.id}`, null, (u) => [`users:email:${u.email}`])
  *   @AcknowledgePersisted<[User]>({ entity: ([user]) => user })

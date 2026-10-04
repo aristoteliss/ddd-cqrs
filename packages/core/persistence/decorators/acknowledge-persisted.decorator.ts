@@ -43,7 +43,6 @@ export interface PersistedAggregate {
  *
  * @example Usage in an update command repository
  * ```typescript
- * @Injectable()
  * export class UpdateRoleCommandRepository extends CommandRepository<Role, RoleSnapshot> {
  *   @Cache<Role, RoleSnapshot>((role) => `roles:${role.id}`)
  *   @AcknowledgePersisted<[Role]>({ entity: ([role]) => role })
@@ -61,7 +60,6 @@ export interface PersistedAggregate {
  *
  * @example Usage in a create command repository
  * ```typescript
- * @Injectable()
  * export class CreateRoleCommandRepository extends CommandRepository<Role, RoleSnapshot> {
  *   @Cache<Role, RoleSnapshot>((role) => `roles:${role.id}`)
  *   @AcknowledgePersisted<[Role]>({ entity: ([role]) => role })

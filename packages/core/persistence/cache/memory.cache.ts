@@ -7,8 +7,6 @@ import type {
   IVersionedCache,
 } from '../../application/ports/cache.port.js';
 
-export const CACHE_TOKEN = Symbol('MemoryCache');
-
 export type MemoryCacheSetOptions = CacheSetOptions;
 
 /**

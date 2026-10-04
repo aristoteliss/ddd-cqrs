@@ -19,7 +19,10 @@ export {
   CorrelationFrom,
   WithCorrelation,
 } from './decorators/with-correlation.decorator.js';
-export { HttpCorrelationMiddleware } from './middlewares/http-correlation.middleware.js';
+export {
+  type HttpMiddleware,
+  httpCorrelation,
+} from './middlewares/http-correlation.middleware.js';
 export type { CorrelationOptions } from './options/correlation.options.js';
 export {
   DEFAULT_CORRELATION_ID_MAX_LENGTH,

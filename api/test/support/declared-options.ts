@@ -1,14 +1,11 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
 import {
-  type BehaviorId,
   type Constructor,
   getBehaviorId,
   type IPipelineBehavior,
+  pipelineOf,
 } from '@cqrs-ddd/pipeline';
-
-/** Where `@UsePipeline` of `@cqrs-ddd/cqrs` keeps a handler's declaration. */
-const PIPELINE = Symbol.for('@cqrs-ddd/cqrs:pipeline');
 
 /**
  * The options `handler` declares for `behavior` in its `@UsePipeline`, so a
@@ -28,13 +25,9 @@ export function declaredOptions<T>(
   handler: Constructor,
   behavior: Constructor<IPipelineBehavior>,
 ): T {
-  const options = (
-    handler as unknown as Record<
-      symbol,
-      { options: Map<BehaviorId, T> } | undefined
-    >
-  )[PIPELINE]?.options;
-  const declared = options?.get(getBehaviorId(behavior));
+  const declared = pipelineOf(handler).options.get(getBehaviorId(behavior)) as
+    | T
+    | undefined;
   if (!declared) {
     throw new Error(`${handler.name} declares no ${behavior.name} options.`);
   }

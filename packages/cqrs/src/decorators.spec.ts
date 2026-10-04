@@ -1,37 +1,17 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
-import type {
-  IPipelineBehavior,
-  IPipelineContext,
-  NextDelegate,
-} from '@cqrs-ddd/pipeline';
 import { describe, expect, it } from 'vitest';
-import { Command, Query } from './classes.js';
 import {
   CommandHandler,
   commandOf,
   EventsHandler,
   eventsOf,
-  pipelineOf,
   QueryHandler,
   queryOf,
-  SkipPipeline,
-  UsePipeline,
 } from './decorators.js';
 
-class Audit implements IPipelineBehavior {
-  async handle(_context: IPipelineContext, next: NextDelegate) {
-    return next();
-  }
-}
-class Trace implements IPipelineBehavior {
-  async handle(_context: IPipelineContext, next: NextDelegate) {
-    return next();
-  }
-}
-
-class CreateUser extends Command<string> {}
-class GetUser extends Query<string | null> {}
+class CreateUser {}
+class GetUser {}
 class UserCreated {}
 class UserInvited {}
 
@@ -85,44 +65,5 @@ describe('handler decorators', () => {
     expect(() => EventsHandler()).toThrow(
       '@EventsHandler takes at least one event class.',
     );
-  });
-
-  it('give typed command and query classes no runtime state', () => {
-    expect(Object.keys(new CreateUser())).toEqual([]);
-    expect(Object.keys(new GetUser())).toEqual([]);
-  });
-});
-
-describe('@UsePipeline and @SkipPipeline', () => {
-  it('record the entries, their options and the skipped behaviors', () => {
-    @UsePipeline(Audit, [Trace, { tracerName: 'users' }])
-    @SkipPipeline(Audit)
-    @SkipPipeline(Trace)
-    class Handler {}
-
-    const declared = pipelineOf(Handler);
-    expect(declared.types).toEqual([Audit, Trace]);
-    expect(declared.options.get(Trace)).toEqual({ tracerName: 'users' });
-    expect(declared.skipped).toEqual([Trace, Audit]);
-  });
-
-  it('declare nothing when a handler has neither', () => {
-    class Plain {}
-    expect(pipelineOf(Plain)).toEqual({
-      types: [],
-      options: new Map(),
-      skipped: [],
-    });
-  });
-
-  it('name the handler in errors, in both decorator modes', () => {
-    class Legacy {}
-    class Modern {}
-    expect(() => UsePipeline({} as never)(Legacy)).toThrow(
-      '@UsePipeline on Legacy, entry 0',
-    );
-    expect(() =>
-      SkipPipeline([Audit, {}] as never)(Modern, standard('Renamed')),
-    ).toThrow('@SkipPipeline on Renamed, entry 0');
   });
 });

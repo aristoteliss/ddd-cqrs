@@ -74,17 +74,11 @@ class CacheCasExhaustedError extends Error {
  * bypassing the identity map across all read and mutation operations. Reads use
  * `store.em`; every write runs in `store.transactional(...)`.
  *
- * A plain class with no framework dependency. In a NestJS application, register
- * it with a factory:
+ * A plain class with no framework dependency.
  *
  * @example
  * ```ts
- * {
- *   provide: CACHE_TOKEN,
- *   useFactory: (store: AppStore) =>
- *     new MikroOrmCache(store, { logger: new Logger('MikroOrmCache') }),
- *   inject: [STORE],
- * }
+ * const cache = new MikroOrmCache<UserSnapshot>(store, { defaultTtlMs: 60_000 });
  * ```
  */
 export class MikroOrmCache<T> implements IVersionedCache<T> {

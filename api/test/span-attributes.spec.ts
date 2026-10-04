@@ -6,8 +6,8 @@ import {
   type Cqrs,
   createCqrs,
   type ICommandHandler,
-  UsePipeline,
 } from '@cqrs-ddd/cqrs';
+import { UsePipeline } from '@cqrs-ddd/pipeline';
 import {
   DeadLetterBehavior,
   type DeadLetterRecord,

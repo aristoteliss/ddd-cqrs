@@ -1,15 +1,15 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
 /** A command: a request to change state, handled by exactly one handler. */
-// biome-ignore lint/suspicious/noEmptyInterface: a marker, as in NestJS CQRS
+// biome-ignore lint/suspicious/noEmptyInterface: a marker the buses constrain
 export interface ICommand {}
 
 /** A query: a request to read, handled by exactly one handler. */
-// biome-ignore lint/suspicious/noEmptyInterface: a marker, as in NestJS CQRS
+// biome-ignore lint/suspicious/noEmptyInterface: a marker the buses constrain
 export interface IQuery {}
 
 /** An event: something that happened, handled by any number of handlers. */
-// biome-ignore lint/suspicious/noEmptyInterface: a marker, as in NestJS CQRS
+// biome-ignore lint/suspicious/noEmptyInterface: a marker the buses constrain
 export interface IEvent {}
 
 /**

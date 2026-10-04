@@ -14,7 +14,7 @@ that maps unique violations and transient failures, a revision-fenced cache stor
 the database, and the `EntitySchema` mapping of `RootEntity`.
 
 `@cqrs-ddd/core` depends on no ORM; this package is where MikroORM enters. It depends
-on no framework: it works in a plain Node service and in a NestJS application.
+on no framework.
 
 ## Contents
 
@@ -35,7 +35,7 @@ on no framework: it works in a plain Node service and in a NestJS application.
 pnpm add @cqrs-ddd/mikro-orm @cqrs-ddd/core @mikro-orm/core
 ```
 
-Requires Node.js 22.17 or later, as MikroORM 7 does. `@cqrs-ddd/core` `^0.5.0` and `@mikro-orm/core` `^7.2.1` are peer
+Requires Node.js 22.17 or later, as MikroORM 7 does. `@cqrs-ddd/core` `^0.5.0` and `@mikro-orm/core` `^7.2.3` are peer
 dependencies; add the MikroORM driver you use, such as `@mikro-orm/postgresql`.
 
 Published as an ES module; a CommonJS application loads it with `require()`.
@@ -267,7 +267,6 @@ with one database row per key; every write is a compare-and-set in its own trans
 `createCacheTableSql(table?)`, which covers PostgreSQL and SQLite.
 
 ```typescript
-import { CACHE_TOKEN } from '@cqrs-ddd/core/persistence';
 import { createCacheTableSql, MikroOrmCache } from '@cqrs-ddd/mikro-orm';
 
 // once, in a migration
@@ -279,13 +278,6 @@ const cache = new MikroOrmCache<UserSnapshot>(store, {
 });
 const users = new UpdateUserRepository(cache, store);
 const reads = new GetUserRepository(cache, store);
-
-// NestJS
-{
-  provide: CACHE_TOKEN,
-  useFactory: (store: TenantStore) => new MikroOrmCache(store, { logger: new Logger('MikroOrmCache') }),
-  inject: [STORE],
-}
 ```
 
 - `store.transactional(work)` must run `work` on a manager of its own, never the caller's

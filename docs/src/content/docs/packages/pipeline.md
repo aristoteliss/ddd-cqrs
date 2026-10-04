@@ -107,11 +107,28 @@ throws `PipelineConfigurationError` in `'strict'` mode. See
 class of the errors that keyed behaviors throw when a required tenant or principal is
 missing. The cache, idempotency and rate-limit packages build on them.
 
+## Handler classes
+
+`@UsePipeline(...entries)` declares the behaviors of a handler class, outermost first, and
+`@SkipPipeline(...Behaviors)` opts it out of global ones. Both work in the standard and the
+`experimentalDecorators` mode. A handler runtime reads the declaration with
+`pipelineOf(Handler)`: [`@cqrs-ddd/cqrs`](/ddd-cqrs/packages/cqrs/) does, and so can a
+framework adapter.
+
+```ts
+import { LoggingBehavior, SkipPipeline, UsePipeline } from '@cqrs-ddd/pipeline';
+import { audit } from '@cqrs-ddd/pipeline-audit';
+
+@UsePipeline(audit({ action: 'user.create' }))
+@SkipPipeline(LoggingBehavior)
+class CreateUserHandler {}
+```
+
 ## Lower-level API
 
 `compilePipelinePlan()`, `createPipelineRunner()`, `validateBehaviorContracts()` and
-`pipelineStore` are the pieces `createPipeline()` is built from. A framework adapter uses them to run the same
-behaviors around its own handlers.
+`pipelineStore` are the pieces `createPipeline()` is built from. A framework adapter uses
+them, with `pipelineOf()`, to run the same behaviors around its own handlers.
 
 ## API reference
 

@@ -31,11 +31,10 @@ export interface QueryRepositoryHydration<TResult> {
  *
  * @example Creating a query repository with the FromCache decorator
  * ```typescript
- * @Injectable()
  * export class GetUserQueryRepository extends QueryRepository<GetUserQuery, User | null> {
  *   constructor(
- *     @Inject(CACHE_TOKEN) protected readonly cache: ICache<UserSnapshot>,
- *     @Inject(MIKRO_ORM_CLIENT) private readonly store: MikroOrmStore,
+ *     protected readonly cache: ICache<UserSnapshot>,
+ *     private readonly store: MikroOrmStore,
  *   ) {
  *     super(cache);
  *   }
@@ -53,11 +52,10 @@ export interface QueryRepositoryHydration<TResult> {
  *
  * @example Declaring rehydration once for the whole repository
  * ```typescript
- * @Injectable()
  * export class GetRoleQueryRepository extends QueryRepository<GetRoleQuery, Role | null> {
  *   constructor(
- *     @Inject(CACHE_TOKEN) cache: ICache<RoleSnapshot>,
- *     @Inject(MIKRO_ORM_CLIENT) private readonly store: MikroOrmStore,
+ *     cache: ICache<RoleSnapshot>,
+ *     private readonly store: MikroOrmStore,
  *   ) {
  *     super(cache, { hydrateFn: (cached) => Role.fromJSON(cached as RoleSnapshot) });
  *   }

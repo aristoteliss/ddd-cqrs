@@ -1,9 +1,10 @@
 # @cqrs-ddd/cqrs
 
 Command, query and event buses for TypeScript, with a pipeline of behaviors around each
-handler: `@CommandHandler`, `@QueryHandler`, `@EventsHandler`, `@UsePipeline` and
-`@SkipPipeline` on handler classes, and `createCqrs()`, which builds the buses and
-registers handler instances. No framework and no container.
+handler: `@CommandHandler`, `@QueryHandler` and `@EventsHandler` on handler classes,
+`@UsePipeline` and `@SkipPipeline` of `@cqrs-ddd/pipeline` for their behaviors, and
+`createCqrs()`, which builds the buses and registers handler instances. No framework and
+no container.
 
 **Documentation:** [guide](https://aristoteliss.github.io/ddd-cqrs/packages/cqrs/) · [API reference](https://aristoteliss.github.io/ddd-cqrs/api/cqrs-ddd/cqrs/) · [all packages](https://aristoteliss.github.io/ddd-cqrs/)
 

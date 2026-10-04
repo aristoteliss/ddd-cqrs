@@ -4,8 +4,8 @@ import {
   CommandBaseHandler,
   ICommandRepository,
 } from '@cqrs-ddd/core/application';
-import { CommandHandler, EventBus, UsePipeline } from '@cqrs-ddd/cqrs';
-import { logging } from '@cqrs-ddd/pipeline';
+import { CommandHandler, EventBus } from '@cqrs-ddd/cqrs';
+import { logging, UsePipeline } from '@cqrs-ddd/pipeline';
 import { AUDIT_SEVERITY, audit } from '@cqrs-ddd/pipeline-audit';
 import {
   CaslAuthorizer,

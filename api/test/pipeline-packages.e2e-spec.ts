@@ -94,7 +94,7 @@ describe.each(ADAPTERS)('pipeline-packages (e2e) on %s', (adapter) => {
       expect(res.status).toBe(201);
       expect(res.headers['x-correlation-id']).toBe(customCorrId);
 
-      // Verify the correlation ID reached the BullMQ job via HttpCorrelationMiddleware + correlationStore
+      // Verify the correlation ID reached the BullMQ job via httpCorrelation() and the correlation store
       const jobs = await welcomeEmailQueue.getJobs([
         'waiting',
         'active',

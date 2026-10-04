@@ -29,19 +29,17 @@ export abstract class Mailer {
 
 ## A command
 
-`CreateUserCommand` extends `Command<string>`, so `commandBus.execute()` resolves with a
-`string`. Its handler adds the user and publishes an event. `@UsePipeline` runs it once per
+`CreateUserCommand` is a plain class, and `commandBus.execute<CreateUserCommand, string>()`
+types its result. Its handler adds the user and publishes an event. `@UsePipeline` runs it once per
 request id and audits it: a repeated `requestId` returns the first result without running
 the handler again.
 
 ```ts
-export class CreateUserCommand extends Command<string> {
+export class CreateUserCommand {
   constructor(
     readonly requestId: string,
     readonly name: string,
-  ) {
-    super();
-  }
+  ) {}
 }
 
 @CommandHandler(CreateUserCommand)
@@ -133,8 +131,12 @@ been sent.
 
 ```ts
 const app = createApp({ users: new MemoryUsers(), mailer, auditSink: new PostgresAuditSink(pool) });
-const id = await app.commandBus.execute(new CreateUserCommand('req-1', 'Ann'));
-const user = await app.queryBus.execute(new GetUserQuery(id));
+const id = await app.commandBus.execute<CreateUserCommand, string>(
+  new CreateUserCommand('req-1', 'Ann'),
+);
+const user = await app.queryBus.execute<GetUserQuery, User | undefined>(
+  new GetUserQuery(id),
+);
 await app.close();
 ```
 

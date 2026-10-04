@@ -9,9 +9,10 @@ import {
   type GlobalBehaviorsOptions,
   type IPipelineBehavior,
   type PipelineBehaviorDiagnostic,
+  pipelineOf,
   validateBehaviorContracts,
 } from '@cqrs-ddd/pipeline';
-import { pipelineOf, type RequestType } from './decorators.js';
+import type { RequestType } from './decorators.js';
 import {
   InvalidCommandHandlerException,
   InvalidEventsHandlerException,
@@ -103,8 +104,7 @@ export function toDispatch(
 }
 
 /**
- * The entry of a request class or, failing that, of its nearest parent class, as
- * NestJS CQRS finds handlers through class metadata.
+ * The entry of a request class or, failing that, of its nearest parent class.
  */
 export function nearest<T>(
   entries: ReadonlyMap<RequestType, T>,

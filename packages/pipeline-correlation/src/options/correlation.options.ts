@@ -11,7 +11,7 @@ export const DEFAULT_CORRELATION_ID_MAX_LENGTH = 128;
 export const DEFAULT_CORRELATION_ID_PATTERN = /^[A-Za-z0-9._~:/+=@-]+$/;
 
 /**
- * Correlation ID configuration consumed by {@link HttpCorrelationMiddleware}.
+ * Correlation ID configuration consumed by {@link httpCorrelation}.
  *
  * The middleware is registered explicitly by the application. For non-HTTP
  * transports (Bull, RabbitMQ, etc.), use `runWithCorrelationId()` directly in

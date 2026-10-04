@@ -3,10 +3,13 @@
 import { IncomingMessage, ServerResponse } from 'node:http';
 import { describe, expect, it, vi } from 'vitest';
 import { getCorrelationId } from '../correlation.store.js';
-import { HttpCorrelationMiddleware } from './http-correlation.middleware.js';
+import {
+  type HttpMiddleware,
+  httpCorrelation,
+} from './http-correlation.middleware.js';
 
 function run(
-  middleware: HttpCorrelationMiddleware,
+  middleware: HttpMiddleware,
   incoming?: string,
   header = 'x-correlation-id',
 ): { id: string; responseId: string; responseHeader: string } {
@@ -23,18 +26,18 @@ function run(
   } as unknown as ServerResponse;
   let id = '';
 
-  middleware.use(req, res, () => {
+  middleware(req, res, () => {
     id = getCorrelationId();
   });
 
   return { id, responseId, responseHeader };
 }
 
-describe('HttpCorrelationMiddleware incoming ID validation', () => {
+describe('httpCorrelation incoming ID validation', () => {
   it('accepts a well-formed incoming value unchanged by default', () => {
     const traceparent =
       '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01';
-    expect(run(new HttpCorrelationMiddleware(), traceparent)).toEqual({
+    expect(run(httpCorrelation(), traceparent)).toEqual({
       id: traceparent,
       responseId: traceparent,
       responseHeader: 'x-correlation-id',
@@ -42,7 +45,7 @@ describe('HttpCorrelationMiddleware incoming ID validation', () => {
   });
 
   it('replaces an incoming value outside the default character set', () => {
-    const result = run(new HttpCorrelationMiddleware(), ' trace id / A ');
+    const result = run(httpCorrelation(), ' trace id / A ');
     expect(result.id).not.toBe(' trace id / A ');
     expect(result.responseId).toBe(result.id);
   });
@@ -50,14 +53,12 @@ describe('HttpCorrelationMiddleware incoming ID validation', () => {
   it('replaces an incoming value longer than 128 characters by default', () => {
     const atLimit = 'a'.repeat(128);
     const oversized = 'a'.repeat(8000);
-    expect(run(new HttpCorrelationMiddleware(), atLimit).id).toBe(atLimit);
-    expect(run(new HttpCorrelationMiddleware(), oversized).id).not.toBe(
-      oversized,
-    );
+    expect(run(httpCorrelation(), atLimit).id).toBe(atLimit);
+    expect(run(httpCorrelation(), oversized).id).not.toBe(oversized);
   });
 
   it('generates a local ID when the incoming header is empty', () => {
-    const result = run(new HttpCorrelationMiddleware(), '');
+    const result = run(httpCorrelation(), '');
     expect(result.id).not.toBe('');
     expect(result.responseId).toBe(result.id);
     expect(result.responseHeader).toBe('x-correlation-id');
@@ -65,7 +66,7 @@ describe('HttpCorrelationMiddleware incoming ID validation', () => {
 
   it('uses the default header when header is false', () => {
     const result = run(
-      new HttpCorrelationMiddleware({ header: false } as never),
+      httpCorrelation({ header: false } as never),
       'incoming-id',
     );
     expect(result).toEqual({
@@ -77,7 +78,7 @@ describe('HttpCorrelationMiddleware incoming ID validation', () => {
 
   it('lower-cases a custom header name for the lookup and the response header', () => {
     const result = run(
-      new HttpCorrelationMiddleware({ header: 'X-Request-ID' } as never),
+      httpCorrelation({ header: 'X-Request-ID' } as never),
       'custom-id',
       'x-request-id',
     );
@@ -89,7 +90,7 @@ describe('HttpCorrelationMiddleware incoming ID validation', () => {
   });
 
   it('can trim and bound incoming identifiers when explicitly configured', () => {
-    const middleware = new HttpCorrelationMiddleware({
+    const middleware = httpCorrelation({
       trimIncoming: true,
       maxLength: 12,
     } as never);
@@ -106,7 +107,7 @@ describe('HttpCorrelationMiddleware incoming ID validation', () => {
 
   it('can reject all caller supplied IDs', () => {
     const result = run(
-      new HttpCorrelationMiddleware({ acceptIncoming: false } as never),
+      httpCorrelation({ acceptIncoming: false } as never),
       'caller-id',
     );
     expect(result.id).not.toBe('caller-id');
@@ -114,7 +115,7 @@ describe('HttpCorrelationMiddleware incoming ID validation', () => {
   });
 
   it('lets custom validation replace the default character set', () => {
-    const middleware = new HttpCorrelationMiddleware({
+    const middleware = httpCorrelation({
       validateIncoming: (value: string) => value.startsWith('trusted '),
     } as never);
 
@@ -123,7 +124,7 @@ describe('HttpCorrelationMiddleware incoming ID validation', () => {
   });
 
   it('falls back safely when a custom validator throws', () => {
-    const middleware = new HttpCorrelationMiddleware({
+    const middleware = httpCorrelation({
       validateIncoming: () => {
         throw new Error('bad validator');
       },
@@ -133,10 +134,10 @@ describe('HttpCorrelationMiddleware incoming ID validation', () => {
   });
 
   it('rejects a non-positive configured maxLength', () => {
-    expect(
-      () => new HttpCorrelationMiddleware({ maxLength: 0 } as never),
-    ).toThrow(/positive safe integer/);
+    expect(() => httpCorrelation({ maxLength: 0 } as never)).toThrow(
+      /positive safe integer/,
+    );
 
-    expect(() => new HttpCorrelationMiddleware()).not.toThrow();
+    expect(() => httpCorrelation()).not.toThrow();
   });
 });

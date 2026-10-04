@@ -1,7 +1,6 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
 import { describe, expect, it } from 'vitest';
-import { Command, Query } from './classes.js';
 import { CommandBus } from './command.bus.js';
 import type { RequestType } from './decorators.js';
 import type { Dispatch } from './dispatch.js';
@@ -11,17 +10,13 @@ import {
 } from './errors.js';
 import { QueryBus } from './query.bus.js';
 
-class CreateUser extends Command<string> {
-  constructor(readonly name: string) {
-    super();
-  }
+class CreateUser {
+  constructor(readonly name: string) {}
 }
 class CreateAdmin extends CreateUser {}
 class DeleteUser {}
-class GetUser extends Query<string | null> {
-  constructor(readonly id: string) {
-    super();
-  }
+class GetUser {
+  constructor(readonly id: string) {}
 }
 class GetActiveUser extends GetUser {}
 
@@ -32,7 +27,7 @@ describe('CommandBus', () => {
         [CreateUser, async (c) => `created ${(c as CreateUser).name}`],
       ]),
     );
-    const id: string = await bus.execute(new CreateUser('ann'));
+    const id = await bus.execute<CreateUser, string>(new CreateUser('ann'));
     expect(id).toBe('created ann');
   });
 
@@ -43,7 +38,7 @@ describe('CommandBus', () => {
     await expect(bus.execute(new DeleteUser())).resolves.toBe('deleted');
   });
 
-  it("falls back to the nearest parent class's handler, as NestJS CQRS does", async () => {
+  it("falls back to the nearest parent class's handler", async () => {
     const handlers = new Map<RequestType, Dispatch>([
       [CreateUser, async () => 'user'],
     ]);
@@ -73,7 +68,7 @@ describe('QueryBus', () => {
         [GetUser, async (q) => (q as GetUser).id],
       ]),
     );
-    const user: string | null = await bus.execute(new GetUser('u-1'));
+    const user = await bus.execute<GetUser, string | null>(new GetUser('u-1'));
     expect(user).toBe('u-1');
     await expect(bus.execute(new GetActiveUser('u-2'))).resolves.toBe('u-2');
   });

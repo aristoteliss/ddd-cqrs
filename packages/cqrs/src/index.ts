@@ -1,12 +1,5 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
-export {
-  Command,
-  type CommandResult,
-  Query,
-  type QueryResult,
-  RESULT_TYPE_SYMBOL,
-} from './classes.js';
 export { CommandBus } from './command.bus.js';
 export {
   type Cqrs,
@@ -14,19 +7,10 @@ export {
   createCqrs,
 } from './create-cqrs.js';
 export {
-  type AnyClass,
   CommandHandler,
-  commandOf,
-  type DualClassDecorator,
   EventsHandler,
-  eventsOf,
-  type HandlerPipeline,
-  pipelineOf,
   QueryHandler,
-  queryOf,
   type RequestType,
-  SkipPipeline,
-  UsePipeline,
 } from './decorators.js';
 export type { Dispatch } from './dispatch.js';
 export {
@@ -41,7 +25,6 @@ export {
   type EventBusOptions,
   type EventSubscriber,
 } from './event.bus.js';
-export { EventPublisher } from './event.publisher.js';
 export type {
   ICommand,
   ICommandHandler,

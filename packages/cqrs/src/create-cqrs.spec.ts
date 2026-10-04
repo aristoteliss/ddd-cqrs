@@ -9,27 +9,18 @@ import {
   PIPELINE_BEHAVIOR_CONTRACT,
   PipelineConfigurationError,
   type PipelineLogger,
+  UsePipeline,
 } from '@cqrs-ddd/pipeline';
 import { describe, expect, it, vi } from 'vitest';
-import { Command, Query } from './classes.js';
 import { createCqrs } from './create-cqrs.js';
-import {
-  CommandHandler,
-  EventsHandler,
-  QueryHandler,
-  UsePipeline,
-} from './decorators.js';
+import { CommandHandler, EventsHandler, QueryHandler } from './decorators.js';
 import type { EventBus } from './event.bus.js';
 
-class CreateUser extends Command<string> {
-  constructor(readonly name: string) {
-    super();
-  }
+class CreateUser {
+  constructor(readonly name: string) {}
 }
-class GetUser extends Query<string | undefined> {
-  constructor(readonly id: string) {
-    super();
-  }
+class GetUser {
+  constructor(readonly id: string) {}
 }
 class UserCreated {
   constructor(readonly id: string) {}
@@ -99,7 +90,9 @@ describe('createCqrs', () => {
       new Welcome(),
     );
 
-    const id = await cqrs.commandBus.execute(new CreateUser('ann'));
+    const id = await cqrs.commandBus.execute<CreateUser, string>(
+      new CreateUser('ann'),
+    );
     await expect(cqrs.queryBus.execute(new GetUser(id))).resolves.toBe('ann');
     await cqrs.close();
 
@@ -108,7 +101,6 @@ describe('createCqrs', () => {
       expect.stringContaining('COMMAND CreateUser'),
       'CreateUserHandler',
     );
-    expect(cqrs.eventPublisher).toBeDefined();
     expect(cqrs.unhandledExceptionBus).toBeDefined();
   });
 

@@ -14,8 +14,7 @@ events, repository contracts, persistence lifecycle decorators, a revision-fence
 repository cache, tenant-scoped cache keys and HTTP status mapping for its errors.
 
 It depends on no framework and no ORM. MikroORM adapters are in
-[`@cqrs-ddd/mikro-orm`](https://www.npmjs.com/package/@cqrs-ddd/mikro-orm). It works in a plain Node service, and in a NestJS
-application through structural compatibility: see [Using it from NestJS](#using-it-from-nestjs).
+[`@cqrs-ddd/mikro-orm`](https://www.npmjs.com/package/@cqrs-ddd/mikro-orm).
 
 ## Contents
 
@@ -30,7 +29,6 @@ application through structural compatibility: see [Using it from NestJS](#using-
 - [The repository cache](#the-repository-cache)
 - [Tenant-scoped cache keys](#tenant-scoped-cache-keys)
 - [HTTP status mapping](#http-status-mapping)
-- [Using it from NestJS](#using-it-from-nestjs)
 - [Known limits](#known-limits)
 - [License](#license)
 
@@ -61,7 +59,7 @@ needs.
 | `@cqrs-ddd/core/http` | `domainErrorHttpStatus` |
 | `@cqrs-ddd/core` | all of the above, plus the `Method` type |
 
-No entry point loads an ORM or NestJS.
+No entry point loads an ORM or a framework.
 
 ## Aggregates
 
@@ -571,7 +569,7 @@ Mutation barriers (`CacheMutationBarrier`) mark a deleted or invalidated key for
 
 **The `logger` option.** `@Cache` and `@FromCache` accept `logger: { warn(message) }`
 for their operational warnings, such as a failed cache write, a bypassed adapter or a
-miswired repository. A NestJS `Logger` or `console` fits. Without one, warnings go to
+miswired repository. `console` or a pino logger fits. Without one, warnings go to
 `console.warn`. A logger that throws never changes a result. An adapter reports its own
 warnings the same way through `consoleCacheLogger(context)` and `safeWarn(logger, message)`.
 
@@ -633,50 +631,6 @@ stored entries stay addressable across releases.
 
 It returns `undefined` for anything else. Map your own exceptions first, then pass the
 rest to it.
-
-## Using it from NestJS
-
-Nothing in this package imports NestJS; the fit is structural.
-
-- The NestJS CQRS `EventBus` has `publishAll(events, dispatcherContext)`, so it is an
-  `IDomainEventPublisher`: a handler passes its injected bus to `super(eventBus)`, and
-  the bus hands the aggregate to its configured publisher as the dispatcher context.
-- `AggregateRoot` satisfies NestJS's `IAggregateRoot`, and a NestJS `AggregateRoot`
-  satisfies this package's `IAggregateRoot`. `EventPublisher.mergeObjectContext(aggregate)`
-  connects an aggregate to the `EventBus`: `commit()` then publishes with the aggregate as
-  the context, `commit({ transaction })` with that context, and both return the bus's
-  result.
-- `CommandBaseHandler.execute(command)` is the method the NestJS command bus calls, so a
-  class decorated with `@CommandHandler` extends it directly.
-- `BaseCommand`, `BaseQuery` and the domain events are plain classes that NestJS
-  dispatches like any other.
-
-```typescript
-@CommandHandler(UpdateUserCommand)
-export class UpdateUserHandler extends CommandBaseHandler<UpdateUserCommand, User> {
-  constructor(
-    @Inject(USER_WRITE_REPOSITORY) private readonly users: IWriteSideAggregateRepository<User>,
-    eventBus: EventBus,
-  ) {
-    super(eventBus);
-  }
-  // handle() as above
-}
-```
-
-The application writes the rest of the glue:
-
-- providers for the repositories and the cache, for example a `useFactory` provider
-  that builds a `MikroOrmCache` from `@cqrs-ddd/mikro-orm` under `CACHE_TOKEN`:
-
-  ```typescript
-  { provide: CACHE_TOKEN, useValue: new MemoryCache({ defaultTtlMs: 30_000 }) }
-  ```
-
-- the tenant resolver, registered once before any lifecycle hook can start work that
-  reads it, for example in a module constructor;
-- an exception filter that maps its own errors, then calls `domainErrorHttpStatus`;
-- a `logger` for the cache decorators, such as `new Logger('UserCache')`.
 
 ## Known limits
 

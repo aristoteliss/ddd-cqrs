@@ -10,10 +10,7 @@
  *
  * @example
  * ```ts
- * constructor(
- *   @Inject(COMMAND_REPOSITORY.createUser)
- *   private readonly users: ICommandRepository<User, UserSnapshot>,
- * ) {}
+ * constructor(private readonly users: ICommandRepository<User, UserSnapshot>) {}
  *
  * await this.users.save(user);
  * ```

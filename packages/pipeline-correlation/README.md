@@ -1,7 +1,7 @@
 # @cqrs-ddd/pipeline-correlation
 
 Correlation id propagation for any Node.js application: an HTTP middleware
-(`HttpCorrelationMiddleware`, for Node's `http` server, Express or Connect), the
+(`httpCorrelation()`, for Node's `http` server, Express or Connect), the
 `@WithCorrelation()` method decorator for queue and message consumers and cron jobs
 (both TypeScript decorator modes), a gRPC extraction preset (`CorrelationFrom.grpc()`), and
 `correlationSource` for `createPipeline({ sources })` of `@cqrs-ddd/pipeline`.
@@ -20,10 +20,9 @@ it with `require()`.
 ## Example
 
 ```ts
-import { getCorrelationId, HttpCorrelationMiddleware } from '@cqrs-ddd/pipeline-correlation';
+import { getCorrelationId, httpCorrelation } from '@cqrs-ddd/pipeline-correlation';
 
-const correlation = new HttpCorrelationMiddleware();
-app.use((req, res, next) => correlation.use(req, res, next));
+app.use(httpCorrelation());
 app.get('/ping', (_req, res) => res.send(getCorrelationId()));
 ```
 

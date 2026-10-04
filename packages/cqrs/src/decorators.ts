@@ -1,41 +1,13 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
-import {
-  type BehaviorId,
-  type Constructor,
-  type IPipelineBehavior,
-  normalizeBehaviorEntries,
-  type PipelineBehaviorEntry,
-} from '@cqrs-ddd/pipeline';
+import type { AnyClass, DualClassDecorator } from '@cqrs-ddd/pipeline';
 
 const COMMAND_HANDLER = Symbol.for('@cqrs-ddd/cqrs:command-handler');
 const QUERY_HANDLER = Symbol.for('@cqrs-ddd/cqrs:query-handler');
 const EVENTS_HANDLER = Symbol.for('@cqrs-ddd/cqrs:events-handler');
-const PIPELINE = Symbol.for('@cqrs-ddd/cqrs:pipeline');
-const SKIPPED = Symbol.for('@cqrs-ddd/cqrs:skipped');
-
-/** A class, of a request or of a handler, whatever its constructor takes. */
-// biome-ignore lint/suspicious/noExplicitAny: constructors take any arguments
-export type AnyClass = abstract new (...args: any[]) => unknown;
 
 /** A request class: a command, a query or an event. */
 export type RequestType = AnyClass;
-
-/**
- * A class decorator for the standard and the `experimentalDecorators` mode: it receives
- * the class, and a context only in the standard mode.
- */
-export type DualClassDecorator = (
-  target: AnyClass,
-  context?: ClassDecoratorContext,
-) => void;
-
-/** The pipeline a handler class declares with `@UsePipeline` and `@SkipPipeline`. */
-export interface HandlerPipeline {
-  readonly types: Constructor<IPipelineBehavior>[];
-  readonly options: Map<BehaviorId, Record<string, unknown>>;
-  readonly skipped: Constructor<IPipelineBehavior>[];
-}
 
 function define(target: AnyClass, key: symbol, value: unknown): void {
   Object.defineProperty(target, key, { value, configurable: true });
@@ -111,70 +83,6 @@ export function EventsHandler(...events: RequestType[]): DualClassDecorator {
 }
 
 /**
- * Declares the behaviors that run around a handler, outermost first: behavior classes or
- * `[Behavior, options]` tuples such as `cache({ key })`. The global behaviors of
- * `createCqrs()` wrap these; a behavior declared in both runs once, at its
- * global position, with these options merged over the global ones.
- *
- * @throws TypeError on a malformed entry.
- * @example
- * ```ts
- * @CommandHandler(CreateUserCommand)
- * @UsePipeline(idempotent({ keyFactory }), audit({ action: 'user.create' }))
- * class CreateUserHandler implements ICommandHandler<CreateUserCommand> {
- *   async execute(command: CreateUserCommand) {}
- * }
- * ```
- */
-export function UsePipeline(
-  ...entries: PipelineBehaviorEntry[]
-): DualClassDecorator {
-  return (target, context) => {
-    const name = String(context?.name ?? target.name);
-    const { types, options } = normalizeBehaviorEntries(
-      entries,
-      `@UsePipeline on ${name}`,
-    );
-    define(target, PIPELINE, { types, options });
-  };
-}
-
-/**
- * Opts a handler out of the global behaviors of `createCqrs()`. Repeated
- * decorators add up.
- *
- * @throws TypeError when an argument is not a behavior class.
- * @example
- * ```ts
- * @QueryHandler(HealthQuery)
- * @SkipPipeline(LoggingBehavior, TraceBehavior)
- * class HealthHandler implements IQueryHandler<HealthQuery> {
- *   async execute() {
- *     return 'ok';
- *   }
- * }
- * ```
- */
-export function SkipPipeline(
-  ...behaviors: Constructor<IPipelineBehavior>[]
-): DualClassDecorator {
-  return (target, context) => {
-    const name = String(context?.name ?? target.name);
-    const existing =
-      read<Constructor<IPipelineBehavior>[]>(target, SKIPPED) ?? [];
-    define(
-      target,
-      SKIPPED,
-      normalizeBehaviorEntries(
-        [...existing, ...behaviors],
-        `@SkipPipeline on ${name}`,
-        false,
-      ).types,
-    );
-  };
-}
-
-/**
  * The command class a handler class handles, if it is a command handler.
  *
  * @example
@@ -210,21 +118,4 @@ export function eventsOf(
   handler: AnyClass,
 ): readonly RequestType[] | undefined {
   return read<RequestType[]>(handler, EVENTS_HANDLER);
-}
-
-/**
- * The pipeline a handler class declares; empty when it declares none.
- *
- * @example
- * ```ts
- * pipelineOf(CreateUserHandler).types; // [IdempotencyBehavior, AuditBehavior]
- * ```
- */
-export function pipelineOf(handler: AnyClass): HandlerPipeline {
-  const declared = read<Omit<HandlerPipeline, 'skipped'>>(handler, PIPELINE);
-  return {
-    types: declared?.types ?? [],
-    options: declared?.options ?? new Map(),
-    skipped: read<Constructor<IPipelineBehavior>[]>(handler, SKIPPED) ?? [],
-  };
 }

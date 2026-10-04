@@ -32,17 +32,12 @@ import type { IEntityManagerSource } from '../interfaces/entity-manager-source.j
  *
  * @example
  * ```typescript
- * // A NestJS provider; STORE is the application's IEntityManagerSource token.
- * @Injectable()
  * export class UpdateUserCommandRepository extends AggregateRepository<
  *   UserSnapshot,
  *   User,
  *   UserSnapshot
  * > {
- *   constructor(
- *     @Inject(CACHE_TOKEN) cache: ICache<UserSnapshot>,
- *     @Inject(STORE) store: IEntityManagerSource,
- *   ) {
+ *   constructor(cache: ICache<UserSnapshot>, store: IEntityManagerSource) {
  *     super(cache, store, User, User.aggregateName, User.fromJSON);
  *   }
  *

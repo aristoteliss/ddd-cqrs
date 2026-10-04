@@ -29,12 +29,12 @@ export interface EventBusOptions {
 
 /**
  * Starts every handler of an event, each through its own pipeline, and returns without
- * awaiting them. `CqrsFactory.create()` builds it; it satisfies `IDomainEventPublisher` of
+ * awaiting them. `createCqrs()` builds it; it satisfies `IDomainEventPublisher` of
  * `@cqrs-ddd/core`, so `CommandBaseHandler` takes it as its event publisher.
  *
  * @example
  * ```ts
- * app.get(EventBus).publish(new UserCreatedEvent(user.id));
+ * cqrs.eventBus.publish(new UserCreatedEvent(user.id));
  * ```
  */
 export class EventBus<E extends IEvent = IEvent> {

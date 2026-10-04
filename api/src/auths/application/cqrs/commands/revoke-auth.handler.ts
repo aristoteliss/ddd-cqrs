@@ -4,7 +4,8 @@ import {
   CommandBaseHandler,
   type IQueryRepository,
 } from '@cqrs-ddd/core/application';
-import { CommandHandler, EventBus, UsePipeline } from '@cqrs-ddd/cqrs';
+import { CommandHandler, EventBus } from '@cqrs-ddd/cqrs';
+import { UsePipeline } from '@cqrs-ddd/pipeline';
 import { AUDIT_SEVERITY, audit } from '@cqrs-ddd/pipeline-audit';
 import { deadLetter } from '@cqrs-ddd/pipeline-deadletter';
 import { metrics } from '@cqrs-ddd/pipeline-opentelemetry';

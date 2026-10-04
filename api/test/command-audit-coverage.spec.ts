@@ -1,7 +1,6 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
-import { pipelineOf } from '@cqrs-ddd/cqrs';
-import { getBehaviorId } from '@cqrs-ddd/pipeline';
+import { getBehaviorId, pipelineOf } from '@cqrs-ddd/pipeline';
 import { AuditBehavior } from '@cqrs-ddd/pipeline-audit';
 import { describe, expect, it } from 'vitest';
 import { CreateAuthHandler } from '../src/auths/application/cqrs/commands/create-auth.handler.js';
