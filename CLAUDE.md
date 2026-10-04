@@ -43,6 +43,7 @@ Use repository-native commands. Never invent an equivalent, and never `npm`/`yar
 | Install | `pnpm install` |
 | Tests of every workspace, after the Grit plugin diagnostics | `pnpm test` |
 | One workspace's tests | `pnpm --filter <package-name> test` |
+| The api's end-to-end suites (needs Docker) | `pnpm test:e2e` |
 | Type checks across workspaces | `pnpm lint` |
 | Grit plugin diagnostics | `pnpm lint:plugins` |
 | Format and lint (Biome) | `pnpm check`, `pnpm format` |

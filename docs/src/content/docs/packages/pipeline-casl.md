@@ -5,15 +5,11 @@ sidebar:
   order: 11
 ---
 
-Authorization with [CASL](https://casl.js.org). It works at two levels:
+Fine-grained attribute- and role-based authorization using [CASL](https://casl.js.org). 
 
-- `CaslBehavior` checks **type-level** requirements before the operation runs, such as
-  "may this caller delete posts?", declared with `requires({ action, subject })`.
-- `CaslAuthorizer` checks the **loaded entity** inside the operation, such as "may this
-  caller update this post's title?", and projects the fields the caller may read.
-
-The behavior loads the caller and their rules through an `ICaslPermissionSource` that the
-application implements.
+Enforces a two-tier defense-in-depth model:
+1. **Type-Level Authorization (Outer Gate)**: `CaslBehavior` evaluates static permissions before operations execute (e.g. *Can this user execute `DeleteUserCommand`?*), avoiding unnecessary database lookups.
+2. **Entity & Field Authorization (Inner Gate)**: `CaslAuthorizer` evaluates fine-grained rules on hydrated domain aggregates inside the handler (e.g. *Can this user update this specific article when `authorId !== currentUserId`?*) and projects readable fields.
 
 ## Installation
 
@@ -21,9 +17,33 @@ application implements.
 pnpm add @cqrs-ddd/pipeline-casl @cqrs-ddd/pipeline @casl/ability
 ```
 
-## Usage
+Requires Node.js 22.12 or later and `@casl/ability` 7.
 
-```ts
+## Architecture & Two-Tier Authorization Flow
+
+```text
+Incoming Request
+      │
+      ▼
+[1. Type-Level Gate: CaslBehavior]
+      ├─ Resolves caller principal & rules via ICaslPermissionSource
+      ├─ Evaluates type-level rules declared by requires({ action, subject })
+      ├─ Denied? ──► Throws UnauthorizedActionException (HTTP 403)
+      └─ Allowed ──► Stashes Ability & Principal in IPipelineContext
+                           │
+                           ▼
+[2. Handler Execution]
+      ├─ Loads domain aggregate from repository (e.g. post = await repo.findById(id))
+      ├─ Instantiates CaslAuthorizer (reads Ability from context)
+      ├─ Evaluates authorizer.authorize('update', post, ['title'])
+      ├─ Modifies aggregate via domain methods
+      ├─ Saves aggregate
+      └─ Returns projected fields: authorizer.project('read', post, dto)
+```
+
+## Quick Example
+
+```typescript
 import { createPipeline } from '@cqrs-ddd/pipeline';
 import {
   CaslBehavior,
@@ -32,94 +52,166 @@ import {
   requires,
 } from '@cqrs-ddd/pipeline-casl';
 
-const permissions: ICaslPermissionSource = {
+// 1. Implement permission source
+const permissionSource: ICaslPermissionSource = {
   load: async (context) => {
-    const user = await sessions.current();
-    if (!user) return null; // unauthenticated: denied
+    const session = await authService.getCurrentSession();
+    if (!session) return null; // Unauthenticated requests are denied
+
     return {
-      principal: { id: user.id },
-      rules: user.capabilities.map(parseCapabilityString),
+      principal: { id: session.userId, tenantId: session.tenantId, role: session.role },
+      rules: session.capabilities.map(parseCapabilityString),
     };
   },
 };
 
+// 2. Configure pipeline
 const pipeline = createPipeline({
-  behaviors: [new CaslBehavior(permissions)],
+  behaviors: [new CaslBehavior(permissionSource)],
   globalBehaviors: { before: [CaslBehavior] },
 });
 
-export const deletePost = pipeline.wrap(
-  { name: 'deletePost', kind: 'command' },
-  requires({ action: 'delete', subject: 'Post' }),
-)(async (id: string) => posts.remove(id));
+// 3. Declare type-level requirement
+export const deleteUser = pipeline.wrap(
+  { name: 'deleteUser', kind: 'command' },
+  requires({ action: 'delete', subject: 'User' }),
+)(async (userId: string) => usersRepo.delete(userId));
 ```
 
-`requires()` takes one or more requirements, `{ action, subject, field? }`; all of them
-must pass. An operation without requirements runs without loading permissions.
+## Capability Format & Condition Interpolation
 
-## Rules
+The permission source loads rules as `Capability` objects. For compact database storage or JWT claims, serialize them as capability strings:
 
-`load()` returns the principal and its rules, as `Capability` objects (`subject`,
-`action`, and optionally `conditions`, `fields` and `inverted`). A capability string,
-`Subject|action|conditions|fields`, is their compact form for storage;
-`parseCapabilityString()` and `serializeCapability()` convert between the two:
+```text
+Subject|action|conditions|fields
+```
 
-| Capability | Meaning |
-| --- | --- |
-| `Post\|read\|*` | read any post |
-| `!Post\|delete\|*` | never delete a post (inverted) |
-| `Post\|update\|{"authorId":"${user.id}"}\|title,body` | update the title and body of the caller's own posts |
-| `all\|manage\|*` | anything |
+### Capability Examples
 
-`${user.<path>}` placeholders in conditions read the principal's attributes.
+| Capability String | Action | Subject | Conditions / Fields | Meaning |
+| --- | --- | --- | --- | --- |
+| `Post\|read\|*` | `read` | `Post` | Wildcard | Can read any post |
+| `!Post\|delete\|*` | `delete` | `Post` | Inverted (`!`) | Explicitly forbidden to delete posts |
+| `Post\|update\|{"authorId":"${user.id}"}\|title,body` | `update` | `Post` | `${user.id}` match | Can only update title and body on own posts |
+| `all\|manage\|*` | `manage` | `all` | Wildcard | Superadmin: can perform any action |
 
-## Entity and field checks
+### Dynamic Condition Interpolation
 
-The behavior stores the ability and the principal in the context. Inside the operation,
-`CaslAuthorizer` checks the entity once it is loaded:
+Placeholders matching `${user.<field>}` in conditions are automatically interpolated against attributes of the active `principal`:
 
-```ts
+```typescript
+// Rule: {"tenantId":"${user.tenantId}","department":"${user.dept}"}
+// Principal: { id: 'u_1', tenantId: 'org_abc', dept: 'engineering' }
+// Interpolated condition: { tenantId: 'org_abc', department: 'engineering' }
+```
+
+## Entity and Field Checks (`CaslAuthorizer`)
+
+Inside command or query handlers, instantiate `CaslAuthorizer` to evaluate rules against hydrated entities and sanitize output fields:
+
+```typescript
 import { CaslAuthorizer } from '@cqrs-ddd/pipeline-casl';
 
-const authorizer = new CaslAuthorizer();
-const post = await posts.findById(command.id);
-authorizer.authorize('update', post, ['title']);
-post.retitle(command.title);
+export class UpdateArticleHandler {
+  async execute(command: UpdateArticleCommand) {
+    const authorizer = new CaslAuthorizer(); // Automatically reads Ability from running context
+    const article = await this.articles.findById(command.articleId);
 
-return authorizer.project('read', post, { id: post.id, title: post.title });
+    // 1. Authorize action and modified fields on the aggregate:
+    authorizer.authorize('update', article, ['title', 'content']);
+
+    // 2. Perform domain mutation:
+    article.updateContent(command.title, command.content);
+    await this.articles.save(article);
+
+    // 3. Project only fields the caller is authorized to read:
+    return authorizer.project('read', article, {
+      id: article.id,
+      title: article.title,
+      content: article.content,
+      internalNotes: article.internalNotes, // Stripped if caller lacks permission
+    });
+  }
+}
 ```
 
-Without a constructor argument, it uses the ability of the running pipeline; a missing
-ability denies. `getCaslAbility()` and `getCaslPrincipal()` read them in other behaviors.
+`authorizer.authorize()` throws `UnauthorizedActionException` if the check fails. `authorizer.can(action, subject)` returns a boolean for non-throwing conditional logic.
 
-## Options
+## Security & Cache Partitioning (`abilityDigest`)
 
-| Option | Meaning | Default |
-| --- | --- | --- |
-| `rules` | the type-level requirements; `requires(...)` sets them | none: no check |
+When caching query results (`@cqrs-ddd/pipeline-cache`) or replaying idempotent commands (`@cqrs-ddd/pipeline-idempotency`), responses must never be replayed across different permission tiers.
 
-## Ordering and security
+`abilityDigest(context)` generates a SHA-256 fingerprint of the caller's rules:
 
-Place `CaslBehavior` in `globalBehaviors.before`, so it stays outermost even when a call site
-redeclares it to pass its requirements. Cache and idempotency order themselves after it.
+```typescript
+import { createPartitionedCacheKeyFactory } from '@cqrs-ddd/pipeline-cache';
+import { abilityDigest, getCaslPrincipal } from '@cqrs-ddd/pipeline-casl';
 
-A type-level check does not replace the entity check: a cache or idempotency hit skips the
-operation, so their keys must include the principal and its permission scope.
-`abilityDigest(context)` is a digest of the caller's ability for that purpose:
-
-```ts
-const key = createPartitionedCacheKeyFactory({
+const userCacheKey = createPartitionedCacheKeyFactory({
   principal: (ctx) => getCaslPrincipal(ctx)?.id,
-  scope: abilityDigest,
+  scope: abilityDigest, // Binds cache entries to caller permission fingerprint
 });
 ```
 
-## HTTP errors
+If a user's permissions change, subsequent requests generate a different cache key, preventing unauthorized cache hits.
 
-A denial throws `UnauthorizedActionException`. `toHttpResponse(error)` from
-`@cqrs-ddd/pipeline-casl/http` returns a 403 answer with the denied `action` and
-`subject`. See [HTTP errors](/ddd-cqrs/guides/http-errors/).
+## NestJS Integration (`@cqrs-ddd/nestjs`)
 
-## API reference
+Provide `CaslBehavior` in a shared security module:
+
+```typescript
+import { Module } from '@nestjs/common';
+import { CaslBehavior } from '@cqrs-ddd/pipeline-casl';
+import { AuthService } from '../auth/auth.service.js';
+
+@Module({
+  providers: [
+    {
+      provide: CaslBehavior,
+      inject: [AuthService],
+      useFactory: (auth: AuthService) => new CaslBehavior(auth.permissionSource),
+    },
+  ],
+  exports: [CaslBehavior],
+})
+export class SecurityModule {}
+```
+
+Decorate `@CommandHandler` or `@QueryHandler` with `requires`:
+
+```typescript
+import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
+import { UsePipeline } from '@cqrs-ddd/pipeline';
+import { requires } from '@cqrs-ddd/pipeline-casl';
+
+@CommandHandler(DeleteArticleCommand)
+@UsePipeline(requires({ action: 'delete', subject: 'Article' }))
+export class DeleteArticleHandler implements ICommandHandler<DeleteArticleCommand> {
+  async execute(command: DeleteArticleCommand) {
+    // Type-level authorization passed
+  }
+}
+```
+
+The global `ErrorFilter` automatically translates `UnauthorizedActionException` into HTTP 403 Forbidden with details:
+
+```json
+{
+  "statusCode": 403,
+  "error": "Forbidden",
+  "message": "Access denied: cannot execute \"delete\" on \"Article\".",
+  "action": "delete",
+  "subject": "Article"
+}
+```
+
+## Behavior Ordering
+
+Position `CaslBehavior` **before** cache and idempotency behaviors in the pipeline:
+1. `ZodValidationBehavior`: Sanitizes input.
+2. `CaslBehavior`: Verifies authorization before any business logic or caching.
+3. `CacheBehavior` / `IdempotencyBehavior`: Evaluates short-circuit keys using `abilityDigest`.
+
+## API Reference
 
 [API reference](/ddd-cqrs/api/cqrs-ddd/pipeline-casl/)

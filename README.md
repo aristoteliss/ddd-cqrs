@@ -1,10 +1,12 @@
 # ddd-cqrs
 
-Framework-neutral packages of the `@cqrs-ddd` organization: Domain-Driven Design
-primitives, small dependency-free utilities, and pipeline behaviors (validation,
-authorization, caching, idempotency, rate limiting, resilience, audit, dead letters,
-feature flags, telemetry). Every package runs in a plain Node.js application, without a
-framework or a dependency-injection container.
+Packages of the `@cqrs-ddd` organization: Domain-Driven Design primitives, small
+dependency-free utilities, pipeline behaviors (validation, authorization, caching,
+idempotency, rate limiting, resilience, audit, dead letters, feature flags,
+telemetry), framework-free CQRS buses ([`@cqrs-ddd/cqrs`](https://aristoteliss.github.io/ddd-cqrs/packages/cqrs/)),
+and the official NestJS adapter ([`@cqrs-ddd/nestjs`](https://aristoteliss.github.io/ddd-cqrs/packages/nestjs/))
+that glues the pipeline and DDD ecosystem with `@nestjs/cqrs`. Every core package runs
+without a framework or a dependency-injection container.
 
 **Documentation:** [site](https://aristoteliss.github.io/ddd-cqrs/) · [getting started](https://aristoteliss.github.io/ddd-cqrs/getting-started/) · [API reference](https://aristoteliss.github.io/ddd-cqrs/api/)
 
@@ -12,7 +14,7 @@ framework or a dependency-injection container.
 
 | Path | Holds |
 | --- | --- |
-| `packages/` | The published packages, each with its own README |
+| `packages/` | The published `@cqrs-ddd/*` packages, each with its own README |
 | `api/` | The example application: users, roles and sessions on every package together |
 | `integration/` | Repository-wide checks, and small applications that use one package family at a time (see its README) |
 | `docs/` | The documentation site |

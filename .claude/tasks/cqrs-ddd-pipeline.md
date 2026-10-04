@@ -51,7 +51,7 @@ bridge, documentation and examples) and steps 8.1 and 8.2 are done and committed
   `npm whoami`, `pnpm publish:all --tag next`. A package published for the first time
   with `--tag next` also gets `latest` from the registry, which has no other version
   to point it at.
-- [ ] 8.3a Placement review (owner, 2026-10-04), uncommitted: `@UsePipeline`,
+- [x] 8.3a Placement review (owner, 2026-10-04), uncommitted: `@UsePipeline`,
   `@SkipPipeline`, `pipelineOf` and their types moved from `@cqrs-ddd/cqrs` to
   `@cqrs-ddd/pipeline` (`src/handler-pipeline.ts`), so the plugin, which keeps
   `@nestjs/cqrs`, uses them without `@cqrs-ddd/cqrs`; removed the unused NestJS copies
@@ -67,8 +67,11 @@ bridge, documentation and examples) and steps 8.1 and 8.2 are done and committed
   Committed as `f79af9f` and `2f25925`; `pnpm verify:log` passed on that tree
   (2,882/2,882 Vitest tests, 7/7 `node --test`, 20 packages packed and installed alone;
   `api` coverage 85.95%, `integration` 100%). The guides link to the `integration/`
-  applications. Remaining before the owner's commands:
-  `pnpm --filter ddd-cqrs-api test:e2e` (needs Docker).
+  applications. 2026-10-04, with `@cqrs-ddd/nestjs` added: `pnpm --filter ddd-cqrs-api
+  test:e2e` passed (33 files, 356 tests); `pnpm docs:build` passes after the adapter's main
+  module was named (`d530f35`); `pnpm test`, `pnpm lint`, `pnpm check`, `pnpm lint:plugins`
+  and `pnpm test:release` (21 packages) passed. Nothing is left before the owner's commands
+  of 8.3; nestjs-pipeline publishes its facade and its 0.4.3 notices after them.
 - [ ] 8.4 A scratch consumer installs the published packages from npm and runs the
   plain-function example.
 
@@ -135,3 +138,16 @@ None for the release itself.
 ## Last Updated
 
 2026-10-04
+
+## The NestJS adapter (2026-10-04)
+
+The owner moved the NestJS adapter here: `packages/nestjs` = `@cqrs-ddd/nestjs` 0.5.0, the
+one exception to rule 1 (NestJS only as peers; `framework-independence.grit` and the
+release check leave out only that package). It runs official `@nestjs/cqrs` handlers
+through their pipelines, answers every package error as a NestJS `HttpException` (errors
+matched by name), and wires correlation and job context; its guide is
+`docs/src/content/docs/packages/nestjs.md`, with a CHANGELOG entry under 0.5.0. Verified:
+`pnpm test` (23 workspaces), `pnpm lint`, `pnpm check`, `pnpm lint:plugins`,
+`pnpm test:release` (21 packages) passed; published to the local registry (user
+`claude-local`, token in `~/.npmrc-local`). nestjs-pipeline installs it from there and
+publishes only the facade `@nestjs-pipeline/cqrs-ddd`, after this repository's step 8.3.

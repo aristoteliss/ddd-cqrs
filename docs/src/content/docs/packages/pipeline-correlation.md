@@ -39,6 +39,22 @@ app.get('/ping', (_req, res) => res.send(getCorrelationId()));
 The middleware `httpCorrelation()` returns, `(req, res, next)`, fits Node's `http` server,
 Express and Connect.
 
+### NestJS Integration (`@cqrs-ddd/nestjs`)
+
+For NestJS applications, import `CorrelationMiddleware` from `@cqrs-ddd/nestjs/correlation` and register it in `AppModule`:
+
+```typescript
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
+import { CorrelationMiddleware } from '@cqrs-ddd/nestjs/correlation';
+
+@Module({})
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(CorrelationMiddleware).forRoutes('*');
+  }
+}
+```
+
 ## The HTTP middleware
 
 | Option | Meaning | Default |

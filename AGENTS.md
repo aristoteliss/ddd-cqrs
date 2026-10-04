@@ -22,7 +22,7 @@ repository relies on.
 | --- | --- | --- |
 | Path | `~/Source/ddd-cqrs` | `~/Source/nestjs-pipeline` |
 | GitHub | https://github.com/aristoteliss/ddd-cqrs | https://github.com/aristoteliss/nestjs-pipeline |
-| Owns | The one implementation: the framework-neutral `@cqrs-ddd/*` packages, published from 0.5.0; the example application `api/` on Express and Fastify; the documentation site https://aristoteliss.github.io/ddd-cqrs/; the local registry `tools/local-registry/` | The NestJS application `api/`, which from 0.5.0 installs the `@cqrs-ddd/*` packages; the old `@nestjs-pipeline/*` packages, stopped at 0.4.x and kept on npm with every version |
+| Owns | The one implementation: the framework-neutral `@cqrs-ddd/*` packages and their NestJS adapter `@cqrs-ddd/nestjs`, published from 0.5.0; the example application `api/` on Express and Fastify; the documentation site https://aristoteliss.github.io/ddd-cqrs/; the local registry `tools/local-registry/` | The NestJS application `api/`, which from 0.5.0 installs the `@cqrs-ddd/*` packages; the old `@nestjs-pipeline/*` packages, stopped at 0.4.x and kept on npm with every version, and `@nestjs-pipeline/cqrs-ddd`, a facade that re-exports `@cqrs-ddd/nestjs` |
 | Active task | `.claude/tasks/cqrs-ddd-pipeline.md` (the 0.5.0 release) | `.claude/tasks/adopt-cqrs-ddd-packages.md` (`api` on `@cqrs-ddd`, the README notices) |
 
 How they connect:
@@ -31,8 +31,8 @@ How they connect:
   copies or patches their code; a missing feature or a bug found there is fixed in
   ddd-cqrs.
 - **Dependencies point one way:** nestjs-pipeline depends on `@cqrs-ddd/*`; no
-  `@cqrs-ddd` package imports NestJS or `@nestjs-pipeline/*` (ddd-cqrs `AGENTS.md`,
-  rule 1).
+  `@cqrs-ddd` package imports `@nestjs-pipeline/*`, and only the adapter
+  `@cqrs-ddd/nestjs` imports NestJS (ddd-cqrs `AGENTS.md`, rule 1).
 - **Before anything is published,** nestjs-pipeline installs the packages from the local
   registry: Verdaccio in Docker, `~/Source/ddd-cqrs/tools/local-registry/`, on
   `http://127.0.0.1:4873/`, whose README holds every command. A fix in ddd-cqrs is
@@ -250,7 +250,10 @@ context, or the thing it names does too much.
    or on none, uses these packages without bringing in half of NestJS; NestJS usage
    lives in the nestjs-pipeline repository. Do not reproduce a framework's architecture
    here: no containers, module systems, controllers, guards, interceptors or lifecycle
-   machinery added for parity. Borrowing one or two framework concepts is fair only as a
+   machinery added for parity. One exception (owner, 2026-10-04): `packages/nestjs`
+   (`@cqrs-ddd/nestjs`) is the NestJS adapter of these packages. NestJS is only its peer,
+   no other package imports or names it, and `framework-independence.grit` and the release
+   check leave only that package out. Borrowing one or two framework concepts is fair only as a
    small helper, a function or decorator of a few lines, when it saves three to five times
    its size in the code that uses it. Packages hold what has to do with CQRS, DDD and their
    decorators (handler, pipeline, domain and repository decorators). The end goal is a

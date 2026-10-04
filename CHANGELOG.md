@@ -25,6 +25,11 @@ The first release. Every package is released at 0.5.0, first under the `next` di
   classes, and `createCqrs()`, which builds the `CommandBus`, `QueryBus`, `EventBus` and
   `UnhandledExceptionBus` and registers handler instances, each with its pipeline. No container: the application
   builds its handlers with `new`.
+- `@cqrs-ddd/nestjs`: the NestJS adapter, the only package with NestJS (as peers).
+  `PipelineModule.forRoot()` runs official `@nestjs/cqrs` handlers through their
+  pipelines, taking each behavior from the module that provides it; `ErrorFilter` answers
+  every package error as a NestJS `HttpException`; `./correlation` and `./job-context`
+  wire correlation ids and job context.
 - `createZodMapper(schema)` in `@cqrs-ddd/pipeline-zod`: parses input into a command at
   the HTTP edge and throws `ZodValidationError`.
 - `@cqrs-ddd/core`: `BaseCommand`, `BaseQuery` and `DomainEvent` carry the

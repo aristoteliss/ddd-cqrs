@@ -93,6 +93,8 @@ export const placeOrder = pipeline.wrap(
 - [Packages](/ddd-cqrs/packages/pipeline/): every behavior and its options.
 - [CQRS without NestJS](/ddd-cqrs/guides/cqrs/): an application of commands, queries and
   events on `@cqrs-ddd/cqrs`, wired with `createCqrs()`.
+- [NestJS & @cqrs-ddd](/ddd-cqrs/guides/from-nestjs/): integrating with NestJS using
+  [`@cqrs-ddd/nestjs`](/ddd-cqrs/packages/nestjs/).
 - [The repository's applications](https://github.com/aristoteliss/ddd-cqrs/tree/master/integration): small applications that each use one package
   family (the pipeline alone, the domain alone, the repositories alone), and `api/`,
   which uses them all.

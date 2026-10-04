@@ -1,0 +1,14 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build api",
+      "detail": "Build the api and every package it depends on",
+      "type": "shell",
+      "command": "pnpm --filter ddd-cqrs-api... build",
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "build",
+      "problemMatcher": "$tsc"
+    }
+  ]
+}

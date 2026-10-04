@@ -80,7 +80,7 @@
     },
     {
       "path": "./biome/plugins/framework-independence.grit",
-      "includes": ["**/packages/**/*.ts"]
+      "includes": ["**/packages/**/*.ts", "!**/packages/nestjs/**"]
     },
     {
       "path": "./biome/plugins/core-environment.grit",

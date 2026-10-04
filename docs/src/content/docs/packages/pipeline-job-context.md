@@ -52,6 +52,31 @@ class WelcomeWorker {
 
 `SessionJobPrincipal` stands for the application's implementation of `IJobPrincipal`.
 
+### NestJS Integration (`@cqrs-ddd/nestjs`)
+
+In NestJS applications, use `JobContextModule.forRoot()` from `@cqrs-ddd/nestjs/job-context` to register context at module startup and clean it up on application shutdown:
+
+```typescript
+import { Module } from '@nestjs/common';
+import { JobContextModule } from '@cqrs-ddd/nestjs/job-context';
+import { correlationSource } from '@cqrs-ddd/pipeline-correlation';
+import { tenantSource } from '@cqrs-ddd/pipeline-tenant';
+import { SessionJobPrincipal } from './session-job-principal.service.js';
+import { AuthModule } from './auth/auth.module.js';
+
+@Module({
+  imports: [
+    JobContextModule.forRoot({
+      imports: [AuthModule],
+      principal: SessionJobPrincipal,
+      tenants: () => ['tenant_a', 'tenant_b'],
+      sources: { tenantId: tenantSource, correlationId: correlationSource },
+    }),
+  ],
+})
+export class AppModule {}
+```
+
 ## Options
 
 `registerJobContext(options)`:

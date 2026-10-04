@@ -1,0 +1,88 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "API (Express)",
+      "type": "node",
+      "request": "launch",
+      "preLaunchTask": "build api",
+      "cwd": "${workspaceFolder}/api",
+      "program": "${workspaceFolder}/api/dist/main.js",
+      "outFiles": [
+        "${workspaceFolder}/api/dist/**/*.js",
+        "${workspaceFolder}/packages/*/dist/**/*.js"
+      ],
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "API (Fastify)",
+      "type": "node",
+      "request": "launch",
+      "preLaunchTask": "build api",
+      "cwd": "${workspaceFolder}/api",
+      "program": "${workspaceFolder}/api/dist/main.js",
+      "env": {
+        "ADAPTER": "fastify",
+        "SESSION_SECRET": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "outFiles": [
+        "${workspaceFolder}/api/dist/**/*.js",
+        "${workspaceFolder}/packages/*/dist/**/*.js"
+      ],
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "API: migrate databases",
+      "type": "node",
+      "request": "launch",
+      "preLaunchTask": "build api",
+      "cwd": "${workspaceFolder}/api",
+      "program": "${workspaceFolder}/api/dist/persistence/cli.js",
+      "args": ["migrate"],
+      "outFiles": [
+        "${workspaceFolder}/api/dist/**/*.js",
+        "${workspaceFolder}/packages/*/dist/**/*.js"
+      ],
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "API tests: current file",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/api",
+      "program": "${workspaceFolder}/api/node_modules/vitest/vitest.mjs",
+      "args": ["run", "--coverage.enabled=false", "${file}"],
+      "autoAttachChildProcesses": true,
+      "smartStep": true,
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Integration tests: current file",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/integration",
+      "program": "${workspaceFolder}/integration/node_modules/vitest/vitest.mjs",
+      "args": ["run", "--coverage.enabled=false", "${file}"],
+      "autoAttachChildProcesses": true,
+      "smartStep": true,
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "API e2e: current file",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/api",
+      "program": "${workspaceFolder}/api/node_modules/vitest/vitest.mjs",
+      "args": ["run", "--config", "vitest.config.e2e.ts", "${file}"],
+      "autoAttachChildProcesses": true,
+      "smartStep": true,
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+      "console": "integratedTerminal"
+    }
+  ]
+}

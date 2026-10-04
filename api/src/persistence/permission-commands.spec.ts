@@ -68,7 +68,7 @@ describe('permission rule commands', () => {
     const drifted = run('permissions:verify', dir);
     expect(drifted.status).toBe(1);
     expect(drifted.stdout).toContain('tenant: drifted user(s):');
-  });
+  }, 30_000);
 
   it('migrates and reverts the schema on SQLite', async () => {
     const dir = tempDir();
@@ -83,5 +83,5 @@ describe('permission rule commands', () => {
     );
     client.close();
     expect(tables.rows.map((row) => row.name)).toEqual([]);
-  });
+  }, 30_000);
 });

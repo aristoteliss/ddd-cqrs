@@ -12,6 +12,7 @@
     "inventory/**/*.ts",
     "profiles/**/*.ts",
     "members/**/*.ts",
+    "nestjs/**/*.ts",
     "vitest.config.ts"
   ]
 }

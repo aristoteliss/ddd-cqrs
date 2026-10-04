@@ -5,14 +5,11 @@ sidebar:
   order: 10
 ---
 
-Validates the input of an operation with [Zod](https://zod.dev) before it runs. There are
-two ways to attach a schema:
+Validates and sanitizes inputs using [Zod](https://zod.dev) schemas before operations execute. Unknown properties are stripped, coercions and defaults applied, and invalid payloads rejected with structured validation errors.
 
-- `validated(schema)` at the call site. The function receives a parsed copy (coerced
-  values, defaults applied, unknown keys removed); the caller's value never changes.
-- `createCommand()`, `createQuery()` or `createZodRequest()` build request classes that
-  carry their schema. `ZodValidationBehavior`, placed globally, validates every such
-  request in place.
+Supports two integration patterns:
+1. **Explicit schema decoration** via `validated(schema)` at the call site or handler.
+2. **Class-embedded schemas** via `createCommand(schema)` and `createQuery(schema)` validated globally by `ZodValidationBehavior`.
 
 ## Installation
 
@@ -20,93 +17,212 @@ two ways to attach a schema:
 pnpm add @cqrs-ddd/pipeline-zod @cqrs-ddd/pipeline zod
 ```
 
-## Usage
+Requires Node.js 22.12 or later and Zod 4.3 or later.
 
-`ZodValidationBehavior` needs no constructor arguments, so the pipeline constructs it.
+## Usage Patterns
 
-```ts
+### Pattern 1: Call-Site Decoration (`validated`)
+
+The wrapped function or handler receives a sanitized, parsed copy. The original input argument is never mutated:
+
+```typescript
 import { createPipeline } from '@cqrs-ddd/pipeline';
 import { validated } from '@cqrs-ddd/pipeline-zod';
 import { z } from 'zod';
+
+const OrderInputSchema = z.object({
+  sku: z.string().min(1),
+  quantity: z.coerce.number().int().positive(),
+  coupon: z.string().optional().default('NONE'),
+});
 
 const pipeline = createPipeline();
 
 export const placeOrder = pipeline.wrap(
   { name: 'placeOrder', kind: 'command' },
-  validated(z.object({ sku: z.string(), qty: z.coerce.number().int().positive() })),
-)(async (order) => orders.place(order));
+  validated(OrderInputSchema),
+)(async (order) => {
+  // order.quantity is parsed as a number, coupon defaults to 'NONE'
+  return ordersRepo.create(order);
+});
 
-await placeOrder({ sku: 'apple', qty: '2' }); // the function receives qty: 2
+await placeOrder({ sku: 'WIDGET-01', quantity: '3' });
 ```
 
-A function with several arguments is validated as a tuple:
+#### Multi-Argument Functions
 
-```ts
-const add = pipeline.wrap(
-  { name: 'add', kind: 'query' },
-  validated(z.tuple([z.coerce.number(), z.coerce.number()])),
-)(async (a: number, b: number) => a + b);
+Functions accepting multiple arguments are validated using `z.tuple()`:
+
+```typescript
+export const transferFunds = pipeline.wrap(
+  { name: 'transferFunds', kind: 'command' },
+  validated(z.tuple([z.string().uuid(), z.string().uuid(), z.number().positive()])),
+)(async (fromId: string, toId: string, amount: number) => {
+  return bank.transfer(fromId, toId, amount);
+});
 ```
 
-## Request classes with a schema
+### Pattern 2: Request Classes with Embedded Schemas
 
-```ts
-import { createPipeline } from '@cqrs-ddd/pipeline';
-import { createCommand, ZodValidationBehavior } from '@cqrs-ddd/pipeline-zod';
+Create command and query classes that encapsulate their validation schema:
+
+```typescript
+import { createCommand, createQuery } from '@cqrs-ddd/pipeline-zod';
+import { z } from 'zod';
 
 export class CreateUserCommand extends createCommand(
-  z.object({ username: z.string().min(3), email: z.email() }),
+  z.object({
+    username: z.string().min(3).max(30),
+    email: z.string().email(),
+  }),
 ) {}
+
+export class GetUserQuery extends createQuery(
+  z.object({
+    userId: z.string().uuid(),
+  }),
+) {}
+```
+
+When `ZodValidationBehavior` runs globally, it validates any request class bearing an embedded schema:
+
+```typescript
+import { createPipeline } from '@cqrs-ddd/pipeline';
+import { ZodValidationBehavior } from '@cqrs-ddd/pipeline-zod';
 
 const pipeline = createPipeline({
   globalBehaviors: { scope: 'all', before: [ZodValidationBehavior] },
 });
 ```
 
-The behavior parses every request whose class carries a schema and passes any other
-request through. It validates in place: omitted keys are deleted and parsed values are
-assigned to the request before the handler runs, so the parsed result must be a plain
-object. `createCommand()` and `createQuery()` accept an optional base class whose
-constructor arguments they keep.
+#### In-Place Request Validation Semantics
 
-`updatable` marks the fields of an update command, and `updatableFieldsOf()` or the class's
-`updatableFields` lists them, for field-level authorization with
-[`@cqrs-ddd/pipeline-casl`](/ddd-cqrs/packages/pipeline-casl/).
+When validating request class instances:
+- Validated values, defaults, and type coercions are reassigned directly to the request instance.
+- Unrecognized keys are stripped.
+- The request maintains its class identity (`instanceof CreateUserCommand === true`).
 
-## Options
+## Updatable Fields & Field-Level Authorization
 
-| Option | Meaning | Default |
-| --- | --- | --- |
-| `schema` | the schema of the input; the function receives the parsed copy. `validated(schema)` sets it | the schema of the request class, applied in place |
+For partial update (PATCH) commands, use `updatable` to declare allowed mutable fields for field-level authorization with [`@cqrs-ddd/pipeline-casl`](/ddd-cqrs/packages/pipeline-casl/):
 
-## Ordering
+```typescript
+import { createCommand, updatable, updatableFieldsOf } from '@cqrs-ddd/pipeline-zod';
+import { z } from 'zod';
 
-Place validation outside behaviors that use the request, such as caching, idempotency and
-rate limits, so their keys see the parsed values.
+export class UpdateUserCommand extends createCommand(
+  z.object({
+    id: z.string().uuid(),
+    bio: updatable(z.string().max(200).optional()),
+    role: updatable(z.enum(['user', 'admin']).optional()),
+  }),
+) {}
 
-## HTTP errors
-
-A failed validation throws `ZodValidationError`, whose `details` describe the issues.
-`toHttpResponse(error)` from `@cqrs-ddd/pipeline-zod/http` returns a 400 answer with
-`statusCode`, `error`, `message` and `details`. See [HTTP errors](/ddd-cqrs/guides/http-errors/).
-
-## Mapping input
-
-`createZodMapper(schema)` parses input at the HTTP edge, typically turning a request body
-into a command:
-
-```ts
-export const CreateUserMapper = createZodMapper(
-  CreateUserDtoSchema.transform(({ name, email }) => new CreateUserCommand(name, email)),
-);
-
-await commandBus.execute(CreateUserMapper.map(req.body));
+// The marked fields, in shape order:
+UpdateUserCommand.updatableFields; // ['bio', 'role']
+updatableFieldsOf(UpdateUserCommand.schema); // the same, from any object schema
 ```
 
-`map()` parses synchronously and throws `ZodValidationError` on invalid input, whose
-`details` hold `{ formErrors, fieldErrors }`; `toHttpResponse` answers it with HTTP 400.
-The mapper's `schema` stays available for reuse.
+Pass the fields a command changes to `authorizer.authorize('update', user, fields)` of `CaslAuthorizer`, which checks the caller may modify each one. A field without the mark is never listed, so mark every field the handler writes.
 
-## API reference
+## Edge HTTP Mapping (`createZodMapper`)
+
+Use `createZodMapper` at the HTTP boundary (Express, Fastify, NestJS controllers) to transform raw HTTP request payloads into strongly typed command or query instances:
+
+```typescript
+import { createZodMapper } from '@cqrs-ddd/pipeline-zod';
+import { z } from 'zod';
+import { CreateUserCommand } from './create-user.command.js';
+
+const CreateUserDtoSchema = z.object({
+  name: z.string().min(2),
+  email: z.string().email(),
+}).transform(({ name, email }) => new CreateUserCommand({ username: name, email }));
+
+export const CreateUserMapper = createZodMapper(CreateUserDtoSchema);
+
+// In HTTP Route Handler:
+app.post('/users', async (req, res) => {
+  const command = CreateUserMapper.map(req.body); // Throws ZodValidationError on invalid input
+  const userId = await commandBus.execute(command);
+  res.status(201).json({ id: userId });
+});
+```
+
+`CreateUserMapper.map()` throws `ZodValidationError` synchronously on validation failure.
+
+## NestJS Integration (`@cqrs-ddd/nestjs`)
+
+In NestJS applications, use `@UsePipeline(validated(Schema))` directly on `@CommandHandler` or `@QueryHandler`:
+
+```typescript
+import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
+import { UsePipeline } from '@cqrs-ddd/pipeline';
+import { validated } from '@cqrs-ddd/pipeline-zod';
+import { RegisterUserCommand, RegisterUserSchema } from './register-user.command.js';
+
+@CommandHandler(RegisterUserCommand)
+@UsePipeline(validated(RegisterUserSchema))
+export class RegisterUserHandler implements ICommandHandler<RegisterUserCommand> {
+  async execute(command: RegisterUserCommand) {
+    // Guaranteed valid input
+  }
+}
+```
+
+The global `ErrorFilter` translates `ZodValidationError` into a NestJS `BadRequestException` formatted to match Nest's `ValidationPipe` convention:
+
+```json
+{
+  "statusCode": 400,
+  "error": "Bad Request",
+  "message": [
+    "email: Invalid email address",
+    "password: Too small: expected string to have >=8 characters"
+  ]
+}
+```
+
+## Error Handling & HTTP Translation
+
+When validation fails, `ZodValidationError` is thrown. Its `details` property carries flattened issues:
+
+```typescript
+export interface ValidationDetails {
+  readonly formErrors: readonly string[];
+  readonly fieldErrors: Readonly<Record<string, readonly string[] | undefined>>;
+}
+```
+
+Translating directly to HTTP using `@cqrs-ddd/pipeline-zod/http`:
+
+```typescript
+import { ZodValidationError } from '@cqrs-ddd/pipeline-zod';
+import { toHttpResponse } from '@cqrs-ddd/pipeline-zod/http';
+
+try {
+  await placeOrder(badInput);
+} catch (error) {
+  if (!(error instanceof ZodValidationError)) throw error;
+  const { status, body } = toHttpResponse(error);
+  // status: 400
+  // body: { statusCode: 400, error: 'Bad Request', message: 'Validation failed', details: { ... } }
+}
+```
+
+## Behavior Ordering
+
+Always position validation **before** behaviors that inspect request contents (such as caching, rate limiting, and idempotency). This guarantees that short-circuit keys are generated from validated, sanitized, and canonical data:
+
+```typescript
+@UsePipeline(
+  validated(OrderSchema),                 // 1. Validate & sanitize
+  requires({ action: 'create', subject: 'Order' }), // 2. Authorize
+  idempotent({ keyFactory }),             // 3. Check idempotency with clean payload
+)
+export class CreateOrderHandler {}
+```
+
+## API Reference
 
 [API reference](/ddd-cqrs/api/cqrs-ddd/pipeline-zod/)

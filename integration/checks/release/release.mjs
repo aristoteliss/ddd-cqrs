@@ -29,6 +29,8 @@ const peerNodeEngines = new Map([
     ).engines.node.replace(/\s+/g, ''),
   ],
 ]);
+// The one NestJS adapter: NestJS is its required peer, and no other package may name it.
+const NESTJS_ADAPTER = '@cqrs-ddd/nestjs';
 const isPipeline = (name) => /^@cqrs-ddd\/(?:pipeline(?:-|$)|cqrs$)/.test(name);
 const isDdd = (name) =>
   name === '@cqrs-ddd/core' || name === '@cqrs-ddd/mikro-orm';
@@ -153,8 +155,8 @@ try {
         `${manifest.name}: engines.node must be "${requiredNodeEngine}", found "${manifest.engines?.node}"`,
       );
     }
-    // No package depends on NestJS, and pipeline and DDD packages do not depend
-    // on each other.
+    // No package but the NestJS adapter depends on NestJS, and pipeline and DDD
+    // packages do not depend on each other.
     for (const field of [
       'dependencies',
       'peerDependencies',
@@ -163,7 +165,7 @@ try {
       for (const [name, range] of Object.entries(manifest[field] ?? {})) {
         if (
           range.startsWith('workspace:') ||
-          /^@?nestjs/.test(name) ||
+          (/^@?nestjs/.test(name) && manifest.name !== NESTJS_ADAPTER) ||
           (isPipeline(manifest.name) && isDdd(name)) ||
           (isDdd(manifest.name) && isPipeline(name))
         ) {
@@ -320,9 +322,13 @@ try {
     const sourceDir = packages.find(
       (entry) => entry.manifest.name === manifest.name,
     ).dir;
-    // Required peers only: an optional peer (a cache store driver) is the application's choice.
+    // Required peers, and the optional peers released here: an optional peer from
+    // elsewhere (a cache store driver) is the application's choice, but an entry point
+    // may be built on a package of this release (the NestJS adapter's `./correlation`).
     const peers = Object.keys(manifest.peerDependencies ?? {}).filter(
-      (name) => !manifest.peerDependenciesMeta?.[name]?.optional,
+      (name) =>
+        !manifest.peerDependenciesMeta?.[name]?.optional ||
+        packedDependencies[name],
     );
     const external = peers.filter((name) => !packedDependencies[name]);
     const externalManifest = (name) =>

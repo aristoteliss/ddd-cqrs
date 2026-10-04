@@ -25,8 +25,8 @@ its guides carry the usage code as snippets.
 ## Repository Shape
 
 <!-- context:generated-start repository-shape -->
-- **Shape**: monorepo — workspace globs `api`, `docs`, `integration`, `packages/*` (23 workspace packages).
-- **Publishable packages**: 20; private: `api`, `docs`, `integration`.
+- **Shape**: monorepo — workspace globs `api`, `docs`, `integration`, `packages/*` (24 workspace packages).
+- **Publishable packages**: 21; private: `api`, `docs`, `integration`.
 - **Runnable workspaces**: `api`, `docs`.
 - **Versions**: `0.5.0`.
 - **Packages**: see the Workspace packages table under Directory Map.
@@ -35,7 +35,7 @@ its guides carry the usage code as snippets.
 ## Technology Stack
 
 <!-- context:generated-start technology-stack -->
-- **Languages** (file counts, excluded directories omitted): `.ts` 775, `.md` 72, `.grit` 7, `.mjs` 4, `.py` 3
+- **Languages** (file counts, excluded directories omitted): `.ts` 792, `.md` 74, `.grit` 7, `.mjs` 4, `.py` 3
 - **Runtime engines** (root `package.json`): `node` >=22.12.0, `pnpm` >=9.0.0
 - **Package manager evidence**: `pnpm-lock.yaml`.
 - **Integrations**: listed with their purpose under Dependencies and Integrations.
@@ -56,7 +56,7 @@ its guides carry the usage code as snippets.
 | `scripts/update-claude-snapshot.py` | Referenced by a root script | `pnpm context:check`; `pnpm context:update` |
 | `scripts/validate-claude-context.py` | Referenced by a root script | `pnpm context:validate` |
 
-Package public entry (barrel): `<package>/src/index.ts` in 19 workspace packages; exceptions are listed above.
+Package public entry (barrel): `<package>/src/index.ts` in 20 workspace packages; exceptions are listed above.
 
 Published packages additionally expose their built `main` (`dist/index.js`, produced by `pnpm build`), imported by package name.
 <!-- context:generated-end entry-points -->
@@ -76,8 +76,8 @@ editor/tooling directories are excluded (see Snapshot Metadata).
 | `api/` | The users API on @cqrs-ddd: Express and Fastify routes with Zod, the CQRS buses and pipelines, DDD aggregates and decorated repositories |
 | `biome/` | Needs verification |
 | `docs/` | The documentation site of the @cqrs-ddd packages. |
-| `integration/` | Repository-wide checks and applications built on the packages one at a time: the Biome Grit plugin specs, the release verification, cross-package pipeline contracts, a pipeline-only payments service, a domain-only library, MikroORM repositories, a plain Node.js module and standard decorators |
-| `packages/` | Workspace container — 20 package(s); see the workspace table below |
+| `integration/` | Repository-wide checks and applications built on the packages one at a time: the Biome Grit plugin specs, the release verification, cross-package pipeline contracts, a pipeline-only payments service, a domain-only library, MikroORM repositories, a plain Node.js module, standard decorators and a NestJS application on the adapter, tested over HTTP |
+| `packages/` | Workspace container — 21 package(s); see the workspace table below |
 | `scripts/` | Needs verification |
 | `tools/` | A Verdaccio npm registry on http://127.0.0.1:4873/, for installing the packages in another project exactly as they will be published, without publishing them to npm. @cqrs-ddd/ is served only from this registry… (from `tools/local-registry/README.md`) |
 
@@ -91,10 +91,11 @@ Each has a `README.md`.
 | --- | --- | --- |
 | `api` | `ddd-cqrs-api` | `auths`, `common`, `http`, `persistence`, `roles`, `users` |
 | `docs` | `ddd-cqrs-docs` | `content` |
-| `integration` | `ddd-cqrs-integration` | `checks`, `inventory`, `library`, `members`, `payments`, `plain-node`, `profiles`, `standard-decorators` |
+| `integration` | `ddd-cqrs-integration` | `checks`, `inventory`, `library`, `members`, `nestjs`, `payments`, `plain-node`, `profiles`, `standard-decorators` |
 | `packages/core` | `@cqrs-ddd/core` | `application`, `domain`, `http`, `persistence`, `types` |
 | `packages/cqrs` | `@cqrs-ddd/cqrs` | flat |
 | `packages/mikro-orm` | `@cqrs-ddd/mikro-orm` | `cache`, `concurrency`, `errors`, `helpers`, `interfaces`, `mapping`, `repository`, `tenancy` |
+| `packages/nestjs` | `@cqrs-ddd/nestjs` | `filters`, `pipeline` |
 | `packages/pipeline` | `@cqrs-ddd/pipeline` | `behaviors`, `constants`, `errors`, `helpers`, `interfaces`, `options`, `services` |
 | `packages/pipeline-audit` | `@cqrs-ddd/pipeline-audit` | `constants`, `helpers`, `interfaces`, `sinks` |
 | `packages/pipeline-cache` | `@cqrs-ddd/pipeline-cache` | `adapters`, `errors`, `helpers`, `interfaces` |
@@ -190,8 +191,9 @@ path given before relying on it.*
   with coverage at 100% per file: `integration/payments/` (pipeline packages only),
   `integration/library/` (core domain only), `integration/inventory/` (core persistence
   decorators with `mikro-orm` on SQLite).
-  `integration/profiles/` (pipeline and domain) and `integration/members/` (domain on the
-  buses) complete them; `integration/checks/` holds the test-only checks (contracts, lint,
+  `integration/profiles/` (pipeline and domain), `integration/members/` (domain on the
+  buses) and `integration/nestjs/` (a NestJS application on `@cqrs-ddd/nestjs`, its
+  `desk.e2e-spec.ts` over HTTP on Express and Fastify) complete them; `integration/checks/` holds the test-only checks (contracts, lint,
   docs, release);
   `api/test/` keeps only suites that exercise the application: `api/test/application/`
   (several modules), `api/test/e2e/` (over HTTP), `api/test/e2e/infrastructure/` (stores
@@ -210,8 +212,8 @@ environment value is read or reproduced here.
 
 | Integration | Packages | Declared in |
 | --- | --- | --- |
-| NestJS runtime — Application framework and DI container | `@nestjs/common` | root only |
-| NestJS CQRS — Command/query/event buses wrapped by the pipeline | `@nestjs/cqrs` | root only |
+| NestJS runtime — Application framework and DI container | `@nestjs/common`, `@nestjs/core` | `integration`, `packages/nestjs` |
+| NestJS CQRS — Command/query/event buses wrapped by the pipeline | `@nestjs/cqrs` | `integration`, `packages/nestjs` |
 | MikroORM — ORM, unit of work, migrations | `@mikro-orm/core`, `@mikro-orm/migrations` | `api`, `integration`, `packages/mikro-orm` |
 | PostgreSQL — Relational backend and schema-per-tenant access | `pg`, `@mikro-orm/postgresql` | `api` |
 | SQLite / libSQL — Local and test persistence backend | `@libsql/client`, `@mikro-orm/libsql` | `api`, `integration` |
@@ -219,15 +221,16 @@ environment value is read or reproduced here.
 | BullMQ — Background jobs and dead-letter transport | `bullmq` | `api` |
 | Keyv / cache-manager — Pluggable cache stores | `keyv`, `cache-manager` | `api`, `integration`, `packages/pipeline-cache` |
 | OpenTelemetry — Tracing and metrics | `@opentelemetry/api`, `@opentelemetry/sdk-node` | `api`, `packages/pipeline-opentelemetry` |
-| OpenFeature — Feature-flag evaluation | `@openfeature/server-sdk` | `api`, `integration`, `packages/pipeline-feature-flags` |
-| CASL — Attribute/role based authorization | `@casl/ability` | `api`, `packages/pipeline-casl` |
+| OpenFeature — Feature-flag evaluation | `@openfeature/server-sdk` | `api`, `integration`, `packages/nestjs`, `packages/pipeline-feature-flags` |
+| CASL — Attribute/role based authorization | `@casl/ability` | `api`, `packages/nestjs`, `packages/pipeline-casl` |
 | JOSE — JWT signing and verification | `jose` | `api` |
-| Zod — Schema validation for DTOs and pipeline payloads | `zod` | `api`, `integration`, `packages/pipeline-zod` |
+| Zod — Schema validation for DTOs and pipeline payloads | `zod` | `api`, `integration`, `packages/nestjs`, `packages/pipeline-zod` |
 | Pino — Structured logging | `pino-http`, `pino-pretty` | `api` |
-| Fastify — Alternative HTTP adapter and sessions | `@fastify/secure-session` | `api` |
+| Fastify — Alternative HTTP adapter and sessions | `@nestjs/platform-fastify`, `@fastify/secure-session` | `api`, `integration` |
+| Express — Default HTTP adapter | `@nestjs/platform-express` | `integration` |
 | Cockatiel — Retry, timeout and circuit-breaker policies | `cockatiel` | `packages/pipeline-resilience` |
 | rate-limiter-flexible — Rate-limit counters | `rate-limiter-flexible` | `api`, `integration`, `packages/pipeline-rate-limit` |
-| Vitest — Test runner | `vitest` | `api`, `integration`, `packages/core`, `packages/cqrs`, … (+18) |
+| Vitest — Test runner | `vitest` | `api`, `integration`, `packages/core`, `packages/cqrs`, … (+19) |
 | Biome — Formatter, linter and Grit plugin host | `@biomejs/biome` | root only |
 | TypeScript — Language and type checker | `typescript` | `docs`, `packages/core`, `packages/mikro-orm` |
 
@@ -241,6 +244,7 @@ environment value is read or reproduced here.
 | `packages/core` | `@cqrs-ddd/safe-stringify`, `@cqrs-ddd/uuidv7` | — | — |
 | `packages/cqrs` | — | — | `@cqrs-ddd/pipeline` |
 | `packages/mikro-orm` | — | — | `@cqrs-ddd/core`, `@mikro-orm/core` |
+| `packages/nestjs` | — | — | `@cqrs-ddd/core`, `@cqrs-ddd/pipeline`, `@cqrs-ddd/pipeline-casl`, `@cqrs-ddd/pipeline-correlation`, `@cqrs-ddd/pipeline-feature-flags`, `@cqrs-ddd/pipeline-idempotency`, `@cqrs-ddd/pipeline-job-context`, `@cqrs-ddd/pipeline-rate-limit`, `@cqrs-ddd/pipeline-zod`, … (+3) |
 | `packages/pipeline` | `@cqrs-ddd/safe-stringify`, `@cqrs-ddd/untyped`, `@cqrs-ddd/uuidv7` | — | — |
 | `packages/pipeline-audit` | `@cqrs-ddd/safe-stringify`, `@cqrs-ddd/uuidv7` | — | `@cqrs-ddd/pipeline` |
 | `packages/pipeline-cache` | `@cqrs-ddd/safe-stringify` | — | `@cqrs-ddd/pipeline`, `@keyv/memcache`, `@keyv/postgres`, `@keyv/redis`, `@keyv/sqlite`, `cache-manager`, `keyv` |
@@ -275,7 +279,7 @@ rules live in `AGENTS.md`.*
 | Area | Convention | Evidence |
 | --- | --- | --- |
 | Tooling | pnpm only; Biome (2 spaces, single quotes); strict `tsc` with `module: NodeNext` | `biome.json`, `tsconfig.base.json`, `CLAUDE.md` |
-| Boundaries | No NestJS anywhere; pipeline and DDD packages independent of each other | `biome/plugins/`, `integration/checks/release/release.mjs` |
+| Boundaries | No NestJS in any package but the adapter `packages/nestjs`; pipeline and DDD packages independent of each other | `biome/plugins/`, `integration/checks/release/release.mjs` |
 | Configuration | Packages read no environment | `biome/plugins/core-environment.grit` |
 | License | Every `.ts` file starts with the repository license header, by convention: no check enforces it | the files themselves |
 | Commits | Conventional style: `feat(scope): …`, `fix(scope): …`, `chore: …` | the nestjs-pipeline history |
@@ -308,6 +312,7 @@ row as *declared* unless you have run it yourself in this checkout.
 | `pnpm rebuild` | `pnpm -r run clean && pnpm -r build` |
 | `pnpm test` | `pnpm lint:plugins && pnpm -r --no-bail test` |
 | `pnpm test:build` | `pnpm -r --no-bail build` |
+| `pnpm test:e2e` | `pnpm --filter ddd-cqrs-api test:e2e` |
 | `pnpm test:release` | `pnpm rebuild && pnpm copy-licenses && node integration/checks/release/r…` |
 | `pnpm verify:all` | `pnpm lint && pnpm test && pnpm test:build && pnpm test:release` |
 | `pnpm verify:fails` | `node -e 'var l=require("node:fs"),u=require("node:path"),h=process.cwd(…` |
@@ -324,7 +329,7 @@ Workspaces with the same scripts share a row.
 | `docs` | `build:site`, `dev`, `preview` |
 | `integration` | `lint`, `test` |
 | `packages/core`, `packages/mikro-orm` | `build`, `clean`, `lint`, `prepublishOnly`, `rebuild`, `test`, `test:watch` |
-| `packages/cqrs`, `packages/pipeline`, `packages/pipeline-audit`, `packages/pipeline-cache`, `packages/pipeline-casl`, `packages/pipeline-correlation`, `packages/pipeline-deadletter`, `packages/pipeline-feature-flags`, `packages/pipeline-idempotency`, `packages/pipeline-job-context`, `packages/pipeline-opentelemetry`, `packages/pipeline-rate-limit`, `packages/pipeline-resilience`, `packages/pipeline-tenant`, `packages/pipeline-zod`, `packages/safe-stringify`, `packages/untyped`, `packages/uuidv7` | `build`, `build:watch`, `clean`, `lint`, `prepublishOnly`, `rebuild`, `test`, `test:watch` |
+| `packages/cqrs`, `packages/nestjs`, `packages/pipeline`, `packages/pipeline-audit`, `packages/pipeline-cache`, `packages/pipeline-casl`, `packages/pipeline-correlation`, `packages/pipeline-deadletter`, `packages/pipeline-feature-flags`, `packages/pipeline-idempotency`, `packages/pipeline-job-context`, `packages/pipeline-opentelemetry`, `packages/pipeline-rate-limit`, `packages/pipeline-resilience`, `packages/pipeline-tenant`, `packages/pipeline-zod`, `packages/safe-stringify`, `packages/untyped`, `packages/uuidv7` | `build`, `build:watch`, `clean`, `lint`, `prepublishOnly`, `rebuild`, `test`, `test:watch` |
 
 ### Context-management commands
 
@@ -353,6 +358,10 @@ Workspaces with the same scripts share a row.
   boot the real application on Express and Fastify with `api/test/support/e2e-app.ts`
   against throwaway libSQL databases and Testcontainers Redis or PostgreSQL; they need
   Docker and are not part of `pnpm verify:all`.
+- **NestJS adapter end to end**: `integration/nestjs/desk.e2e-spec.ts` boots a NestJS
+  application on `@cqrs-ddd/nestjs` on Express and on Fastify and drives it with
+  supertest; no Docker, so it runs in `pnpm test`. `integration/vitest.config.ts`
+  dedupes NestJS, because the linked adapter would otherwise load its own copy.
 - **Plugin specs**: `integration/checks/lint/biome-plugins.spec.ts` writes fixture files into a
   temporary directory and lints them with this repository's `biome.json` (plugin paths
   made absolute, every other rule off).
@@ -405,13 +414,13 @@ secret value.*
 ## Snapshot Metadata
 
 <!-- context:generated-start metadata -->
-- Generated at: 2026-10-04T08:17:43Z
-- Git commit: e3922a187b8d397899017a81c1988efc13aa5c0f
+- Generated at: 2026-10-04T16:06:33Z
+- Git commit: d2d6720d8e49bbb688a459411b57e4a8c7af6df9
 - Git branch: develop
 - Uncommitted changes when generated: yes
 - Generator: `scripts/update-claude-snapshot.py` version 1.0.0
 - Snapshot status: generated — structural inspection only, no code executed
-- Files inspected: 955
+- Files inspected: 978
 - Included top-level directories: `.agents`, `.archify`, `.claude`, `.github`, `api`, `biome`, `docs`, `integration`, `packages`, `scripts`, `tools`
 - Excluded directory names: `.cache`, `.git`, `.gradle`, `.idea`, `.mypy_cache`, `.next`, `.nuxt`, `.parcel-cache`, `.pnpm-store`, `.pytest_cache`, `.ruff_cache`, `.svelte-kit`, `.terraform`, `.tmp`, `.tox`, `.turbo`, `.venv`, `.vscode`, `__pycache__`, `bower_components`, `build`, `coverage`, `dist`, `node_modules`, `out`, `target`, `vendor`, `venv`, `virtualenv`
 - Excluded file patterns: `.env`, `.env.*`, `*.env`, `*.pem`, `*.key`, `*.pfx`, `*.p12`, `*.jks`, `*.keystore`, `id_rsa*`, `id_ed25519*`, `*credentials*`, `*.secret`, `secrets.*`

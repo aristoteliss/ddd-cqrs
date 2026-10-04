@@ -5,11 +5,9 @@ sidebar:
   order: 12
 ---
 
-Caches the results of queries on [cache-manager](https://github.com/jaredwray/cacheable)
-and Keyv stores: memory, Redis, Memcache, SQLite, PostgreSQL, or several in tiers. A cache
-hit returns the stored result without running the operation, and without running any
-check inside it. Keys must therefore separate everything that can change the answer;
-`createPartitionedCacheKeyFactory()` builds such keys.
+Caches composed query results on [cache-manager](https://github.com/jaredwray/cacheable) and Keyv backends: memory, Redis, Memcache, SQLite, PostgreSQL, or multi-tier combinations.
+
+A cache hit returns the stored result immediately without executing the underlying handler or its internal entity checks. To prevent data leakage across users or privilege tiers, cache keys must partition by tenant, principal, and permission scope.
 
 ## Installation
 
@@ -17,12 +15,26 @@ check inside it. Keys must therefore separate everything that can change the ans
 pnpm add @cqrs-ddd/pipeline-cache @cqrs-ddd/pipeline cache-manager keyv
 ```
 
-A store other than memory needs its Keyv adapter, an optional peer dependency:
-`@keyv/redis`, `@keyv/memcache`, `@keyv/sqlite` or `@keyv/postgres`.
+Install optional Keyv adapters for external storage:
+- Redis: `@keyv/redis`
+- PostgreSQL: `@keyv/postgres`
+- SQLite: `@keyv/sqlite`
+- Memcache: `@keyv/memcache`
+
+## Two Cache Layers in `@cqrs-ddd`
+
+`@cqrs-ddd` separates caching into two distinct, complementary layers:
+
+1. **Pipeline Result Caching (`@cqrs-ddd/pipeline-cache`)**: The use case/query handler level. Caches composed, projected view models and DTOs. Owns security boundaries (tenant, principal, permission scope) and freshness policies.
+2. **Repository Snapshot Caching (`@FromCache`, `@Cache` in `@cqrs-ddd/core`)**: The persistence level. Caches serialized entity snapshots using CAS version comparisons (`isCacheNewer`) and mutation barriers.
+
+Invalidating a persistence entity does not implicitly invalidate composed query responses; each layer manages its own lifecycle.
 
 ## Usage
 
-```ts
+### 1. Plain Node.js / Pipeline Engine
+
+```typescript
 import { createPipeline } from '@cqrs-ddd/pipeline';
 import {
   buildCache,
@@ -31,79 +43,149 @@ import {
   createPartitionedCacheKeyFactory,
 } from '@cqrs-ddd/pipeline-cache';
 
-const pipeline = createPipeline({
-  behaviors: [new CacheBehavior(buildCache({ store: { type: 'redis', url: redisUrl } }))],
+// Initialize cache with Redis backend
+const cacheStore = buildCache({
+  store: { type: 'redis', url: process.env.REDIS_URL, namespace: 'query_cache' },
+  ttl: 60_000,
 });
 
-const perUser = createPartitionedCacheKeyFactory({
-  principal: (ctx) => ctx.items.get('userId') as string | undefined,
-  scope: (ctx) => ctx.items.get('rolesVersion') as string | undefined,
+const pipeline = createPipeline({
+  behaviors: [new CacheBehavior(cacheStore)],
+});
+
+// Construct secure partitioned key factory
+const orderListKey = createPartitionedCacheKeyFactory({
+  principal: (ctx) => ctx.items.get('userId') as string,
+  scope: (ctx) => ctx.items.get('userRolesHash') as string,
+  includeTenant: true,
 });
 
 export const getOrders = pipeline.wrap(
   { name: 'getOrders', kind: 'query' },
-  cache({ key: perUser, ttl: 30_000 }),
-)(async (filter: OrderFilter) => orders.find(filter));
+  cache({ key: orderListKey, ttl: 30_000 }),
+)(async (filter: OrderFilterDto) => ordersService.listOrders(filter));
 ```
 
-The behavior's constructor takes a cache-manager `Cache` (or an `IPipelineCache`, any
-object with `get` and `set`), optional defaults for every operation, and an optional
-logger.
+### 2. NestJS Integration (`@cqrs-ddd/nestjs`)
 
-## Building the cache
+Register `CacheBehavior` as a provider in your infrastructure module:
 
-`buildCache(options)` returns a cache-manager `Cache`:
+```typescript
+import { Module } from '@nestjs/common';
+import { buildCache, CacheBehavior } from '@cqrs-ddd/pipeline-cache';
 
-| Option | Meaning |
-| --- | --- |
-| `store` | one store configuration or a list, tiered in order: `{ type, url, namespace, ttl, options }`, with `type` one of `memory`, `redis`, `memcache`, `sqlite`, `postgres` |
-| `stores` | prebuilt Keyv instances, which it does not modify |
-| `cache` | a prebuilt cache, used as it is |
-| `ttl` | default time to live in milliseconds |
-| `nonBlocking` | forwarded to cache-manager, for several stores |
+@Module({
+  providers: [
+    {
+      provide: CacheBehavior,
+      useFactory: () => {
+        return new CacheBehavior(
+          buildCache({
+            store: { type: 'redis', url: process.env.REDIS_URL },
+            ttl: 60_000,
+          }),
+        );
+      },
+    },
+  ],
+  exports: [CacheBehavior],
+})
+export class CacheModule {}
+```
 
-With none of them, the cache is in memory. `buildKeyv()` builds one Keyv store.
+Decorate `@QueryHandler` with `cache()`:
 
-## Partitioned keys
+```typescript
+import { QueryHandler, IQueryHandler } from '@nestjs/cqrs';
+import { UsePipeline } from '@cqrs-ddd/pipeline';
+import { cache } from '@cqrs-ddd/pipeline-cache';
 
-`createPartitionedCacheKeyFactory(options)` builds a key from the tenant, the principal,
-the permission scope, the operation name and a digest of the request:
+@QueryHandler(GetCatalogQuery)
+@UsePipeline(cache({ key: catalogKeyFactory, ttl: 120_000 }))
+export class GetCatalogHandler implements IQueryHandler<GetCatalogQuery> {
+  async execute(query: GetCatalogQuery) {
+    return this.catalog.load(query);
+  }
+}
+```
 
-| Option | Meaning | Default |
+## Storage Backends & Multi-Tier Caching
+
+`buildCache(options)` configures single or multi-tier storage:
+
+```typescript
+// Multi-tier: Fast in-memory L1 cache with Redis L2 fallback
+const multiTierCache = buildCache({
+  store: [
+    { type: 'memory', ttl: 10_000 },
+    { type: 'redis', url: process.env.REDIS_URL, ttl: 300_000 },
+  ],
+  nonBlocking: true, // Non-blocking reads across tiers
+});
+```
+
+| Store Type | Required Package | Best Used For |
 | --- | --- | --- |
-| `principal` | the caller the answer is for | required |
-| `scope` | a fingerprint of the caller's permissions, such as a role-set hash | none |
-| `requirePrincipal` | a missing principal throws instead of being left out | `true` |
-| `requireScope` | a missing scope throws instead of being left out | `true` |
-| `includeTenant` | the key starts with the execution's tenant | `true` |
-| `requireTenant` | a missing tenant throws | the value of `includeTenant` |
+| `'memory'` | Built-in | L1 in-process caching, testing, dev environments |
+| `'redis'` | `@keyv/redis` | Distributed L2 caching, high-throughput microservices |
+| `'postgres'` | `@keyv/postgres` | Relational environments without dedicated Redis infrastructure |
+| `'sqlite'` | `@keyv/sqlite` | Embedded desktop/CLI or edge applications |
+| `'memcache'` | `@keyv/memcache` | High-volume simple key-value stores |
 
-A missing required part throws `MissingCachePartitionError`. Set `requirePrincipal` and
-`requireScope` to `false` only for answers that are the same for every caller.
+## Partitioned Key Construction & Security Boundaries
 
-## Options
+Short-circuit keys are a critical security boundary. Serving a cached result bypasses all internal entity-level and field-level permission checks. 
 
-| Option | Meaning | Default |
-| --- | --- | --- |
-| `key` | the key factory; required when the behavior runs | none |
-| `ttl` | time to live of the entries, in milliseconds | the cache's |
-| `kinds` | request kinds that are cached | `['query']` |
-| `condition` | a predicate that decides per execution whether to cache | none |
-| `failOpen` | when the store fails, continue without the cache instead of throwing | `true` |
+Always partition keys by tenant, principal, and permission scope:
 
-`cache({ inheritModuleKey: true, ttl })` takes the key factory from the constructor
-defaults.
+```typescript
+import { createPartitionedCacheKeyFactory } from '@cqrs-ddd/pipeline-cache';
+import { abilityDigest, getCaslPrincipal } from '@cqrs-ddd/pipeline-casl';
 
-## Ordering
+export const userProfileKey = createPartitionedCacheKeyFactory({
+  principal: (ctx) => getCaslPrincipal(ctx)?.id,
+  scope: abilityDigest, // Hashes caller's CASL capability set
+  includeTenant: true,
+  requireTenant: true,
+  requirePrincipal: true,
+  requireScope: true,
+});
+```
 
-The cache orders itself after `CaslBehavior` when both are present, so a cached answer is
-never served to a caller the authorization check would refuse. Validation should run
-before it, so the key sees the parsed request.
+| Factory Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `principal` | `(ctx) => string \| undefined` | required | Identifies the caller. Throws `MissingCachePartitionError` if missing and required. |
+| `scope` | `(ctx) => string \| undefined` | `undefined` | Fingerprint of permissions (role hash or `abilityDigest`). |
+| `requirePrincipal` | `boolean` | `true` | When `true`, missing principal throws fail-closed error. Set to `false` only for public queries. |
+| `requireScope` | `boolean` | `true` | When `true`, missing permission scope throws. Set to `false` only for unprivileged queries. |
+| `includeTenant` | `boolean` | `true` | Prepends active tenant ID to the cache key segment. |
+| `requireTenant` | `boolean` | value of `includeTenant` | Enforces active tenant presence in execution context. |
 
-`CACHE_HIT_ITEM_TOKEN` and `CACHE_KEY_ITEM_TOKEN` tell later behaviors whether the answer
-came from the cache and under which key; `buildCacheAttributes` turns them into trace or
-audit attributes.
+## Configuration Options
 
-## API reference
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `key` | `CacheKeyFactory` | required | Computes cache key from pipeline context. |
+| `ttl` | `number` | Cache default | Time-to-live for cached entry in milliseconds. |
+| `kinds` | `DeclaredKind[]` | `['query']` | Request kinds the cache applies to (typically queries only). |
+| `condition` | `(ctx) => boolean \| Promise<boolean>` | `undefined` | Predicate determining whether this specific request should check/populate cache. |
+| `failOpen` | `boolean` | `true` | When `true`, underlying store failures log a warning and proceed without cache. When `false`, store errors throw. |
+
+## Observability & Attributes
+
+`CacheBehavior` records runtime items in `context.items`:
+- `CACHE_HIT_ITEM_TOKEN`: Boolean indicating whether the result was served from cache.
+- `CACHE_KEY_ITEM_TOKEN`: String key under which the entry was retrieved or written.
+
+Convert them into tracing or metrics attributes with `buildCacheAttributes(context)`.
+
+## Behavior Ordering
+
+Position `CacheBehavior` **after** validation and authorization:
+1. `ZodValidationBehavior`: Normalizes and validates request parameters.
+2. `CaslBehavior`: Verifies type-level authorization.
+3. `CacheBehavior`: Checks cache key with authenticated principal and permission scope.
+
+## API Reference
 
 [API reference](/ddd-cqrs/api/cqrs-ddd/pipeline-cache/)

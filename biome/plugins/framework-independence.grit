@@ -8,7 +8,8 @@ language js(typescript)
 // load, or to need an undeclared peer, in a consumer that does not use NestJS.
 //
 // A NestJS application integrates through the ports these packages define, and the
-// `@nestjs-pipeline/*` adapters supply the NestJS side. Every static form is matched
+// one NestJS adapter, `packages/nestjs` (`@cqrs-ddd/nestjs`), supplies the NestJS side;
+// biome.json leaves that package out of this rule. Every static form is matched
 // through its module source (import, `import type`, re-export, `import x = require()`,
 // module augmentation), plus dynamic `import()` and `require()`. Strings and comments
 // are not imports, so documentation and lint-rule fixtures are unaffected.

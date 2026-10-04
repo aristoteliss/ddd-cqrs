@@ -5,104 +5,187 @@ sidebar:
   order: 15
 ---
 
-Resilience policies built on [cockatiel](https://github.com/connor4312/cockatiel), at two
-places:
+Fault tolerance and reliability policies built on [cockatiel](https://github.com/connor4312/cockatiel), applied at two distinct architectural levels:
 
-- `ResilienceBehavior` wraps a whole operation in the layers that make sense around it:
-  **retry**, **timeout** and **bulkhead**.
-- `ResiliencePolicies` holds **named policies** for outbound dependencies (a payment API,
-  an SMTP server), with retry, circuit breaker, timeout, bulkhead and fallback. A circuit
-  breaker and a fallback belong there, around the remote call, not around an operation.
+1. **Operation-Level Resilience (`ResilienceBehavior`)**: Wraps whole handlers or operations with **retry**, **timeout**, and **bulkhead** isolation.
+2. **Outbound Dependency Policies (`ResiliencePolicies`)**: A centralized registry of named resilience policies (**circuit breakers**, **retry**, **bulkhead**, **timeout**, **fallback**) applied around outbound RPC calls, payment APIs, database queries, and third-party webhooks.
 
-A retry repeats everything inside the behavior, the operation included, so the package
-makes the dangerous choices explicit: a misconfiguration fails when the function is
-wrapped, not in production.
+Enforces strict compile- and startup-time invariants to prevent dangerous side-effect replays.
 
 ## Installation
 
 ```bash
-pnpm add @cqrs-ddd/pipeline-resilience @cqrs-ddd/pipeline cockatiel
+pnpm add @cqrs-ddd/pipeline-resilience @cqrs-ddd/pipeline
 ```
 
-## Usage
+Requires Node.js 22.12 or later. `cockatiel` 4 comes as a dependency.
 
-`ResilienceBehavior` takes optional defaults and an optional logger, so the pipeline can
-construct it.
+## Two Architectural Scopes
 
-```ts
+```text
+Incoming Command / Query
+      │
+      ▼
+[ResilienceBehavior] (Operation Level)
+  ├─ Bulkhead: Limits concurrent operations across this handler
+  ├─ Timeout: Bounds entire handler execution time
+  └─ Retry: Re-runs the operation (commands and events only with replaySafe)
+         │
+         ▼
+[Handler Business Logic]
+         │
+         ▼ Outbound Remote Call (e.g. Stripe, AWS S3, SendGrid)
+[ResiliencePolicies] (Dependency Level)
+  ├─ Circuit Breaker: Tripped on consecutive remote failures
+  ├─ Outbound Timeout: Bounds network HTTP socket duration
+  ├─ Outbound Retry: Retries transient network socket drops
+  └─ Fallback: Returns cached or degraded response on outage
+```
+
+## Operation-Level Usage (`ResilienceBehavior`)
+
+```typescript
 import { createPipeline } from '@cqrs-ddd/pipeline';
-import { resilience } from '@cqrs-ddd/pipeline-resilience';
+import { resilience, getResilienceAbortSignal } from '@cqrs-ddd/pipeline-resilience';
 
 const pipeline = createPipeline();
 
-export const lookup = pipeline.wrap(
-  { name: 'lookup', kind: 'query' },
+export const fetchRemotePrice = pipeline.wrap(
+  { name: 'fetchRemotePrice', kind: 'query' },
   resilience({
-    retry: { maxAttempts: 3, backoff: { type: 'exponential' } },
-    timeout: { duration: 2_000 },
-    handle: (error) => error instanceof CatalogUnavailableError,
+    retry: {
+      maxAttempts: 3,
+      backoff: { type: 'exponential', initialDelay: 200, maxDelay: 2_000 },
+    },
+    timeout: { duration: 3_000, strategy: 'cooperative' },
+    bulkhead: { limit: 20, queue: 10 },
+    handle: (error) => error instanceof UpstreamNetworkError,
   }),
-)(async (id: string) => catalog.find(id));
+)(async (sku: string) => {
+  const signal = getResilienceAbortSignal(); // the current attempt's cancellation signal
+  return pricingApi.getPrice(sku, { signal });
+});
 ```
 
-## Safety rules
+### Safety Invariants & Diagnostics
 
-- A retry needs `handle(error)`, which selects the errors worth retrying, unless
-  `handleAllErrors: true` is chosen deliberately.
-- A retry of a command or an event needs `retry.replaySafe: true`: the operation must be
-  safe to run again.
-- An `aggressive` timeout on a command or an event needs `timeout.replaySafe: true`: the
-  caller is answered while the operation keeps running. A `cooperative` timeout signals
-  cancellation and waits; the operation reads the signal with `getResilienceAbortSignal()`.
-- A circuit breaker or a fallback on an operation is rejected; declare them on a named
-  policy.
+Because retries re-execute everything inside the behavior, `ResilienceBehavior` validates strict safety rules:
 
-The behavior's contract checks these rules, so a violation throws
-`PipelineConfigurationError` when the operation is wrapped (with the default `'strict'`
-diagnostics). With diagnostics turned off, the behavior still refuses the first call with
-`ResilienceConfigurationError`.
+1. **Selective Failure Filter (`handle`)**: Retries require an explicit `handle: (error) => boolean` predicate selecting transient errors (network drops, deadlocks). To intentionally retry all errors, set `handleAllErrors: true`.
+2. **Replay Safety on Commands/Events (`retry.replaySafe`)**: Commands and events mutate state. Attempting to configure retries on a command without explicitly setting `retry: { replaySafe: true }` fails at startup with `PipelineConfigurationError`.
+3. **Timeout Strategy & Safety (`timeout.strategy`)**:
+   - `'aggressive'` (default): Immediately answers the caller with a timeout rejection while the underlying handler continues running in the background. On commands or events, requires `timeout: { replaySafe: true }`.
+   - `'cooperative'`: Aborts the `AbortSignal` returned by `getResilienceAbortSignal()` and waits for the handler to settle before answering.
+4. **No Circuit Breakers on Use Cases**: Declaring a circuit breaker directly on an operation handler is rejected. Circuit breakers track external dependency health, not domain use cases; declare them on `ResiliencePolicies`.
 
-## Options
+## Outbound Dependency Policies (`ResiliencePolicies`)
 
-| Option | Meaning | Default |
-| --- | --- | --- |
-| `retry` | `{ maxAttempts, backoff, replaySafe }` | none |
-| `timeout` | `{ duration, strategy: 'aggressive' \| 'cooperative', replaySafe }` | none; strategy `'aggressive'` |
-| `bulkhead` | `{ limit, queue }`: at most `limit` concurrent executions, shared by every call of the operation | none |
-| `handle` | which errors count as failures to retry | none |
-| `handleAllErrors` | treat every error as retryable | `false` |
-| `order` | composition order of the layers, outermost first | `['retry', 'bulkhead', 'timeout']` |
-| `telemetry` | hooks fired by the underlying cockatiel policies, such as on each retry | none |
-| `policy` | a prebuilt cockatiel policy, used as it is and not validated | none |
+Create a shared registry of named policies for downstream external systems:
 
-Constructor defaults are shallowly merged under the options of each operation. Policies are
-built at the first call of each operation and reused.
-
-## Named policies
-
-```ts
+```typescript
 import { ResiliencePolicies } from '@cqrs-ddd/pipeline-resilience';
 
-const policies = new ResiliencePolicies({
-  paymentsApi: {
-    handle: (error) => error instanceof GatewayUnavailableError,
-    retry: { maxAttempts: 2 },
-    circuitBreaker: { halfOpenAfter: 10_000, breaker: { type: 'consecutive', threshold: 5 } },
-    timeout: { duration: 3_000 },
+export const externalPolicies = new ResiliencePolicies({
+  paymentGateway: {
+    handle: (error) => isTransientHttpError(error),
+    retry: { maxAttempts: 2, backoff: { type: 'exponential', initialDelay: 500 } },
+    circuitBreaker: {
+      halfOpenAfter: 30_000,
+      breaker: { type: 'consecutive', threshold: 5 },
+    },
+    timeout: { duration: 5_000 },
+  },
+  smsProvider: {
+    timeout: { duration: 2_000 },
+    bulkhead: { limit: 10, queue: 5 },
   },
 });
 
-await policies.execute('paymentsApi', ({ signal }) => http.post('/charges', order, { signal }));
+// Executing via named policy:
+const charge = await externalPolicies.execute('paymentGateway', async ({ signal }) => {
+  return stripe.charges.create(chargeParams, { signal });
+});
 ```
 
-Every policy is built when the registry is created, so an invalid one fails at startup with
-`ResiliencePolicyConfigurationError`, and is shared by every caller: a circuit breaker tracks
-the dependency, whichever operation calls it.
+All callers across all handlers share the same circuit breaker state for `'paymentGateway'`, protecting downstream APIs from cascading failures.
 
-The package re-exports cockatiel's outcome errors (`BrokenCircuitError`,
-`BulkheadRejectedError`, `TaskCancelledError` and their guards), so callers can detect them
-without importing cockatiel.
+## NestJS Integration (`@cqrs-ddd/nestjs`)
 
-## API reference
+Provide `ResiliencePolicies` as an injectable service:
+
+```typescript
+import { Module, Global } from '@nestjs/common';
+import { ResiliencePolicies } from '@cqrs-ddd/pipeline-resilience';
+
+@Global()
+@Module({
+  providers: [
+    {
+      provide: ResiliencePolicies,
+      useFactory: () =>
+        new ResiliencePolicies({
+          stripeApi: {
+            handle: (error) => isTransientHttpError(error), // required by retry and circuitBreaker
+            retry: { maxAttempts: 3 },
+            circuitBreaker: { halfOpenAfter: 15_000, breaker: { type: 'consecutive', threshold: 3 } },
+            timeout: { duration: 4_000 },
+          },
+        }),
+    },
+  ],
+  exports: [ResiliencePolicies],
+})
+export class ResilienceModule {}
+```
+
+Decorate `@CommandHandler` with `resilience()`:
+
+```typescript
+import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
+import { UsePipeline } from '@cqrs-ddd/pipeline';
+import { resilience } from '@cqrs-ddd/pipeline-resilience';
+
+@CommandHandler(SyncInventoryCommand)
+@UsePipeline(
+  resilience({
+    retry: { maxAttempts: 3, replaySafe: true },
+    timeout: { duration: 10_000, strategy: 'cooperative' },
+    handle: (err) => err instanceof DatabaseDeadlockError,
+  }),
+)
+export class SyncInventoryHandler implements ICommandHandler<SyncInventoryCommand> {
+  async execute(command: SyncInventoryCommand) {
+    // Retried safely on deadlock
+  }
+}
+```
+
+## Layer Ordering
+
+`ResilienceBehavior` composes policies in the following default order (outermost to innermost):
+
+```text
+['retry', 'bulkhead', 'timeout']
+```
+
+Customize the execution order via `order`:
+
+```typescript
+resilience({
+  order: ['bulkhead', 'retry', 'timeout'], // Bulkhead wraps retry attempts
+  retry: { maxAttempts: 3 },
+  bulkhead: { limit: 10 },
+  timeout: { duration: 2_000 },
+})
+```
+
+## Error Types & Guards
+
+Re-exports Cockatiel error classes and predicate guards:
+- `BrokenCircuitError` / `isBrokenCircuitError(err)`: Thrown when a remote call is blocked by an open circuit breaker.
+- `BulkheadRejectedError` / `isBulkheadRejectedError(err)`: Thrown when concurrency limits and queue capacity are exhausted.
+- `TaskCancelledError` / `isTaskCancelledError(err)`: Thrown when execution exceeds configured timeout.
+
+## API Reference
 
 [API reference](/ddd-cqrs/api/cqrs-ddd/pipeline-resilience/)

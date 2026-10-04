@@ -29,6 +29,12 @@ pnpm start:fastify    # Fastify; needs SESSION_SECRET
 
 An `.env` file in `api/`, when present, is loaded before anything reads the environment.
 
+In VS Code, Run and Debug offers `API (Express)` and `API (Fastify)`: each builds the
+api and its packages, then starts `dist/main.js` with breakpoints mapped to the
+TypeScript of both. `API: migrate databases` runs `pnpm db:migrate` the same way, and
+`API tests: current file` and `API e2e: current file` debug the open spec. The Vitest
+extension, recommended by the workspace, runs and debugs any spec from the editor.
+
 | Command | Purpose |
 | --- | --- |
 | `pnpm db:migrate` | Apply pending migrations in every tenant |

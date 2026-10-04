@@ -5,10 +5,9 @@ sidebar:
   order: 14
 ---
 
-Limits how often an operation runs. The behavior works with any limiter that has a
-`consume()` method, such as those of
-[rate-limiter-flexible](https://github.com/animir/node-rate-limiter-flexible) (memory,
-Redis, PostgreSQL and more). A request over the limit is refused before the operation runs.
+Enforces throughput throttling and quota policies across distributed microservices. Works with any limiter exposing a `consume()` method, including [rate-limiter-flexible](https://github.com/animir/node-rate-limiter-flexible) (Redis, Memory, PostgreSQL, MySQL).
+
+Over-quota requests are rejected before executing business logic, throwing `RateLimitExceededError` which translates to HTTP 429 Too Many Requests with a calculated `Retry-After` header.
 
 ## Installation
 
@@ -16,71 +15,162 @@ Redis, PostgreSQL and more). A request over the limit is refused before the oper
 pnpm add @cqrs-ddd/pipeline-rate-limit @cqrs-ddd/pipeline rate-limiter-flexible
 ```
 
-`rate-limiter-flexible` is not a dependency of the package; any limiter that satisfies
-`RateLimiterLike` works.
+Compatible with all `rate-limiter-flexible` adapters (`RateLimiterRedis`, `RateLimiterMemory`, `RateLimiterPostgres`, `RateLimiterCluster`).
 
-## Usage
+## Usage Patterns
 
-```ts
+### 1. Plain Node.js / Pipeline Engine
+
+```typescript
 import { createPipeline } from '@cqrs-ddd/pipeline';
 import {
   createPartitionedRateLimitKeyFactory,
   RateLimitBehavior,
   rateLimit,
 } from '@cqrs-ddd/pipeline-rate-limit';
-import { RateLimiterMemory } from 'rate-limiter-flexible';
+import { RateLimiterRedis } from 'rate-limiter-flexible';
+import { createClient } from 'redis';
 
-const pipeline = createPipeline({
-  behaviors: [new RateLimitBehavior(new RateLimiterMemory({ points: 10, duration: 60 }))],
+const redis = createClient({ url: process.env.REDIS_URL });
+await redis.connect();
+
+const limiter = new RateLimiterRedis({
+  storeClient: redis,
+  points: 100,      // 100 points
+  duration: 60,     // per 60 seconds
+  keyPrefix: 'rl',
 });
 
-const perUser = createPartitionedRateLimitKeyFactory(
-  (ctx) => ctx.items.get('userId') as string | undefined,
+const pipeline = createPipeline({
+  behaviors: [new RateLimitBehavior(limiter)],
+});
+
+// Partition by authenticated user, failing closed if user context is missing
+const perUserKey = createPartitionedRateLimitKeyFactory(
+  (ctx) => ctx.items.get('userId') as string,
+  { onMissingPartition: 'throw', includeTenant: true },
 );
 
-export const search = pipeline.wrap(
-  { name: 'search', kind: 'query' },
-  rateLimit({ keyFactory: perUser }),
+export const searchCatalog = pipeline.wrap(
+  { name: 'searchCatalog', kind: 'query' },
+  rateLimit({ keyFactory: perUserKey, points: 1 }),
 )(async (term: string) => catalog.search(term));
 ```
 
-The behavior's constructor takes the limiter, optional defaults for every operation and an
-optional logger.
+### 2. NestJS Integration (`@cqrs-ddd/nestjs`)
 
-## Partitioned keys
+Provide `RateLimitBehavior` in your rate-limiting or security module:
 
-`createPartitionedRateLimitKeyFactory(partition, options)` builds the key
-`<tenant>:<partition>:<requestName>` from a function that returns the caller's identity:
+```typescript
+import { Module } from '@nestjs/common';
+import { RateLimitBehavior } from '@cqrs-ddd/pipeline-rate-limit';
+import { RateLimiterRedis } from 'rate-limiter-flexible';
+import { RedisService } from '../redis/redis.service.js';
 
-| Option | Meaning | Default |
-| --- | --- | --- |
-| `onMissingPartition` | `'throw'` refuses a request whose caller is unknown; `'request'` falls back to one bucket for every caller of the operation | `'throw'` |
-| `includeTenant`, `requireTenant` | the tenant segment, as for the other keyed behaviors | `true` |
+@Module({
+  providers: [
+    {
+      provide: RateLimitBehavior,
+      inject: [RedisService],
+      useFactory: (redis: RedisService) => {
+        const limiter = new RateLimiterRedis({
+          storeClient: redis.client,
+          points: 50,
+          duration: 60,
+        });
+        return new RateLimitBehavior(limiter);
+      },
+    },
+  ],
+  exports: [RateLimitBehavior],
+})
+export class RateLimitModule {}
+```
 
-A missing required part throws `MissingRateLimitPartitionError`.
+Decorate command or query handlers:
 
-## Options
+```typescript
+import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
+import { UsePipeline } from '@cqrs-ddd/pipeline';
+import { rateLimit } from '@cqrs-ddd/pipeline-rate-limit';
 
-| Option | Meaning | Default |
-| --- | --- | --- |
-| `keyFactory` | the key factory; required when the behavior runs | none |
-| `points` | what one request costs: a number, or a function of the context; `0` costs nothing | `1` |
-| `keyPrefix` | prepended to the key as `<prefix>:<key>` | none |
-| `limiter` | a limiter for this operation instead of the constructor's | the constructor's |
-| `failOpen` | when the limiter's store fails, let the request through instead of refusing it | `true` |
+@CommandHandler(SendVerificationCodeCommand)
+@UsePipeline(rateLimit({ keyFactory: verificationKeyFactory, points: 5 }))
+export class SendVerificationCodeHandler implements ICommandHandler<SendVerificationCodeCommand> {
+  async execute(command: SendVerificationCodeCommand) {
+    // Throttled execution
+  }
+}
+```
 
-`rateLimit({ inheritModuleKey: true })` takes the key factory from the constructor
-defaults.
+The global `ErrorFilter` automatically maps `RateLimitExceededError` to HTTP 429 Too Many Requests and sets the `Retry-After: <seconds>` response header.
 
-`RATE_LIMIT_ITEM_TOKEN` gives later behaviors the limiter's decision;
-`buildRateLimitAttributes` turns it into trace or audit attributes.
+## Dynamic Points Consumption
 
-## HTTP errors
+Requests can consume varying point costs based on execution weight (e.g. batch operations consume points proportional to array length):
 
-A refusal throws `RateLimitExceededError`, with `retryAfterSeconds`, `remainingPoints` and
-the key. `toHttpResponse(error)` from `@cqrs-ddd/pipeline-rate-limit/http` returns a 429
-answer with a `Retry-After` header. See [HTTP errors](/ddd-cqrs/guides/http-errors/).
+```typescript
+@UsePipeline(
+  rateLimit({
+    keyFactory: perUserKey,
+    points: (ctx) => {
+      const command = ctx.request as BatchImportCommand;
+      return Math.max(1, command.items.length); // 1 point per batch item
+    },
+  }),
+)
+export class BatchImportHandler {}
+```
 
-## API reference
+## Partitioned Key Construction
+
+`createPartitionedRateLimitKeyFactory(partitionFn, options)` builds composite keys in the format `<tenant>:<partition>:<requestName>`:
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `onMissingPartition` | `'throw' \| 'request'` | `'throw'` | When `'throw'`, requests lacking an identified caller fail closed with `MissingRateLimitPartitionError`. When `'request'`, unidentified callers share one bucket per request and tenant. |
+| `includeTenant` | `boolean` | `true` | Prepends active tenant ID to prevent cross-tenant quota contention. |
+| `requireTenant` | `boolean` | `includeTenant` | Throws `MissingRateLimitPartitionError` if tenant context is missing. |
+
+Generated key examples:
+- Authenticated user: `org_123:usr_456:searchCatalog`
+- IP address: `org_123:ip_192.168.1.1:searchCatalog`
+
+## Configuration Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `keyFactory` | `RateLimitKeyFactory` | required | Key factory returning the partition string. |
+| `points` | `number \| ((ctx) => number)` | `1` | Point cost consumed by this request, a non-negative safe integer. `0` charges nothing: the limiter is not called. |
+| `keyPrefix` | `string` | `undefined` | Additional prefix prepended to the generated key. |
+| `limiter` | `RateLimiterLike` | Constructor limiter | Override the default limiter for this specific operation. |
+| `failOpen` | `boolean` | `true` | When `true`, limiter backend errors (Redis offline) log a warning and let the request proceed. When `false`, backend failures reject. |
+
+## Observability & Pipeline Items
+
+`RateLimitBehavior` stamps limiter decisions onto `context.items`:
+- `RATE_LIMIT_ITEM_TOKEN`: the limiter's result, with the remaining points and the milliseconds before the next point.
+- `buildRateLimitAttributes(context)`: `{ 'rate_limit.remaining_points': n }`, for span or metric attributes.
+
+## HTTP Error Translation
+
+When points are exhausted, `RateLimitExceededError` is thrown:
+
+```typescript
+import { RateLimitExceededError } from '@cqrs-ddd/pipeline-rate-limit';
+import { toHttpResponse } from '@cqrs-ddd/pipeline-rate-limit/http';
+
+try {
+  await searchCatalog(term);
+} catch (error) {
+  if (!(error instanceof RateLimitExceededError)) throw error;
+  const { status, body, headers } = toHttpResponse(error);
+  // status: 429
+  // body: { statusCode: 429, error: 'Too Many Requests', message, retryAfter: 12 }
+  // headers: { 'Retry-After': '12' }
+}
+```
+
+## API Reference
 
 [API reference](/ddd-cqrs/api/cqrs-ddd/pipeline-rate-limit/)

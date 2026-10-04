@@ -15,6 +15,7 @@
     "lint": "pnpm lint:plugins && pnpm -r lint",
     "lint:plugins": "biome lint --only=plugin .",
     "test": "pnpm lint:plugins && pnpm -r --no-bail test",
+    "test:e2e": "pnpm --filter ddd-cqrs-api test:e2e",
     "test:build": "pnpm -r --no-bail build",
     "test:release": "pnpm rebuild && pnpm copy-licenses && node integration/checks/release/release.mjs",
     "verify:all": "pnpm lint && pnpm test && pnpm test:build && pnpm test:release",
