@@ -23,6 +23,8 @@ task-file syncs included).
 ## Current Status
 
 The runtime task and the example application (`api/`) are done (2026-10-03), so 0.5.0 ships with both.
+A placement review (2026-10-04, owner) changed the API before the first publish, so 8.3's
+verification reruns: see 8.3a.
 Phases 0 to 7 (skeleton, moved packages, engine, context and behavior packages, DDD
 bridge, documentation and examples) and steps 8.1 and 8.2 are done and committed on
 `develop`; their record is the git history.
@@ -45,6 +47,21 @@ bridge, documentation and examples) and steps 8.1 and 8.2 are done and committed
   `npm whoami`, `pnpm publish:all --tag next`. A package published for the first time
   with `--tag next` also gets `latest` from the registry, which has no other version
   to point it at.
+- [ ] 8.3a Placement review (owner, 2026-10-04), uncommitted: `@UsePipeline`,
+  `@SkipPipeline`, `pipelineOf` and their types moved from `@cqrs-ddd/cqrs` to
+  `@cqrs-ddd/pipeline` (`src/handler-pipeline.ts`), so the plugin, which keeps
+  `@nestjs/cqrs`, uses them without `@cqrs-ddd/cqrs`; removed the unused NestJS copies
+  `Command<R>`, `Query<R>`, `RESULT_TYPE_SYMBOL`, `CommandResult`, `QueryResult`,
+  `EventPublisher` and `cqrs.eventPublisher`, the exports `commandOf`, `queryOf`,
+  `eventsOf`, and `CACHE_TOKEN` of core; `HttpCorrelationMiddleware` became
+  `httpCorrelation(options)`; NestJS DI examples left the JSDoc and the core and
+  mikro-orm pages. Then (owner, 2026-10-04): the package-only suites left in `api/test`
+  moved to `integration/pipeline/` and `integration/docs/` (the prototype-patching tests
+  of the old plugin dropped); `integration/` gained three applications that use one
+  package family each (`payments/`, `library/`, `inventory/`) at 100% coverage; `api`
+  and `integration` report coverage; the Archify skills moved to `.archify/skills/`.
+  Remaining before the owner's commands: `pnpm verify:all` and
+  `pnpm --filter ddd-cqrs-api test:e2e` (needs Docker).
 - [ ] 8.4 A scratch consumer installs the published packages from npm and runs the
   plain-function example.
 
@@ -58,16 +75,27 @@ bridge, documentation and examples) and steps 8.1 and 8.2 are done and committed
 - The packages keep only what has to do with CQRS and DDD, with no container or module
   classes (owner, 2026-10-03, AGENTS.md rule 1); the plugin's NestJS modules wrap the
   behavior classes directly.
+- Handler-class pipeline declarations belong to `@cqrs-ddd/pipeline`; `@cqrs-ddd/cqrs`
+  keeps the buses and the handler decorators (owner, 2026-10-04).
+- The default OpenTelemetry tracer and meter name is `'@cqrs-ddd/pipeline-opentelemetry'`;
+  the plugin passes `'nestjs-pipeline'` to keep its scope name (owner, 2026-10-03, Q8).
 
 ## Modified Files
 
-None open; everything is committed.
+The 8.3a changes are committed on `develop`.
 
 ## Tests and Verification
 
 Last full run: `pnpm verify:all` exit 0 on 2026-10-03 (2,870 Vitest tests, 7
 `node --test` cases, release check of 20 packages); `pnpm --filter ddd-cqrs-api test:e2e`
 exit 0 the same day (34 files, 358 tests, Docker).
+
+On the 8.3a tree (2026-10-04): `pnpm build`, `pnpm lint`, `pnpm check` and `pnpm
+lint:plugins` exit 0; every workspace's tests pass (mikro-orm 186/186 after its
+`@mikro-orm/core` peer moved to `^7.2.3`, the range it develops and is tested against);
+`pnpm docs:build` exit 0, all internal links valid. `biome.json` excludes the generated
+Archify output (`.archify`, `.agents/skills/archify`,
+`docs/public/architecture-diagram.html`). End-to-end not run: Docker was down.
 
 ## Risks
 
@@ -79,21 +107,24 @@ exit 0 the same day (34 files, 358 tests, Docker).
 
 - Q7 (non-blocking): dead-letter redrive for plain functions: a name-to-function map in
   the redriver options?
-- Q8 (non-blocking, before the plugin): the default tracer and meter name of
-  `@cqrs-ddd/pipeline-opentelemetry` is still `'nestjs-pipeline'`; change it to the
-  package name and let the plugin pass `'nestjs-pipeline'`?
 - Q6 (non-blocking): a combined HTTP error mapper in a package, or each application's own
   `answer(error)` only, as `api/src/http/answer.ts` does?
 - Q10 (decide before the plugin starts): nestjs-pipeline's `api` keeps every line only if
   `@nestjs-pipeline/<name>` re-exports the neutral API of `@cqrs-ddd/pipeline-<name>`
   (`export *` plus its own NestJS `XxxModule`). That reverses "No re-exports between the
   two scopes" in `adopt-cqrs-ddd-packages.md`. Record the answer there when nestjs-pipeline
-  unfreezes.
+  unfreezes. The same holds for `UsePipeline` and `SkipPipeline`, now in
+  `@cqrs-ddd/pipeline`: the plugin re-exports them from `@nestjs-pipeline/core` and its
+  discovery reads `pipelineOf()`; its `PIPELINE_*_METADATA` symbols go, and the five
+  `api` specs that read them switch to `pipelineOf()`. Its plan table still lists the two
+  decorators as plugin code; correct it then.
 
 ## Next Steps
 
-1. The owner runs the commands of 8.3.
-2. Step 8.4.
+1. Commit 8.3a.
+2. `pnpm verify:all` and the end-to-end suites.
+3. The owner runs the commands of 8.3.
+4. Step 8.4.
 
 ## Snapshot Impact
 
@@ -101,4 +132,4 @@ None for the release itself.
 
 ## Last Updated
 
-2026-10-03
+2026-10-04

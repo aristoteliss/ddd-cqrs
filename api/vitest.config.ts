@@ -11,5 +11,10 @@ export default defineConfig({
     server: {
       deps: { external: [/\/packages\/[^/]+\/dist\//] },
     },
+    coverage: {
+      enabled: true,
+      include: ['src/**/*.ts'],
+      exclude: ['src/**/*.spec.ts'],
+    },
   },
 });

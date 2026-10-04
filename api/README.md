@@ -231,7 +231,7 @@ query and event from the trace behavior, with the attributes of the behaviors th
 
 | Suite | Where | Command |
 | --- | --- | --- |
-| Unit and integration | `src/**/*.spec.ts`, `test/**/*.spec.ts` | `pnpm test` |
+| Unit and integration, with coverage | `src/**/*.spec.ts`, `test/**/*.spec.ts` | `pnpm test` |
 | End to end | `test/**/*.e2e-spec.ts` | `pnpm test:e2e` |
 
 The end-to-end suites start the real application on Express and on Fastify against
@@ -240,4 +240,7 @@ supertest. A request carrying `x-test-user` authenticates through a test session
 still runs the real authentication and authorization. The PostgreSQL suites start their
 own PostgreSQL container. They need a running Docker-compatible runtime; an
 infrastructure failure fails the suite instead of skipping it.
+
+These suites test the application. Checks of the packages alone, or of several packages
+composed without application code, are in `integration/`.
 

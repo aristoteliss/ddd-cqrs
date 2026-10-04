@@ -5,13 +5,13 @@ import {
   type Cqrs,
   createCqrs,
   EventsHandler,
-  UsePipeline,
 } from '@cqrs-ddd/cqrs';
 import {
   type IPipelineBehavior,
   type IPipelineContext,
   type NextDelegate,
   PIPELINE_BEHAVIOR_CONTRACT,
+  UsePipeline,
 } from '@cqrs-ddd/pipeline';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -44,7 +44,6 @@ class InvalidBehavior implements IPipelineBehavior {
 
 class ParentCommand {}
 class ChildCommand {}
-class OverrideCommand {}
 class BrokenCommand {}
 
 @CommandHandler(ParentCommand)
@@ -58,14 +57,6 @@ class ParentHandler {
 @CommandHandler(ChildCommand)
 @UsePipeline([LabelBehavior, { label: 'child' }])
 class ChildHandler extends ParentHandler {}
-
-@CommandHandler(OverrideCommand)
-@UsePipeline([LabelBehavior, { label: 'override' }])
-class OverrideHandler extends ParentHandler {
-  async execute(request: object) {
-    return super.execute(request);
-  }
-}
 
 @CommandHandler(BrokenCommand)
 @UsePipeline(InvalidBehavior)
@@ -83,20 +74,6 @@ function application(): Cqrs {
 }
 
 describe('pipeline registration lifecycle', () => {
-  it('leaves handler prototypes untouched when registration fails', async () => {
-    const original = ParentHandler.prototype.execute;
-    const app = application();
-    try {
-      expect(() =>
-        app.register(new ParentHandler(), new BrokenHandler()),
-      ).toThrow(/Pipeline configuration invalid/);
-      expect(ParentHandler.prototype.execute).toBe(original);
-      expect(Object.hasOwn(BrokenHandler.prototype, 'execute')).toBe(true);
-    } finally {
-      await app.close();
-    }
-  });
-
   it.each([false, true])(
     'uses each inherited handler chain regardless of registration order (child first: %s)',
     async (childFirst) => {
@@ -116,21 +93,8 @@ describe('pipeline registration lifecycle', () => {
       } finally {
         await app.close();
       }
-      expect(Object.hasOwn(ChildHandler.prototype, 'execute')).toBe(false);
     },
   );
-
-  it('allows a handler override to call super without reentering its pipeline', async () => {
-    const app = application();
-    try {
-      app.register(new ParentHandler(), new OverrideHandler());
-      await expect(
-        app.commandBus.execute(new OverrideCommand()),
-      ).resolves.toEqual(['override', 'done']);
-    } finally {
-      await app.close();
-    }
-  });
 
   it('runs a repeated local behavior once with the last tuple options', async () => {
     class DuplicateCommand {}

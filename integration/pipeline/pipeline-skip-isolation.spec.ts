@@ -1,16 +1,12 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
-import {
-  CommandHandler,
-  type Cqrs,
-  createCqrs,
-  SkipPipeline,
-} from '@cqrs-ddd/cqrs';
+import { CommandHandler, type Cqrs, createCqrs } from '@cqrs-ddd/cqrs';
 import {
   type IPipelineBehavior,
   type IPipelineContext,
   type NextDelegate,
   pipelineStore,
+  SkipPipeline,
 } from '@cqrs-ddd/pipeline';
 import { describe, expect, it } from 'vitest';
 

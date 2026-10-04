@@ -4,5 +4,14 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["lint/**/*.ts", "ddd/**/*.ts", "vitest.config.ts"]
+  "include": [
+    "lint/**/*.ts",
+    "docs/**/*.ts",
+    "ddd/**/*.ts",
+    "pipeline/**/*.ts",
+    "payments/**/*.ts",
+    "library/**/*.ts",
+    "inventory/**/*.ts",
+    "vitest.config.ts"
+  ]
 }

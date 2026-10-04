@@ -131,3 +131,26 @@ The code compiles with `experimentalDecorators: true`. Persistence is a `Map`; a
 application implements the repository contracts of
 [`@cqrs-ddd/core`](/ddd-cqrs/packages/core/), with
 [`@cqrs-ddd/mikro-orm`](/ddd-cqrs/packages/mikro-orm/) or its own adapter.
+
+## In the repository
+
+Two small applications use `@cqrs-ddd/core` without a pipeline or buses:
+
+- [`integration/library/`](https://github.com/aristoteliss/ddd-cqrs/tree/master/integration/library): a book aggregate with value rules,
+  `@Mutable` fields and `@ApplyMutation` methods, and `CommandBaseHandler` subclasses
+  that publish its events over an in-memory repository. A refused loan stores and
+  publishes nothing; a write from a stale copy fails with `ConcurrencyConflictError`.
+- [`integration/inventory/`](https://github.com/aristoteliss/ddd-cqrs/tree/master/integration/inventory): repositories that declare their
+  persistence with the core decorators, over MikroORM on in-memory SQLite, with the
+  repository cache in the same database:
+
+  ```ts
+  @PersistedWrite<Product>({
+    cache: { setKey: (product) => productKey(product.id) },
+    unique: { sku: (product) => new DuplicateSkuException(product) },
+  })
+  async save(product: Product): Promise<ProductSnapshot> { … }
+  ```
+
+[`api/`](https://github.com/aristoteliss/ddd-cqrs/tree/master/api) uses both families
+together, on the `@cqrs-ddd/cqrs` buses.

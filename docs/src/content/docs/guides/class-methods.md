@@ -94,3 +94,28 @@ await runWithTenant('acme', () => catalog.price('apple')); // 120
 await runWithTenant('globex', () => catalog.price('apple')); // 95
 await catalog.price('apple'); // rejects with MissingCachePartitionError
 ```
+
+## In the repository
+
+[`integration/payments/`](https://github.com/aristoteliss/ddd-cqrs/tree/master/integration/payments) is a payment service built this way, on the
+pipeline alone: no buses and no aggregates. One pipeline holds every behavior instance,
+and each method declares its own, outermost first:
+
+```ts
+@pipeline.wrap(
+  { kind: 'command' },
+  requires({ action: 'create', subject: 'Payment' }),
+  rateLimit({ keyFactory: perMerchant }),
+  audit({ action: 'payment.charge', actor }),
+  validated(Charge),
+  resilience({
+    handle: (error) => error instanceof GatewayTimeoutError,
+    retry: { maxAttempts: 2, replaySafe: true, backoff: { type: 'constant', delay: 0 } },
+  }),
+)
+async charge(input: z.input<typeof Charge>): Promise<Payment> { … }
+```
+
+A refused merchant is stopped before anything is audited, an invalid amount before the
+gateway is called, and a gateway timeout is retried inside one audited attempt. Its spec
+runs every case.

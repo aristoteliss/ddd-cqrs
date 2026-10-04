@@ -1,8 +1,0 @@
-{
-  "schemaVersion": 1,
-  "command": "deliver",
-  "status": "pending",
-  "receiptId": "131475a3-2d2c-47e1-a5ab-46be6a8591e0",
-  "input": "/home/aristotelis/Source/ddd-cqrs/.archify/architecture-full-repo-20261003-192530/candidate.json",
-  "output": "/home/aristotelis/Source/ddd-cqrs/.archify/architecture-full-repo-20261003-192530/architecture.html"
-}

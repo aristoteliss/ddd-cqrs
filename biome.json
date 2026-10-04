@@ -8,7 +8,9 @@
       "!!**/.astro",
       "!!**/.claude",
       "!!**/.tmp",
-      "!!**/.vscode"
+      "!!**/.vscode",
+      "!!.archify",
+      "!!docs/public/architecture-diagram.html"
     ]
   },
   "formatter": {

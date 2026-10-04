@@ -6,12 +6,13 @@
  * and a security guard could leave the chain unnoticed.
  */
 
-import { CommandHandler, createCqrs, UsePipeline } from '@cqrs-ddd/cqrs';
+import { CommandHandler, createCqrs } from '@cqrs-ddd/cqrs';
 import type {
   IPipelineBehavior,
   IPipelineContext,
   NextDelegate,
 } from '@cqrs-ddd/pipeline';
+import { UsePipeline } from '@cqrs-ddd/pipeline';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 const order: string[] = [];

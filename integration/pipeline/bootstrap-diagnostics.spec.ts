@@ -8,9 +8,8 @@ import {
   type ICommandHandler,
   type IQueryHandler,
   QueryHandler,
-  UsePipeline,
 } from '@cqrs-ddd/cqrs';
-import { PipelineConfigurationError } from '@cqrs-ddd/pipeline';
+import { PipelineConfigurationError, UsePipeline } from '@cqrs-ddd/pipeline';
 import { buildCache, CacheBehavior } from '@cqrs-ddd/pipeline-cache';
 import { CaslBehavior } from '@cqrs-ddd/pipeline-casl';
 import {

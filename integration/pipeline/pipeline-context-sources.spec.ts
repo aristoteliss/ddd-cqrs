@@ -1,16 +1,12 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
-import {
-  type CommandBus,
-  CommandHandler,
-  createCqrs,
-  UsePipeline,
-} from '@cqrs-ddd/cqrs';
+import { type CommandBus, CommandHandler, createCqrs } from '@cqrs-ddd/cqrs';
 import {
   type IPipelineBehavior,
   type IPipelineContext,
   type NextDelegate,
   pipelineStore,
+  UsePipeline,
 } from '@cqrs-ddd/pipeline';
 import {
   correlationSource,

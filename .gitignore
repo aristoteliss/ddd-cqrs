@@ -49,8 +49,8 @@ __pycache__/
 docs/.astro/
 docs/src/content/docs/api/
 
-# Archify local generator toolchain and build receipts
-.agents/skills/archify*
-docs/public/architecture/*.finalize*.json
-docs/public/architecture/*.browser-check.json
-docs/public/architecture/*.delivery.json
+# Archify: the local skill toolchain and its build receipts stay out; the diagrams are tracked
+.archify/skills/
+.archify/**/*.finalize*.json
+.archify/**/*.browser-check.json
+.archify/**/*.delivery*.json

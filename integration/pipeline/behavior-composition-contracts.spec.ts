@@ -14,9 +14,9 @@ import {
   CommandHandler,
   createCqrs,
   type ICommandHandler,
-  UsePipeline,
 } from '@cqrs-ddd/cqrs';
 import type { Constructor, IPipelineContext } from '@cqrs-ddd/pipeline';
+import { UsePipeline } from '@cqrs-ddd/pipeline';
 import {
   CacheBehavior,
   createPartitionedCacheKeyFactory,

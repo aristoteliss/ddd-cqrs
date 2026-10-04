@@ -13,13 +13,13 @@ import {
   type IQueryHandler,
   type QueryBus,
   QueryHandler,
-  UsePipeline,
 } from '@cqrs-ddd/cqrs';
 import type {
   IPipelineBehavior,
   IPipelineContext,
   NextDelegate,
 } from '@cqrs-ddd/pipeline';
+import { UsePipeline } from '@cqrs-ddd/pipeline';
 import {
   buildCache,
   CacheBehavior,

@@ -13,7 +13,9 @@ framework or a dependency-injection container.
 | Path | Holds |
 | --- | --- |
 | `packages/` | The published packages, each with its own README |
-| `integration/` | Repository-wide checks: the Biome Grit plugin specs (`lint/`) and the release verification (`release/`) |
+| `api/` | The example application: users, roles and sessions on every package together |
+| `integration/` | Repository-wide checks, and small applications that use one package family at a time (see its README) |
+| `docs/` | The documentation site |
 | `biome/plugins/` | The Grit plugins that guard the package boundaries |
 | `scripts/` | Generator and validator of the agent context files |
 

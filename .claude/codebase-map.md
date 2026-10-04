@@ -35,7 +35,7 @@ its guides carry the usage code as snippets.
 ## Technology Stack
 
 <!-- context:generated-start technology-stack -->
-- **Languages** (file counts, excluded directories omitted): `.ts` 764, `.md` 68, `.grit` 7, `.mjs` 4, `.py` 3
+- **Languages** (file counts, excluded directories omitted): `.ts` 776, `.md` 70, `.grit` 7, `.mjs` 4, `.py` 3
 - **Runtime engines** (root `package.json`): `node` >=22.12.0, `pnpm` >=9.0.0
 - **Package manager evidence**: `pnpm-lock.yaml`.
 - **Integrations**: listed with their purpose under Dependencies and Integrations.
@@ -70,26 +70,27 @@ editor/tooling directories are excluded (see Snapshot Metadata).
 | Directory | Responsibility |
 | --- | --- |
 | `.agents/` | Guide changes to the framework-neutral @cqrs-ddd packages — domain models, persistence lifecycle, repository and pipeline caching, short-circuit keys — preserving their contracts and race protections. |
+| `.archify/` | Needs verification |
 | `.claude/` | Needs verification |
 | `.github/` | Needs verification |
 | `api/` | The users API on @cqrs-ddd: Express and Fastify routes with Zod, the CQRS buses and pipelines, DDD aggregates and decorated repositories |
 | `biome/` | Needs verification |
 | `docs/` | The documentation site of the @cqrs-ddd packages. |
-| `integration/` | Repository-wide checks: the Biome Grit plugin specs, the release verification, a plain Node.js module and standard decorators |
+| `integration/` | Repository-wide checks and applications built on the packages one at a time: the Biome Grit plugin specs, the release verification, cross-package pipeline contracts, a pipeline-only payments service, a domain-only library, MikroORM repositories, a plain Node.js module and standard decorators |
 | `packages/` | Workspace container — 20 package(s); see the workspace table below |
 | `scripts/` | Needs verification |
 
-Root files: `.gitignore`, `.npmrc`, `AGENTS.md`, `CHANGELOG.md`, `CLAUDE.md`, `COMMERCIAL_LICENSE.txt`, `LICENSE`, `README.md`, `biome.json`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `tsconfig.base.json`
+Root files: `.gitignore`, `.npmrc`, `AGENTS.md`, `CHANGELOG.md`, `CLAUDE.md`, `COMMERCIAL_LICENSE.txt`, `LICENSE`, `README.md`, `biome.json`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `skills-lock.json`, `tsconfig.base.json`
 
 ### Workspace packages
 
-Without a `README.md`: `integration`.
+Each has a `README.md`.
 
 | Path | Package | Source layout |
 | --- | --- | --- |
 | `api` | `ddd-cqrs-api` | `auths`, `common`, `http`, `persistence`, `roles`, `users` |
 | `docs` | `ddd-cqrs-docs` | `content` |
-| `integration` | `ddd-cqrs-integration` | `ddd`, `lint`, `plain-node`, `release`, `standard-decorators` |
+| `integration` | `ddd-cqrs-integration` | `ddd`, `docs`, `inventory`, `library`, `lint`, `payments`, `pipeline`, `plain-node`, `release`, `standard-decorators` |
 | `packages/core` | `@cqrs-ddd/core` | `application`, `domain`, `http`, `persistence`, `types` |
 | `packages/cqrs` | `@cqrs-ddd/cqrs` | flat |
 | `packages/mikro-orm` | `@cqrs-ddd/mikro-orm` | `cache`, `concurrency`, `errors`, `helpers`, `interfaces`, `mapping`, `repository`, `tenancy` |
@@ -184,6 +185,12 @@ path given before relying on it.*
   `integration/standard-decorators/` (a real `tsc` build with `experimentalDecorators:
   false`, then `node --test`) and `integration/ddd/` (Vitest). A change
   to that API needs the matching guide edited by hand.
+- `integration/` also holds small applications that use one package family at a time,
+  with coverage at 100% per file: `integration/payments/` (pipeline packages only),
+  `integration/library/` (core domain only), `integration/inventory/` (core persistence
+  decorators with `mikro-orm` on SQLite).
+  `integration/pipeline/` holds the cross-package behavior contracts on `createCqrs()`;
+  `api/test/` keeps only suites that exercise the application.
 - `docs/` builds with `pnpm docs:build`; `starlight-links-validator` fails the build on a
   broken link. A package with an `/http` entry point needs `typedoc.json`
   listing every entry and `@module main` on its `index.ts`.
@@ -199,21 +206,21 @@ environment value is read or reproduced here.
 | --- | --- | --- |
 | NestJS runtime — Application framework and DI container | `@nestjs/common` | root only |
 | NestJS CQRS — Command/query/event buses wrapped by the pipeline | `@nestjs/cqrs` | root only |
-| MikroORM — ORM, unit of work, migrations | `@mikro-orm/core`, `@mikro-orm/migrations` | `api`, `packages/mikro-orm` |
+| MikroORM — ORM, unit of work, migrations | `@mikro-orm/core`, `@mikro-orm/migrations` | `api`, `integration`, `packages/mikro-orm` |
 | PostgreSQL — Relational backend and schema-per-tenant access | `pg`, `@mikro-orm/postgresql` | `api` |
-| SQLite / libSQL — Local and test persistence backend | `@libsql/client`, `@mikro-orm/libsql` | `api` |
+| SQLite / libSQL — Local and test persistence backend | `@libsql/client`, `@mikro-orm/libsql` | `api`, `integration` |
 | Redis — Cache and queue backend | `@keyv/redis`, `redis` | `api`, `packages/pipeline-cache` |
 | BullMQ — Background jobs and dead-letter transport | `bullmq` | `api` |
 | Keyv / cache-manager — Pluggable cache stores | `keyv`, `cache-manager` | `api`, `integration`, `packages/pipeline-cache` |
 | OpenTelemetry — Tracing and metrics | `@opentelemetry/api`, `@opentelemetry/sdk-node` | `api`, `packages/pipeline-opentelemetry` |
-| OpenFeature — Feature-flag evaluation | `@openfeature/server-sdk` | `api`, `packages/pipeline-feature-flags` |
+| OpenFeature — Feature-flag evaluation | `@openfeature/server-sdk` | `api`, `integration`, `packages/pipeline-feature-flags` |
 | CASL — Attribute/role based authorization | `@casl/ability` | `api`, `packages/pipeline-casl` |
 | JOSE — JWT signing and verification | `jose` | `api` |
 | Zod — Schema validation for DTOs and pipeline payloads | `zod` | `api`, `integration`, `packages/pipeline-zod` |
 | Pino — Structured logging | `pino-http`, `pino-pretty` | `api` |
 | Fastify — Alternative HTTP adapter and sessions | `@fastify/secure-session` | `api` |
 | Cockatiel — Retry, timeout and circuit-breaker policies | `cockatiel` | `packages/pipeline-resilience` |
-| rate-limiter-flexible — Rate-limit counters | `rate-limiter-flexible` | `api`, `packages/pipeline-rate-limit` |
+| rate-limiter-flexible — Rate-limit counters | `rate-limiter-flexible` | `api`, `integration`, `packages/pipeline-rate-limit` |
 | Vitest — Test runner | `vitest` | `api`, `integration`, `packages/core`, `packages/cqrs`, … (+18) |
 | Biome — Formatter, linter and Grit plugin host | `@biomejs/biome` | root only |
 | TypeScript — Language and type checker | `typescript` | `docs`, `packages/core`, `packages/mikro-orm` |
@@ -281,6 +288,7 @@ row as *declared* unless you have run it yourself in this checkout.
 | `pnpm build` | `pnpm -r build` |
 | `pnpm check` | `biome check .` |
 | `pnpm clean` | `pnpm -r run clean` |
+| `pnpm clean:all` | `rm -rf node_modules .tmp .cache coverage api/node_modules api/dist api/…` |
 | `pnpm context:check` | `python3 scripts/update-claude-snapshot.py --check` |
 | `pnpm context:update` | `python3 scripts/update-claude-snapshot.py` |
 | `pnpm context:validate` | `python3 scripts/validate-claude-context.py` |
@@ -326,7 +334,8 @@ Workspaces with the same scripts share a row.
 <!-- context:manual-start testing-strategy -->
 *Manual section — the generator never overwrites it.*
 
-- **Framework**: Vitest 5 (`globals: true`) for packages, with 100% per-file coverage;
+- **Framework**: Vitest 5 (`globals: true`) for packages and the `integration/`
+  applications, with 100% per-file coverage; `api` reports coverage without thresholds;
   `node --test` for `integration/plain-node` and `integration/standard-decorators`.
 - **Standalone specs**: each behavior package has a `*.standalone.spec.ts` that runs the
   behavior on a function wrapped by `createPipeline()`; `integration/ddd/` runs a
@@ -390,14 +399,14 @@ secret value.*
 ## Snapshot Metadata
 
 <!-- context:generated-start metadata -->
-- Generated at: 2026-10-03T15:38:02Z
-- Git commit: bbc60a2c0dfa6d52bd4e00c97660ab5ed5204e1e
+- Generated at: 2026-10-04T07:49:59Z
+- Git commit: c93b8d76201e7bafabccd9639743226e796a6f3a
 - Git branch: develop
 - Uncommitted changes when generated: yes
 - Generator: `scripts/update-claude-snapshot.py` version 1.0.0
 - Snapshot status: generated — structural inspection only, no code executed
-- Files inspected: 932
-- Included top-level directories: `.agents`, `.claude`, `.github`, `api`, `biome`, `docs`, `integration`, `packages`, `scripts`
+- Files inspected: 952
+- Included top-level directories: `.agents`, `.archify`, `.claude`, `.github`, `api`, `biome`, `docs`, `integration`, `packages`, `scripts`
 - Excluded directory names: `.cache`, `.git`, `.gradle`, `.idea`, `.mypy_cache`, `.next`, `.nuxt`, `.parcel-cache`, `.pnpm-store`, `.pytest_cache`, `.ruff_cache`, `.svelte-kit`, `.terraform`, `.tmp`, `.tox`, `.turbo`, `.venv`, `.vscode`, `__pycache__`, `bower_components`, `build`, `coverage`, `dist`, `node_modules`, `out`, `target`, `vendor`, `venv`, `virtualenv`
 - Excluded file patterns: `.env`, `.env.*`, `*.env`, `*.pem`, `*.key`, `*.pfx`, `*.p12`, `*.jks`, `*.keystore`, `id_rsa*`, `id_ed25519*`, `*credentials*`, `*.secret`, `secrets.*`
 
