@@ -3,22 +3,26 @@
 ## Task
 
 Build a framework-agnostic `@cqrs-ddd` ecosystem in this repository that holds the one
-implementation of every pipeline behavior, publish it, and then turn the
-`@nestjs-pipeline/*` packages into a NestJS plugin built on it.
+implementation of every pipeline behavior and publish it; nestjs-pipeline then becomes the
+complete NestJS example of the packages (no plugin; owner, 2026-10-04).
 
 ## Goal
 
 - This repository builds, tests and publishes the `@cqrs-ddd` packages at 0.5.0, first
   under the `next` dist-tag.
-- nestjs-pipeline's `api` then runs on the published packages, through `@nestjs-pipeline/*`
-  packages that hold only NestJS glue.
+- nestjs-pipeline's `api` then runs on the published packages as an ordinary NestJS
+  application: all of NestJS and official `@nestjs/cqrs` (buses, handlers, event handlers,
+  `EventPublisher`), with the `@cqrs-ddd` packages only for what NestJS lacks; its small glue
+  (behaviors registered per module, handlers wrapped at startup, one exception filter) lives
+  in its `api`. `@cqrs-ddd/cqrs` is for applications without NestJS, as this repository's
+  `api/` is.
 
 ## Scope
 
-In: the release of this repository's packages (Phase 8). Out: the plugin rewrite, which
-is planned in `nestjs-pipeline/.claude/tasks/adopt-cqrs-ddd-packages.md` and starts only
-when this repository is complete and published (nestjs-pipeline is frozen until then,
-task-file syncs included).
+In: the release of this repository's packages (Phase 8). Out: the NestJS side, planned in
+`nestjs-pipeline/.claude/tasks/adopt-cqrs-ddd-packages.md` and active since 2026-10-04
+(nestjs-pipeline is no longer frozen). Using the packages without NestJS belongs here;
+nestjs-pipeline only installs them and copies nothing.
 
 ## Current Status
 
@@ -56,7 +60,7 @@ bridge, documentation and examples) and steps 8.1 and 8.2 are done and committed
   `eventsOf`, and `CACHE_TOKEN` of core; `HttpCorrelationMiddleware` became
   `httpCorrelation(options)`; NestJS DI examples left the JSDoc and the core and
   mikro-orm pages. Then (owner, 2026-10-04): the package-only suites left in `api/test`
-  moved to `integration/pipeline/` and `integration/docs/` (the prototype-patching tests
+  moved to `integration/checks/contracts/` and `integration/checks/docs/` (the prototype-patching tests
   of the old plugin dropped); `integration/` gained three applications that use one
   package family each (`payments/`, `library/`, `inventory/`) at 100% coverage; `api`
   and `integration` report coverage; the Archify skills moved to `.archify/skills/`.
@@ -112,20 +116,15 @@ Archify output (`.archify`, `.agents/skills/archify`,
   the redriver options?
 - Q6 (non-blocking): a combined HTTP error mapper in a package, or each application's own
   `answer(error)` only, as `api/src/http/answer.ts` does?
-- Q10 (decide before the plugin starts): nestjs-pipeline's `api` keeps every line only if
-  `@nestjs-pipeline/<name>` re-exports the neutral API of `@cqrs-ddd/pipeline-<name>`
-  (`export *` plus its own NestJS `XxxModule`). That reverses "No re-exports between the
-  two scopes" in `adopt-cqrs-ddd-packages.md`. Record the answer there when nestjs-pipeline
-  unfreezes. The same holds for `UsePipeline` and `SkipPipeline`, now in
-  `@cqrs-ddd/pipeline`: the plugin re-exports them from `@nestjs-pipeline/core` and its
-  discovery reads `pipelineOf()`; its `PIPELINE_*_METADATA` symbols go, and the five
-  `api` specs that read them switch to `pipelineOf()`. Its plan table still lists the two
-  decorators as plugin code; correct it then.
+- Q10 resolved (owner, 2026-10-04): no `@nestjs-pipeline` 0.5.0 is published, so nothing
+  re-exports across the two scopes; nestjs-pipeline's `api` installs `@cqrs-ddd/*`
+  directly.
 
 ## Next Steps
 
-1. `nestjs-pipeline-local-trial.md`: nestjs-pipeline on the local packages and the
-   deprecation messages, before anything is published.
+1. nestjs-pipeline's `api` on the packages from the local registry, and the README
+   notices of the old packages: `~/Source/nestjs-pipeline/.claude/tasks/adopt-cqrs-ddd-packages.md`
+   (Phase 1 must pass before 8.3). Gaps it finds are fixed here first.
 2. The owner runs the commands of 8.3.
 3. Step 8.4.
 

@@ -2,16 +2,16 @@
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "types": ["node"],
-    "noEmit": true
+    "noEmit": true,
+    "emitDecoratorMetadata": false
   },
   "include": [
-    "lint/**/*.ts",
-    "docs/**/*.ts",
-    "ddd/**/*.ts",
-    "pipeline/**/*.ts",
+    "checks/**/*.ts",
     "payments/**/*.ts",
     "library/**/*.ts",
     "inventory/**/*.ts",
+    "profiles/**/*.ts",
+    "members/**/*.ts",
     "vitest.config.ts"
   ]
 }

@@ -1,0 +1,26 @@
+# Verdaccio configuration of the local registry.
+# @cqrs-ddd packages are served from local storage only and never reach npmjs.org;
+# @nestjs-pipeline and every other package are proxied from npmjs.org, so the published
+# versions and all other dependencies still install.
+storage: /verdaccio/storage
+auth:
+  htpasswd:
+    file: /verdaccio/storage/htpasswd
+    max_users: 10
+uplinks:
+  npmjs:
+    url: https://registry.npmjs.org/
+packages:
+  '@cqrs-ddd/*':
+    access: $all
+    publish: $authenticated
+  '@nestjs-pipeline/*':
+    access: $all
+    publish: $authenticated
+    proxy: npmjs
+  '**':
+    access: $all
+    publish: $authenticated
+    proxy: npmjs
+listen: 0.0.0.0:4873
+log: { type: stdout, format: pretty, level: warn }

@@ -35,7 +35,7 @@ its guides carry the usage code as snippets.
 ## Technology Stack
 
 <!-- context:generated-start technology-stack -->
-- **Languages** (file counts, excluded directories omitted): `.ts` 771, `.md` 71, `.grit` 7, `.mjs` 4, `.py` 3
+- **Languages** (file counts, excluded directories omitted): `.ts` 775, `.md` 72, `.grit` 7, `.mjs` 4, `.py` 3
 - **Runtime engines** (root `package.json`): `node` >=22.12.0, `pnpm` >=9.0.0
 - **Package manager evidence**: `pnpm-lock.yaml`.
 - **Integrations**: listed with their purpose under Dependencies and Integrations.
@@ -51,7 +51,7 @@ its guides carry the usage code as snippets.
 | `api/src/main.ts` | Process entry point | workspace `ddd-cqrs-api` |
 | `api/src/tracing.ts` | Telemetry initialization (loaded before the framework) | workspace `ddd-cqrs-api` |
 | `api/vitest.config.e2e.ts` | Referenced by a package script | `pnpm --filter ddd-cqrs-api` `test:e2e` |
-| `integration/release/release.mjs` | Referenced by a root script | `pnpm test:release` |
+| `integration/checks/release/release.mjs` | Referenced by a root script | `pnpm test:release` |
 | `packages/core/index.ts` | Package public entry (barrel) | workspace `@cqrs-ddd/core` |
 | `scripts/update-claude-snapshot.py` | Referenced by a root script | `pnpm context:check`; `pnpm context:update` |
 | `scripts/validate-claude-context.py` | Referenced by a root script | `pnpm context:validate` |
@@ -79,6 +79,7 @@ editor/tooling directories are excluded (see Snapshot Metadata).
 | `integration/` | Repository-wide checks and applications built on the packages one at a time: the Biome Grit plugin specs, the release verification, cross-package pipeline contracts, a pipeline-only payments service, a domain-only library, MikroORM repositories, a plain Node.js module and standard decorators |
 | `packages/` | Workspace container — 20 package(s); see the workspace table below |
 | `scripts/` | Needs verification |
+| `tools/` | A Verdaccio npm registry on http://127.0.0.1:4873/, for installing the packages in another project exactly as they will be published, without publishing them to npm. @cqrs-ddd/ is served only from this registry… (from `tools/local-registry/README.md`) |
 
 Root files: `.gitignore`, `.npmrc`, `AGENTS.md`, `CHANGELOG.md`, `CLAUDE.md`, `COMMERCIAL_LICENSE.txt`, `LICENSE`, `README.md`, `biome.json`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `skills-lock.json`, `tsconfig.base.json`
 
@@ -90,7 +91,7 @@ Each has a `README.md`.
 | --- | --- | --- |
 | `api` | `ddd-cqrs-api` | `auths`, `common`, `http`, `persistence`, `roles`, `users` |
 | `docs` | `ddd-cqrs-docs` | `content` |
-| `integration` | `ddd-cqrs-integration` | `ddd`, `docs`, `inventory`, `library`, `lint`, `payments`, `pipeline`, `plain-node`, `release`, `standard-decorators` |
+| `integration` | `ddd-cqrs-integration` | `checks`, `inventory`, `library`, `members`, `payments`, `plain-node`, `profiles`, `standard-decorators` |
 | `packages/core` | `@cqrs-ddd/core` | `application`, `domain`, `http`, `persistence`, `types` |
 | `packages/cqrs` | `@cqrs-ddd/cqrs` | flat |
 | `packages/mikro-orm` | `@cqrs-ddd/mikro-orm` | `cache`, `concurrency`, `errors`, `helpers`, `interfaces`, `mapping`, `repository`, `tenancy` |
@@ -124,7 +125,7 @@ path given before relying on it.*
   (`core`, `mikro-orm`) do not depend on each other; a request tells a pipeline its kind
   through the `Symbol.for('@cqrs-ddd/request-kind')` brand. Enforced by
   `biome/plugins/*-independence.grit` and the manifest checks of
-  `integration/release/release.mjs`.
+  `integration/checks/release/release.mjs`.
 - **Package directories** under the packages directory carry the package name without
   its scope (directory core holds `@cqrs-ddd/core`, directory pipeline-cache holds
   `@cqrs-ddd/pipeline-cache`); the plugin scopes in `biome.json` rely on these names.
@@ -165,10 +166,10 @@ path given before relying on it.*
 - `test-suite`, `framework-independence`, `core-environment`, `orm-independence`,
   `pipeline-independence`, `ddd-independence` and `aggregate-identity` Grit plugins,
   each
-  scoped in `biome.json`. `integration/lint/biome-plugins.spec.ts` proves that every rule
+  scoped in `biome.json`. `integration/checks/lint/biome-plugins.spec.ts` proves that every rule
   fires and that every scope holds. Do not loosen a plugin to make a change pass.
 
-### Release check — `integration/release/release.mjs`
+### Release check — `integration/checks/release/release.mjs`
 
 - Packs every package and checks each tarball: required files, `dist` JavaScript and
   declarations, no test files, no README link outside the package, version, `engines.node`,
@@ -183,13 +184,15 @@ path given before relying on it.*
 - The guides show focused snippets, never whole files. The code they show runs in
   `integration/`: `integration/plain-node/` (`.mjs` run by `node --test` with no build),
   `integration/standard-decorators/` (a real `tsc` build with `experimentalDecorators:
-  false`, then `node --test`) and `integration/ddd/` (Vitest). A change
+  false`, then `node --test`) and `integration/profiles/` (Vitest). A change
   to that API needs the matching guide edited by hand.
 - `integration/` also holds small applications that use one package family at a time,
   with coverage at 100% per file: `integration/payments/` (pipeline packages only),
   `integration/library/` (core domain only), `integration/inventory/` (core persistence
   decorators with `mikro-orm` on SQLite).
-  `integration/pipeline/` holds the cross-package behavior contracts on `createCqrs()`;
+  `integration/profiles/` (pipeline and domain) and `integration/members/` (domain on the
+  buses) complete them; `integration/checks/` holds the test-only checks (contracts, lint,
+  docs, release);
   `api/test/` keeps only suites that exercise the application: `api/test/application/`
   (several modules), `api/test/e2e/` (over HTTP), `api/test/e2e/infrastructure/` (stores
   against containers) and `api/test/support/`; a spec of one module sits next to it in
@@ -272,7 +275,7 @@ rules live in `AGENTS.md`.*
 | Area | Convention | Evidence |
 | --- | --- | --- |
 | Tooling | pnpm only; Biome (2 spaces, single quotes); strict `tsc` with `module: NodeNext` | `biome.json`, `tsconfig.base.json`, `CLAUDE.md` |
-| Boundaries | No NestJS anywhere; pipeline and DDD packages independent of each other | `biome/plugins/`, `integration/release/release.mjs` |
+| Boundaries | No NestJS anywhere; pipeline and DDD packages independent of each other | `biome/plugins/`, `integration/checks/release/release.mjs` |
 | Configuration | Packages read no environment | `biome/plugins/core-environment.grit` |
 | License | Every `.ts` file starts with the repository license header, by convention: no check enforces it | the files themselves |
 | Commits | Conventional style: `feat(scope): …`, `fix(scope): …`, `chore: …` | the nestjs-pipeline history |
@@ -305,7 +308,7 @@ row as *declared* unless you have run it yourself in this checkout.
 | `pnpm rebuild` | `pnpm -r run clean && pnpm -r build` |
 | `pnpm test` | `pnpm lint:plugins && pnpm -r --no-bail test` |
 | `pnpm test:build` | `pnpm -r --no-bail build` |
-| `pnpm test:release` | `pnpm rebuild && pnpm copy-licenses && node integration/release/release.…` |
+| `pnpm test:release` | `pnpm rebuild && pnpm copy-licenses && node integration/checks/release/r…` |
 | `pnpm verify:all` | `pnpm lint && pnpm test && pnpm test:build && pnpm test:release` |
 | `pnpm verify:fails` | `node -e 'var l=require("node:fs"),u=require("node:path"),h=process.cwd(…` |
 | `pnpm verify:log` | `node -e 'var y=require("node:child_process"),f=require("node:fs"),$=req…` |
@@ -341,7 +344,7 @@ Workspaces with the same scripts share a row.
   applications, with 100% per-file coverage; `api` reports coverage without thresholds;
   `node --test` for `integration/plain-node` and `integration/standard-decorators`.
 - **Standalone specs**: each behavior package has a `*.standalone.spec.ts` that runs the
-  behavior on a function wrapped by `createPipeline()`; `integration/ddd/` runs a
+  behavior on a function wrapped by `createPipeline()`; `integration/profiles/` runs a
   `CommandBaseHandler` through a pipeline (the only workspace that uses both families).
 - **Example application**: `api/` unit and integration specs (`src/**/*.spec.ts`,
   `test/**/*.spec.ts`, `pnpm --filter ddd-cqrs-api test`) build first, because the CLI
@@ -350,7 +353,7 @@ Workspaces with the same scripts share a row.
   boot the real application on Express and Fastify with `api/test/support/e2e-app.ts`
   against throwaway libSQL databases and Testcontainers Redis or PostgreSQL; they need
   Docker and are not part of `pnpm verify:all`.
-- **Plugin specs**: `integration/lint/biome-plugins.spec.ts` writes fixture files into a
+- **Plugin specs**: `integration/checks/lint/biome-plugins.spec.ts` writes fixture files into a
   temporary directory and lints them with this repository's `biome.json` (plugin paths
   made absolute, every other rule off).
 - **Release**: `pnpm test:release` needs Bun on `PATH` and at least one package.
@@ -379,9 +382,9 @@ secret value.*
 
 - **The generated dependency table and environment variable list show fixture text.**
   NestJS, MikroORM, `pg`, libSQL, `DATABASE_URL`, `DB_DEFAULT_SCHEMA` and `REDIS_URL` appear
-  there because `integration/lint/biome-plugins.spec.ts` uses them in fixtures; no
+  there because `integration/checks/lint/biome-plugins.spec.ts` uses them in fixtures; no
   workspace declares or reads any of them.
-- **`integration/release/` sits outside any directory named packages on purpose.** The
+- **`integration/checks/release/` sits outside any directory named packages on purpose.** The
   plugin scopes in `biome.json` match `**/packages/**`.
 - **Packages, `integration` and the site import sibling packages from `dist`.** Run
   `pnpm build` before `pnpm lint`, `pnpm test` or `pnpm docs:build` on a fresh clone.
@@ -396,20 +399,20 @@ secret value.*
 - **`pnpm test:release` cannot run on an empty workspace.** It stops with "Expected
   nonempty, unique publishable package names", and it reads the installed
   `@mikro-orm/core` manifest of the mikro-orm package for that package's `engines.node`
-  (`integration/release/release.mjs`).
+  (`integration/checks/release/release.mjs`).
 <!-- context:manual-end gotchas -->
 
 ## Snapshot Metadata
 
 <!-- context:generated-start metadata -->
-- Generated at: 2026-10-04T08:01:00Z
-- Git commit: 2f25925fbc03bf2689a1fb80ab5ff2741b11b1a5
+- Generated at: 2026-10-04T08:17:43Z
+- Git commit: e3922a187b8d397899017a81c1988efc13aa5c0f
 - Git branch: develop
 - Uncommitted changes when generated: yes
 - Generator: `scripts/update-claude-snapshot.py` version 1.0.0
 - Snapshot status: generated — structural inspection only, no code executed
-- Files inspected: 948
-- Included top-level directories: `.agents`, `.archify`, `.claude`, `.github`, `api`, `biome`, `docs`, `integration`, `packages`, `scripts`
+- Files inspected: 955
+- Included top-level directories: `.agents`, `.archify`, `.claude`, `.github`, `api`, `biome`, `docs`, `integration`, `packages`, `scripts`, `tools`
 - Excluded directory names: `.cache`, `.git`, `.gradle`, `.idea`, `.mypy_cache`, `.next`, `.nuxt`, `.parcel-cache`, `.pnpm-store`, `.pytest_cache`, `.ruff_cache`, `.svelte-kit`, `.terraform`, `.tmp`, `.tox`, `.turbo`, `.venv`, `.vscode`, `__pycache__`, `bower_components`, `build`, `coverage`, `dist`, `node_modules`, `out`, `target`, `vendor`, `venv`, `virtualenv`
 - Excluded file patterns: `.env`, `.env.*`, `*.env`, `*.pem`, `*.key`, `*.pfx`, `*.p12`, `*.jks`, `*.keystore`, `id_rsa*`, `id_ed25519*`, `*credentials*`, `*.secret`, `secrets.*`
 

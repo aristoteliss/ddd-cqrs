@@ -9,6 +9,14 @@ Use this skill for any change to domain models, repositories, the persistence li
 decorators, caching, idempotency keys or pipeline behaviors in this repository. `AGENTS.md`
 holds the non-negotiable rules; this skill holds the reasoning and the detailed contracts.
 
+## The sibling repository
+
+The packages here are the one implementation; nestjs-pipeline (`~/Source/nestjs-pipeline`)
+is a NestJS application that installs them from 0.5.0 and must not need its own copy of any
+contract described in this skill. A contract change here is a change for that application
+too: record it in its active task file. The connection and its rules are in `AGENTS.md`,
+The two repositories.
+
 ## Library scope and caching decisions
 
 `packages/*` target external consumers and future applications. Local non-use does not prove a public export, adapter or supported

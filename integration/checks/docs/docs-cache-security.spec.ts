@@ -17,11 +17,13 @@ describe('Documentation cache security contracts', () => {
     import.meta.dirname,
     '..',
     '..',
+    '..',
     'api',
     'README.md',
   );
   const cacheReadmePath = resolve(
     import.meta.dirname,
+    '..',
     '..',
     '..',
     'packages',
@@ -31,6 +33,7 @@ describe('Documentation cache security contracts', () => {
 
   const cacheGuidePath = resolve(
     import.meta.dirname,
+    '..',
     '..',
     '..',
     'docs',

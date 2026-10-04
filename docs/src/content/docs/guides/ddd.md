@@ -134,7 +134,10 @@ application implements the repository contracts of
 
 ## In the repository
 
-Two small applications use `@cqrs-ddd/core` without a pipeline or buses:
+The code of this guide runs in [`integration/profiles/`](https://github.com/aristoteliss/ddd-cqrs/tree/master/integration/profiles), and
+[`integration/members/`](https://github.com/aristoteliss/ddd-cqrs/tree/master/integration/members) puts the same kind of aggregate on the
+`@cqrs-ddd/cqrs` buses. Two more applications use `@cqrs-ddd/core` without a pipeline or
+buses:
 
 - [`integration/library/`](https://github.com/aristoteliss/ddd-cqrs/tree/master/integration/library): a book aggregate with value rules,
   `@Mutable` fields and `@ApplyMutation` methods, and `CommandBaseHandler` subclasses

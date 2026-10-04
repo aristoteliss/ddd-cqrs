@@ -9,9 +9,47 @@ The framework-neutral packages of the `@cqrs-ddd` organization: the DDD primitiv
 (`@cqrs-ddd/uuidv7`, `@cqrs-ddd/safe-stringify`, `@cqrs-ddd/untyped`) and the pipeline
 behaviors (`@cqrs-ddd/pipeline`, `@cqrs-ddd/pipeline-<name>`), and the CQRS buses with
 their handler decorators (`@cqrs-ddd/cqrs`). Every package runs without a framework or a
-dependency-injection container. Framework integrations, such as the
-`@nestjs-pipeline/*` NestJS plugin, live in their own repositories and depend on these
-packages, never the other way round.
+dependency-injection container. Applications on a framework, such as the NestJS `api` of
+nestjs-pipeline, depend on these packages, never the other way round.
+
+## The two repositories
+
+Two sibling repositories form one product (owner, 2026-10-04). Read this before any
+change that touches a package name, an export, a release or a decision the other
+repository relies on.
+
+| | ddd-cqrs | nestjs-pipeline |
+| --- | --- | --- |
+| Path | `~/Source/ddd-cqrs` | `~/Source/nestjs-pipeline` |
+| GitHub | https://github.com/aristoteliss/ddd-cqrs | https://github.com/aristoteliss/nestjs-pipeline |
+| Owns | The one implementation: the framework-neutral `@cqrs-ddd/*` packages, published from 0.5.0; the example application `api/` on Express and Fastify; the documentation site https://aristoteliss.github.io/ddd-cqrs/; the local registry `tools/local-registry/` | The NestJS application `api/`, which from 0.5.0 installs the `@cqrs-ddd/*` packages; the old `@nestjs-pipeline/*` packages, stopped at 0.4.x and kept on npm with every version |
+| Active task | `.claude/tasks/cqrs-ddd-pipeline.md` (the 0.5.0 release) | `.claude/tasks/adopt-cqrs-ddd-packages.md` (`api` on `@cqrs-ddd`, the README notices) |
+
+How they connect:
+
+- **Package code lives only in ddd-cqrs.** nestjs-pipeline installs the packages and never
+  copies or patches their code; a missing feature or a bug found there is fixed in
+  ddd-cqrs.
+- **Dependencies point one way:** nestjs-pipeline depends on `@cqrs-ddd/*`; no
+  `@cqrs-ddd` package imports NestJS or `@nestjs-pipeline/*` (ddd-cqrs `AGENTS.md`,
+  rule 1).
+- **Before anything is published,** nestjs-pipeline installs the packages from the local
+  registry: Verdaccio in Docker, `~/Source/ddd-cqrs/tools/local-registry/`, on
+  `http://127.0.0.1:4873/`, whose README holds every command. A fix in ddd-cqrs is
+  republished there and tested again in nestjs-pipeline.
+- **Package names.** `@nestjs-pipeline/core` continues as `@cqrs-ddd/pipeline` (the engine,
+  `@UsePipeline`, `@SkipPipeline`) and `@cqrs-ddd/cqrs` (the buses);
+  `@nestjs-pipeline/<name>` continues as `@cqrs-ddd/pipeline-<name>`. `@cqrs-ddd/core`,
+  `mikro-orm`, `uuidv7`, `safe-stringify` and `untyped`, published from nestjs-pipeline up
+  to 0.4.2, are published from ddd-cqrs from 0.5.0.
+- **The old packages stay.** Versions 0.1 to 0.4 of `@nestjs-pipeline/*` are never
+  unpublished or deprecated; a README notice, on GitHub and on npm through a README-only
+  0.4.3, points to `@cqrs-ddd` 0.5.0.
+- **Release order:** `@cqrs-ddd` 0.5.0 from ddd-cqrs first, so every link resolves; then
+  nestjs-pipeline's changes; then the 0.4.3 notices. The owner publishes and pushes;
+  agents commit only after asking, never on `master`.
+- **Keep both sides current.** When work in one repository changes something the other
+  relies on, update the other repository's active task file in the same session.
 
 ## Architecture-sensitive changes
 
@@ -209,7 +247,7 @@ context, or the thing it names does too much.
    (`framework-independence.grit`, the release check). A framework integrates through the
    ports these packages define, from its own adapter packages.
    **Stay as clean as possible** (owner, 2026-10-03): an application on another framework,
-   or on none, uses these packages without bringing in half of NestJS; NestJS integration
+   or on none, uses these packages without bringing in half of NestJS; NestJS usage
    lives in the nestjs-pipeline repository. Do not reproduce a framework's architecture
    here: no containers, module systems, controllers, guards, interceptors or lifecycle
    machinery added for parity. Borrowing one or two framework concepts is fair only as a
@@ -327,7 +365,7 @@ context, or the thing it names does too much.
 19. **Names.** Names are short and declarative, with no prefix or suffix their context
     already gives. Follow the Naming section above.
 20. **Guards.** The rules a linter can check are Biome Grit plugins in `biome/plugins/`,
-    with specs in `integration/lint/`; verify with `pnpm lint:plugins` and `pnpm check`. Do
+    with specs in `integration/checks/lint/`; verify with `pnpm lint:plugins` and `pnpm check`. Do
     not loosen a plugin to make a change pass.
 
 ## Before finishing

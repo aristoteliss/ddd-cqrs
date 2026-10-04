@@ -1,0 +1,16 @@
+# Local npm registry (Verdaccio) for trying the packages before they reach npm.
+# Start: docker compose -f tools/local-registry/compose.yaml up -d
+# Stop:  docker compose -f tools/local-registry/compose.yaml down   (add -v to erase it)
+services:
+  registry:
+    image: verdaccio/verdaccio:6
+    container_name: cqrs-ddd-registry
+    ports:
+      - '127.0.0.1:4873:4873'
+    volumes:
+      - ./config.yaml:/verdaccio/conf/config.yaml:ro
+      - storage:/verdaccio/storage
+    restart: unless-stopped
+
+volumes:
+  storage:

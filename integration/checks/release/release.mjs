@@ -13,7 +13,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 
-const root = resolve(import.meta.dirname, '../..');
+const root = resolve(import.meta.dirname, '../../..');
 const template = resolve(import.meta.dirname, 'consumer');
 const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
 const nodeEngine = readJson(resolve(root, 'package.json')).engines.node;

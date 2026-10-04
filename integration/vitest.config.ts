@@ -2,17 +2,20 @@
 
 import { defineConfig } from 'vitest/config';
 
-const applications = ['payments', 'library', 'inventory'];
+const applications = [
+  'payments',
+  'library',
+  'inventory',
+  'profiles',
+  'members',
+];
 
 export default defineConfig({
   test: {
     globals: true,
     root: '.',
     include: [
-      'lint/**/*.spec.ts',
-      'docs/**/*.spec.ts',
-      'ddd/**/*.spec.ts',
-      'pipeline/**/*.spec.ts',
+      'checks/**/*.spec.ts',
       ...applications.map((folder) => `${folder}/**/*.spec.ts`),
     ],
     coverage: {

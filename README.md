@@ -18,6 +18,7 @@ framework or a dependency-injection container.
 | `docs/` | The documentation site |
 | `biome/plugins/` | The Grit plugins that guard the package boundaries |
 | `scripts/` | Generator and validator of the agent context files |
+| `tools/local-registry/` | A local npm registry in Docker, to install the packages elsewhere before they are published |
 
 ## Development
 

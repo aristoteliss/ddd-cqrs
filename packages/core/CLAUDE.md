@@ -100,7 +100,7 @@ pnpm lint:plugins                                # Grit plugin diagnostics
   before fill, absence/expiry ABA, delete-then-recreate, and retry exhaustion. The presence
   of a barrier is not proof a race is prevented — test the coordination through the final write.
 - The repository-wide Grit plugins, including the persistence rules that apply to this
-  package, are tested in `integration/lint/`; this package's specs name no other workspace.
+  package, are tested in `integration/checks/lint/`; this package's specs name no other workspace.
   The nestjs-pipeline example application exercises these decorators against real
   databases in its end-to-end suites.
   Keep those specs passing rather than loosening a plugin.

@@ -1,7 +1,7 @@
 # ddd-cqrs-integration
 
-Repository-wide checks, and small applications that use the `@cqrs-ddd` packages one
-family at a time. `api/` is the application that uses them all together; each folder here
+Small applications that use the `@cqrs-ddd` packages one family at a time, and
+repository-wide checks. `api/` is the application that uses them all together; each folder here
 shows one way to use some of them without the others. Private, never published.
 
 | Folder | What it shows | Packages |
@@ -9,13 +9,19 @@ shows one way to use some of them without the others. Private, never published.
 | `payments/` | A payment service on the pipeline alone: class methods with `@pipeline.wrap`, no buses and no aggregates. Authorization, rate limiting, audit, Zod validation, retries and a feature flag, with the tenant and correlation id taken from where each call entered | `pipeline` and the `pipeline-*` behavior and context packages |
 | `library/` | A library's loans on the domain alone: an aggregate with value rules, `@Mutable` fields and `@ApplyMutation` methods, its events, and `CommandBaseHandler` publishing them, over an in-memory repository | `core` (domain, application, http) |
 | `inventory/` | Repositories on the core persistence decorators: `@PersistedWrite`, `@Cache`, `@MapPersistenceErrors` and `@FromCache` over MikroORM on in-memory SQLite, with the cache in the same database | `core` (persistence), `mikro-orm` |
-| `ddd/` | `@cqrs-ddd/core` handlers and aggregates on the `@cqrs-ddd/cqrs` buses | `core`, `cqrs` |
-| `pipeline/` | Contracts between behavior packages composed on `createCqrs()`: ordering, registration diagnostics, partitioned keys, context sources | `cqrs`, `pipeline`, `pipeline-*` |
+| `profiles/` | A domain handler wrapped by the pipeline, without buses: the code of the DDD guide, with every command audited and its events published inside the pipeline | `core`, `pipeline`, `pipeline-audit` |
+| `members/` | The domain on the buses: an aggregate, its command, query and event handlers registered with `createCqrs()` | `core`, `cqrs` |
 | `plain-node/` | The pipeline on plain JavaScript functions, run by `node --test` with no build | `pipeline`, `pipeline-cache`, `pipeline-idempotency`, `pipeline-zod` |
 | `standard-decorators/` | The pipeline with TypeScript's standard decorators, compiled by `tsc` with `experimentalDecorators: false` | `pipeline`, `pipeline-cache`, `pipeline-tenant`, `pipeline-zod` |
-| `lint/` | The Biome Grit plugins, each proven on a failing and a passing sample | — |
-| `docs/` | The cache security rules the documentation must not contradict | — |
-| `release/` | Packs every package and installs each one alone from its tarball (`pnpm test:release`) | all |
+
+`checks/` holds what is a test by nature, with no application of its own:
+
+| Folder | What it checks |
+| --- | --- |
+| `checks/contracts/` | Behavior packages composed on `createCqrs()`: ordering, registration diagnostics, partitioned keys, context sources, skip isolation |
+| `checks/lint/` | The Biome Grit plugins, each proven on a failing and a passing sample |
+| `checks/docs/` | The cache security rules the documentation must not contradict |
+| `checks/release/` | Packs every package and installs each one alone from its tarball (`pnpm test:release`) |
 
 ## Commands
 
@@ -25,4 +31,5 @@ pnpm --filter ddd-cqrs-integration lint   # type checks
 ```
 
 The packages are loaded from their `dist/`, so run `pnpm build` at the repository root
-first. Coverage covers the three applications, each file at 100%.
+first. Coverage covers the applications, each file at 100%. They compile without
+`emitDecoratorMetadata`: no dependency-injection container reads it.

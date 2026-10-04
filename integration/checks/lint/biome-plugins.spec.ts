@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-const root = resolve(import.meta.dirname, '../..');
+const root = resolve(import.meta.dirname, '../../..');
 let directory: string;
 
 function lintFixture(relativePath: string, source: string) {
@@ -131,7 +131,7 @@ describe('Biome Grit framework-independence plugin', () => {
   it('leaves code outside the packages to its own rules', () => {
     expect(
       lintFixture(
-        'integration/release/consumer/src/consumer.ts',
+        'integration/checks/release/consumer/src/consumer.ts',
         `import { Injectable } from '@nestjs/common';`,
       ).status,
     ).toBe(0);
