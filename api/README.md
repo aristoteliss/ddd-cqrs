@@ -231,8 +231,14 @@ query and event from the trace behavior, with the attributes of the behaviors th
 
 | Suite | Where | Command |
 | --- | --- | --- |
-| Unit and integration, with coverage | `src/**/*.spec.ts`, `test/**/*.spec.ts` | `pnpm test` |
-| End to end | `test/**/*.e2e-spec.ts` | `pnpm test:e2e` |
+| Unit, with coverage: one module, next to its source | `src/**/*.spec.ts` | `pnpm test` |
+| Application: several modules together, with coverage | `test/application/*.spec.ts` | `pnpm test` |
+| End to end, over HTTP | `test/e2e/*.e2e-spec.ts` | `pnpm test:e2e` |
+| End to end, the stores against PostgreSQL and Redis | `test/e2e/infrastructure/*.e2e-spec.ts` | `pnpm test:e2e` |
+
+`test/support/` holds the helpers: `harness.ts` builds the buses over in-memory stores,
+`e2e-app.ts` boots the application for the end-to-end suites. A spec named
+`*.sqlite.spec.ts` runs its module against an in-memory SQLite database.
 
 The end-to-end suites start the real application on Express and on Fastify against
 throwaway libSQL databases and a Redis container (Testcontainers), and drive it with

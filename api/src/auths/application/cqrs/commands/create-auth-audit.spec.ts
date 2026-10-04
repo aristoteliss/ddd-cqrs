@@ -3,7 +3,7 @@
 import { REDACTED } from '@cqrs-ddd/pipeline-audit';
 import { runWithTenant } from '@cqrs-ddd/pipeline-tenant';
 import { afterAll, describe, expect, it } from 'vitest';
-import { memoryCqrs } from '../../../../../test/harness.js';
+import { memoryCqrs } from '../../../../../test/support/harness.js';
 import { InvalidLoginCredentialsException } from '../../../domain/errors/authentication.exception.js';
 import { NodeRefreshTokens } from '../../../infrastructure/node-refresh-tokens.js';
 import type { PrincipalLoginService } from '../../../services/principal-login.service.js';

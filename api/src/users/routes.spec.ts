@@ -11,7 +11,7 @@ import {
   it,
   vi,
 } from 'vitest';
-import { memoryCqrs, mountOptions } from '../../test/harness.js';
+import { memoryCqrs, mountOptions } from '../../test/support/harness.js';
 import { expressApp } from '../http/express.js';
 import { fastifyApp } from '../http/fastify.js';
 import { Role } from '../roles/domain/models/role.entity.js';

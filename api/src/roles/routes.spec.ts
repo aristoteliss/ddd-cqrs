@@ -3,7 +3,7 @@
 import { CaslAuthorizer } from '@cqrs-ddd/pipeline-casl';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { memoryCqrs, mountOptions } from '../../test/harness.js';
+import { memoryCqrs, mountOptions } from '../../test/support/harness.js';
 import { expressApp } from '../http/express.js';
 import { fastifyApp } from '../http/fastify.js';
 import { CreateRoleHandler } from './application/cqrs/commands/create-role.handler.js';

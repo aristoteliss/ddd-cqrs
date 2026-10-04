@@ -1,0 +1,268 @@
+/* Copyright (C) 2026-present Aristotelis — see repository license. */
+
+import type { CommandBus, EventBus, QueryBus } from '@cqrs-ddd/cqrs';
+import { PipelineContext, SET_TENANT_ID } from '@cqrs-ddd/pipeline';
+import type { CaslAuthorizer } from '@cqrs-ddd/pipeline-casl';
+import {
+  IDEMPOTENCY_REPLAYED_ITEM,
+  IdempotencyBehavior,
+  type IdempotencyBehaviorOptions,
+  MemoryIdempotencyStore,
+} from '@cqrs-ddd/pipeline-idempotency';
+import { describe, expect, it, vi } from 'vitest';
+import { sessionPrincipalStore } from '../../src/common/context/session-principal.store.js';
+import { CreateRoleCommand } from '../../src/roles/application/cqrs/commands/create-role.command.js';
+import { CreateRoleHandler } from '../../src/roles/application/cqrs/commands/create-role.handler.js';
+import { RoleCreatedEvent } from '../../src/roles/domain/events/role-created.event.js';
+import {
+  Role,
+  type RoleSnapshot,
+} from '../../src/roles/domain/models/role.entity.js';
+import { CreateUserCommand } from '../../src/users/application/cqrs/commands/create-user.command.js';
+import { CreateUserHandler } from '../../src/users/application/cqrs/commands/create-user.handler.js';
+import { GetUserQuery } from '../../src/users/application/cqrs/queries/get-user.query.js';
+import { UserCreatedEvent } from '../../src/users/domain/events/user-created.event.js';
+import {
+  User,
+  type UserSnapshot,
+} from '../../src/users/domain/models/user.entity.js';
+import { userBody, userRoutes } from '../../src/users/routes.js';
+import { declaredOptions, requiredKey } from '../support/declared-options.js';
+
+const { keyFactory: createUserIdempotencyKey } = declaredOptions<
+  Required<IdempotencyBehaviorOptions>
+>(CreateUserHandler, IdempotencyBehavior);
+const { keyFactory: createRoleIdempotencyKey } = declaredOptions<
+  Required<IdempotencyBehaviorOptions>
+>(CreateRoleHandler, IdempotencyBehavior);
+
+function tenantContext<T>(context: PipelineContext<T>): PipelineContext<T> {
+  context[SET_TENANT_ID]('tenant');
+  return context;
+}
+
+/**
+ * The operation key and the replay scope are both principal-scoped and fail
+ * closed, so these compositions run as an authenticated principal.
+ */
+function asAuthenticatedPrincipal(): void {
+  sessionPrincipalStore.enterWith({
+    id: 'admin-1',
+    type: 'user',
+    tenant: 'tenant',
+  });
+}
+
+describe('Create command idempotency composition', () => {
+  it.each([undefined, 'Engineering'])(
+    'replays user creation with department %s without another write or event',
+    async (department) => {
+      asAuthenticatedPrincipal();
+      const save = vi.fn(async (user: User) => user.toJSON());
+      const publishAll = vi.fn();
+      const handler = new CreateUserHandler(
+        { save },
+        { authorize: vi.fn() } as unknown as CaslAuthorizer,
+        { publishAll } as unknown as EventBus,
+      );
+      const context = () =>
+        tenantContext(
+          new PipelineContext(
+            new CreateUserCommand({
+              username: 'Alice',
+              email: 'alice@example.test',
+              idempotencyKey: 'op-1',
+              ...(department === undefined ? {} : { department }),
+            }),
+            {
+              handlerType: CreateUserHandler,
+              handlerName: 'CreateUserHandler',
+              requestKind: 'command',
+            },
+          ),
+        );
+      const store = new MemoryIdempotencyStore();
+      const behavior = new IdempotencyBehavior(store, {
+        keyFactory: createUserIdempotencyKey,
+      });
+      const firstContext = context();
+      const first = await behavior.handle(firstContext, () =>
+        handler.execute(firstContext.request),
+      );
+      const record = await store.get(
+        requiredKey(createUserIdempotencyKey, firstContext),
+      );
+      expect(record?.status).toBe('completed');
+      expect(record?.response).toEqual(JSON.parse(JSON.stringify(first)));
+
+      const replayContext = context();
+      const replayNext = vi.fn(() => handler.execute(replayContext.request));
+      const replay = await behavior.handle(replayContext, replayNext);
+      expect(replay).toEqual(record?.response);
+      expect(userBody(replay as UserSnapshot)).toEqual(
+        userBody(first as UserSnapshot),
+      );
+      expect(replayContext.items.get(IDEMPOTENCY_REPLAYED_ITEM)).toBe(true);
+      expect(replayNext).not.toHaveBeenCalled();
+      expect(save).toHaveBeenCalledTimes(1);
+      const aggregate = save.mock.calls[0][0];
+      expect(aggregate).toBeInstanceOf(User);
+      expect(publishAll).toHaveBeenCalledExactlyOnceWith(
+        [expect.any(UserCreatedEvent)],
+        aggregate,
+      );
+      expect(aggregate.getUncommittedEvents()).toHaveLength(0);
+    },
+  );
+
+  it('answers a replayed user creation from a fresh authorized read', async () => {
+    asAuthenticatedPrincipal();
+    const save = vi.fn(async (user: User) => user.toJSON());
+    const publishAll = vi.fn();
+    const handler = new CreateUserHandler(
+      { save },
+      { authorize: vi.fn() } as unknown as CaslAuthorizer,
+      { publishAll } as unknown as EventBus,
+    );
+    const behavior = new IdempotencyBehavior(new MemoryIdempotencyStore(), {
+      keyFactory: createUserIdempotencyKey,
+    });
+    const commandBus = {
+      execute: vi.fn((command: CreateUserCommand) => {
+        const context = tenantContext(
+          new PipelineContext(command, {
+            handlerType: CreateUserHandler,
+            handlerName: 'CreateUserHandler',
+            requestKind: 'command',
+          }),
+        );
+        return behavior.handle(context, () => handler.execute(command));
+      }),
+    } as unknown as CommandBus;
+    const queryBus = {
+      execute: vi.fn(async (query: GetUserQuery) => ({
+        id: query.userId,
+        username: 'Alicia',
+      })),
+    } as unknown as QueryBus;
+    const create = userRoutes({ commandBus, queryBus }).find(
+      (route) => route.method === 'POST' && route.path === '/users',
+    );
+    const post = () =>
+      create?.handle({
+        params: {},
+        query: {},
+        body: { name: 'Alice', email: 'alice@example.test' },
+        headers: { 'idempotency-key': 'op-1' },
+        ip: '127.0.0.1',
+        cookies: {},
+      });
+
+    const first = await post();
+    const replay = await post();
+
+    const created = save.mock.calls[0][0];
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(publishAll).toHaveBeenCalledOnce();
+    expect(queryBus.execute).toHaveBeenCalledTimes(2);
+    for (const [query] of vi.mocked(queryBus.execute).mock.calls) {
+      expect(query).toBeInstanceOf(GetUserQuery);
+      expect((query as GetUserQuery).userId).toBe(created.id);
+    }
+    expect(first).toEqual({ id: created.id, name: 'Alicia' });
+    expect(replay).toEqual(first);
+  });
+
+  it('executes new operation IDs and requests without a key independently', async () => {
+    asAuthenticatedPrincipal();
+    const save = vi.fn(async (user: User) => user.toJSON());
+    const handler = new CreateUserHandler(
+      { save },
+      { authorize: vi.fn() } as unknown as CaslAuthorizer,
+      { publishAll: vi.fn() } as unknown as EventBus,
+    );
+    const behavior = new IdempotencyBehavior(new MemoryIdempotencyStore(), {
+      keyFactory: createUserIdempotencyKey,
+    });
+    const create = (idempotencyKey?: string) => {
+      const context = tenantContext(
+        new PipelineContext(
+          new CreateUserCommand({
+            username: 'Alice',
+            email: 'alice@example.test',
+            ...(idempotencyKey ? { idempotencyKey } : {}),
+          }),
+          {
+            handlerType: CreateUserHandler,
+            handlerName: 'CreateUserHandler',
+            requestKind: 'command',
+          },
+        ),
+      );
+      return behavior.handle(context, () => handler.execute(context.request));
+    };
+
+    const first = (await create('op-1')) as UserSnapshot;
+    const recreated = (await create('op-2')) as UserSnapshot;
+    await create();
+    await create();
+
+    expect(save).toHaveBeenCalledTimes(4);
+    expect(recreated.id).not.toBe(first.id);
+  });
+
+  it('replays role creation without another write or event', async () => {
+    asAuthenticatedPrincipal();
+    const save = vi.fn(async (role: Role) => role.toJSON());
+    const publishAll = vi.fn();
+    const handler = new CreateRoleHandler(
+      { save },
+      { authorize: vi.fn() } as unknown as CaslAuthorizer,
+      { publishAll } as unknown as EventBus,
+    );
+    const context = () =>
+      tenantContext(
+        new PipelineContext(
+          new CreateRoleCommand({ name: 'admin', idempotencyKey: 'op-1' }),
+          {
+            handlerType: CreateRoleHandler,
+            handlerName: 'CreateRoleHandler',
+            requestKind: 'command',
+          },
+        ),
+      );
+    const store = new MemoryIdempotencyStore();
+    const behavior = new IdempotencyBehavior(store, {
+      keyFactory: createRoleIdempotencyKey,
+    });
+    const firstContext = context();
+    const first = await behavior.handle(firstContext, () =>
+      handler.execute(firstContext.request),
+    );
+    const record = await store.get(
+      requiredKey(createRoleIdempotencyKey, firstContext),
+    );
+    expect(record?.status).toBe('completed');
+    expect(record?.response).toEqual(JSON.parse(JSON.stringify(first)));
+
+    const replayContext = context();
+    const replayNext = vi.fn(() => handler.execute(replayContext.request));
+    const replay = await behavior.handle(replayContext, replayNext);
+    expect(replay).toEqual(record?.response);
+    const { id, name } = replay as RoleSnapshot;
+    expect({ id, name }).toEqual({
+      id: (first as RoleSnapshot).id,
+      name: (first as RoleSnapshot).name,
+    });
+    expect(replayContext.items.get(IDEMPOTENCY_REPLAYED_ITEM)).toBe(true);
+    expect(replayNext).not.toHaveBeenCalled();
+    expect(save).toHaveBeenCalledTimes(1);
+    const aggregate = save.mock.calls[0][0];
+    expect(aggregate).toBeInstanceOf(Role);
+    expect(publishAll).toHaveBeenCalledExactlyOnceWith(
+      [expect.any(RoleCreatedEvent)],
+      aggregate,
+    );
+    expect(aggregate.getUncommittedEvents()).toHaveLength(0);
+  });
+});

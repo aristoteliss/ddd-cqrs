@@ -1,0 +1,52 @@
+/* Copyright (C) 2026-present Aristotelis — see repository license. */
+import { MissingTenantContextError } from '@cqrs-ddd/core/domain';
+import request from 'supertest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { GetUsersQueryRepository } from '../../src/users/persistence/get-users.query-repository.js';
+import { ADAPTERS, bootstrapE2E, type E2EContext } from '../support/e2e-app.js';
+
+describe.each(ADAPTERS)(
+  'missing tenant context at the HTTP boundary (e2e) on %s',
+  (adapter) => {
+    let ctx: E2EContext;
+    let http: E2EContext['server'];
+
+    const admin = JSON.stringify({
+      id: 'missing-tenant-admin',
+      email: 'missing-tenant-admin@acme.test',
+      department: 'platform',
+      grants: ['all|manage|*'],
+    });
+
+    beforeAll(async () => {
+      ctx = await bootstrapE2E({ adapter });
+      http = ctx.server;
+    });
+
+    afterAll(async () => {
+      await ctx?.close();
+    });
+
+    it('answers a generic 500, because a missing tenant is server misconfiguration', async () => {
+      const execute = vi
+        .spyOn(GetUsersQueryRepository.prototype, 'find')
+        .mockRejectedValueOnce(
+          new MissingTenantContextError('cache key derivation'),
+        );
+
+      const response = await request(http)
+        .get('/users')
+        .set('x-tenant-schema', 'tenant')
+        .set('x-test-user', admin);
+
+      expect(execute).toHaveBeenCalledOnce();
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({
+        statusCode: 500,
+        error: 'Internal Server Error',
+        message: 'Internal server error',
+      });
+      execute.mockRestore();
+    });
+  },
+);

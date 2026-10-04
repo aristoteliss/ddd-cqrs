@@ -35,7 +35,7 @@ its guides carry the usage code as snippets.
 ## Technology Stack
 
 <!-- context:generated-start technology-stack -->
-- **Languages** (file counts, excluded directories omitted): `.ts` 776, `.md` 70, `.grit` 7, `.mjs` 4, `.py` 3
+- **Languages** (file counts, excluded directories omitted): `.ts` 771, `.md` 71, `.grit` 7, `.mjs` 4, `.py` 3
 - **Runtime engines** (root `package.json`): `node` >=22.12.0, `pnpm` >=9.0.0
 - **Package manager evidence**: `pnpm-lock.yaml`.
 - **Integrations**: listed with their purpose under Dependencies and Integrations.
@@ -190,7 +190,10 @@ path given before relying on it.*
   `integration/library/` (core domain only), `integration/inventory/` (core persistence
   decorators with `mikro-orm` on SQLite).
   `integration/pipeline/` holds the cross-package behavior contracts on `createCqrs()`;
-  `api/test/` keeps only suites that exercise the application.
+  `api/test/` keeps only suites that exercise the application: `api/test/application/`
+  (several modules), `api/test/e2e/` (over HTTP), `api/test/e2e/infrastructure/` (stores
+  against containers) and `api/test/support/`; a spec of one module sits next to it in
+  `api/src/`.
 - `docs/` builds with `pnpm docs:build`; `starlight-links-validator` fails the build on a
   broken link. A package with an `/http` entry point needs `typedoc.json`
   listing every entry and `@module main` on its `index.ts`.
@@ -342,8 +345,8 @@ Workspaces with the same scripts share a row.
   `CommandBaseHandler` through a pipeline (the only workspace that uses both families).
 - **Example application**: `api/` unit and integration specs (`src/**/*.spec.ts`,
   `test/**/*.spec.ts`, `pnpm --filter ddd-cqrs-api test`) build first, because the CLI
-  spec runs `dist`; `api/test/harness.ts` builds the buses over in-memory stores. The
-  end-to-end suites (`test/**/*.e2e-spec.ts`, `test:e2e`, `api/vitest.config.e2e.ts`)
+  spec runs `dist`; `api/test/support/harness.ts` builds the buses over in-memory stores. The
+  end-to-end suites (`test/e2e/**/*.e2e-spec.ts`, `test:e2e`, `api/vitest.config.e2e.ts`)
   boot the real application on Express and Fastify with `api/test/support/e2e-app.ts`
   against throwaway libSQL databases and Testcontainers Redis or PostgreSQL; they need
   Docker and are not part of `pnpm verify:all`.
@@ -399,13 +402,13 @@ secret value.*
 ## Snapshot Metadata
 
 <!-- context:generated-start metadata -->
-- Generated at: 2026-10-04T07:49:59Z
-- Git commit: c93b8d76201e7bafabccd9639743226e796a6f3a
+- Generated at: 2026-10-04T08:01:00Z
+- Git commit: 2f25925fbc03bf2689a1fb80ab5ff2741b11b1a5
 - Git branch: develop
 - Uncommitted changes when generated: yes
 - Generator: `scripts/update-claude-snapshot.py` version 1.0.0
 - Snapshot status: generated — structural inspection only, no code executed
-- Files inspected: 952
+- Files inspected: 948
 - Included top-level directories: `.agents`, `.archify`, `.claude`, `.github`, `api`, `biome`, `docs`, `integration`, `packages`, `scripts`
 - Excluded directory names: `.cache`, `.git`, `.gradle`, `.idea`, `.mypy_cache`, `.next`, `.nuxt`, `.parcel-cache`, `.pnpm-store`, `.pytest_cache`, `.ruff_cache`, `.svelte-kit`, `.terraform`, `.tmp`, `.tox`, `.turbo`, `.venv`, `.vscode`, `__pycache__`, `bower_components`, `build`, `coverage`, `dist`, `node_modules`, `out`, `target`, `vendor`, `venv`, `virtualenv`
 - Excluded file patterns: `.env`, `.env.*`, `*.env`, `*.pem`, `*.key`, `*.pfx`, `*.p12`, `*.jks`, `*.keystore`, `id_rsa*`, `id_ed25519*`, `*credentials*`, `*.secret`, `secrets.*`

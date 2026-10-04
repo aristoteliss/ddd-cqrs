@@ -60,7 +60,10 @@ bridge, documentation and examples) and steps 8.1 and 8.2 are done and committed
   of the old plugin dropped); `integration/` gained three applications that use one
   package family each (`payments/`, `library/`, `inventory/`) at 100% coverage; `api`
   and `integration` report coverage; the Archify skills moved to `.archify/skills/`.
-  Remaining before the owner's commands: `pnpm verify:all` and
+  Committed as `f79af9f` and `2f25925`; `pnpm verify:log` passed on that tree
+  (2,882/2,882 Vitest tests, 7/7 `node --test`, 20 packages packed and installed alone;
+  `api` coverage 85.95%, `integration` 100%). The guides link to the `integration/`
+  applications. Remaining before the owner's commands:
   `pnpm --filter ddd-cqrs-api test:e2e` (needs Docker).
 - [ ] 8.4 A scratch consumer installs the published packages from npm and runs the
   plain-function example.
@@ -121,10 +124,10 @@ Archify output (`.archify`, `.agents/skills/archify`,
 
 ## Next Steps
 
-1. Commit 8.3a.
-2. `pnpm verify:all` and the end-to-end suites.
-3. The owner runs the commands of 8.3.
-4. Step 8.4.
+1. `nestjs-pipeline-local-trial.md`: nestjs-pipeline on the local packages and the
+   deprecation messages, before anything is published.
+2. The owner runs the commands of 8.3.
+3. Step 8.4.
 
 ## Snapshot Impact
 
