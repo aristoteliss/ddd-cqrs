@@ -1,0 +1,17 @@
+{
+  "skipLink.label": "Μετάβαση στο περιεχόμενο",
+  "search.label": "Αναζήτηση",
+  "tableOfContents.title": "Σε αυτή τη σελίδα",
+  "tableOfContents.overview": "Επισκόπηση",
+  "themeSelect.accessibleLabel": "Επιλογή θέματος",
+  "languageSelect.accessibleLabel": "Επιλογή γλώσσας",
+  "aside.note": "Σημείωση",
+  "aside.tip": "Συμβουλή",
+  "aside.caution": "Προσοχή",
+  "aside.danger": "Κίνδυνος",
+  "page.editLink": "Επεξεργασία σελίδας",
+  "page.lastUpdated": "Τελευταία ενημέρωση:",
+  "page.previousLink": "Προηγούμενο",
+  "page.nextLink": "Επόμενο",
+  "page.draft": "Αυτό το περιεχόμενο είναι πρόχειρο."
+}

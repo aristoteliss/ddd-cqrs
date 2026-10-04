@@ -23,7 +23,7 @@ repository relies on.
 | Path | `~/Source/ddd-cqrs` | `~/Source/nestjs-pipeline` |
 | GitHub | https://github.com/aristoteliss/ddd-cqrs | https://github.com/aristoteliss/nestjs-pipeline |
 | Owns | The one implementation: the framework-neutral `@cqrs-ddd/*` packages and their NestJS adapter `@cqrs-ddd/nestjs`, published from 0.5.0; the example application `api/` on Express and Fastify; the documentation site https://aristoteliss.github.io/ddd-cqrs/; the local registry `tools/local-registry/` | The NestJS application `api/`, which from 0.5.0 installs the `@cqrs-ddd/*` packages; the old `@nestjs-pipeline/*` packages, stopped at 0.4.x and kept on npm with every version, and `@nestjs-pipeline/cqrs-ddd`, a facade that re-exports `@cqrs-ddd/nestjs` |
-| Active task | `.claude/tasks/cqrs-ddd-pipeline.md` (the 0.5.0 release) | `.claude/tasks/adopt-cqrs-ddd-packages.md` (`api` on `@cqrs-ddd`, the README notices) |
+| Active task | none: the 0.5.0 release is done (2026-10-04) | none: `api` runs on `@cqrs-ddd` 0.5.0 from npm and the 0.4.3 notices are published (2026-10-04) |
 
 How they connect:
 

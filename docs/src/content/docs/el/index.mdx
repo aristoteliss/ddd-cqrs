@@ -1,0 +1,55 @@
+---
+title: ddd-cqrs
+description: Behaviors pipeline και δομικά στοιχεία DDD για TypeScript, χωρίς framework.
+template: splash
+editUrl: false
+hero:
+  tagline: Τυλίξτε απλές συναρτήσεις και μεθόδους κλάσεων με logging, επικύρωση, εξουσιοδότηση, caching, idempotency και άλλα, μοντελοποιήστε το domain με aggregates και commands, και εκτελέστε commands, queries και events με το API του NestJS CQRS, όλα χωρίς framework.
+  actions:
+    - text: Πρώτα βήματα
+      link: /ddd-cqrs/el/getting-started/
+      icon: right-arrow
+    - text: Επισκόπηση
+      link: /ddd-cqrs/el/overview/
+      variant: minimal
+    - text: Αναφορά API
+      link: /ddd-cqrs/api/
+      variant: minimal
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## Τι θα βρείτε εδώ
+
+<CardGrid>
+  <LinkCard
+    title="Πρώτα βήματα"
+    description="Εγκαταστήστε τη μηχανή, δημιουργήστε ένα pipeline και τυλίξτε μια συνάρτηση."
+    href="/ddd-cqrs/el/getting-started/"
+  />
+  <LinkCard
+    title="Έννοιες"
+    description="Πώς ονομάζεται μια λειτουργία και τι είδους είναι, με ποια σειρά εκτελούνται τα behaviors και τι περιέχει το context."
+    href="/ddd-cqrs/el/concepts/wrapping/"
+  />
+  <LinkCard
+    title="CQRS χωρίς NestJS"
+    description="Handlers με decorators, ένα pipeline ανά handler και τα buses του createCqrs(), χωρίς container."
+    href="/ddd-cqrs/el/guides/cqrs/"
+  />
+  <LinkCard
+    title="Οδηγοί"
+    description="Απλό Node.js, μέθοδοι κλάσεων, CQRS, μετάβαση από NestJS, DDD, HTTP με Express και Fastify, multi-tenancy, εργασίες παρασκηνίου, testing, δικά σας behaviors και σφάλματα HTTP."
+    href="/ddd-cqrs/el/guides/plain-node/"
+  />
+  <LinkCard
+    title="Ενσωμάτωση με NestJS"
+    description="Τρέξτε τους handlers του NestJS και του @nestjs/cqrs μέσα από pipelines behaviors, με το ErrorFilter του @cqrs-ddd/nestjs."
+    href="/ddd-cqrs/el/packages/nestjs/"
+  />
+  <LinkCard
+    title="Πακέτα"
+    description="Μία σελίδα ανά πακέτο: τι κάνει, πώς εγκαθίσταται και πώς ρυθμίζεται."
+    href="/ddd-cqrs/el/packages/pipeline/"
+  />
+</CardGrid>

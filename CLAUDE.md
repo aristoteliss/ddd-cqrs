@@ -109,7 +109,7 @@ found there is fixed here and tried through the local registry
 (`tools/local-registry/`) before anything is published. Release order, package names and
 the rules of both sides: [AGENTS.md, The two repositories](AGENTS.md#the-two-repositories).
 When a change here affects what nestjs-pipeline relies on, update its active task file
-(`~/Source/nestjs-pipeline/.claude/tasks/adopt-cqrs-ddd-packages.md`) in the same session.
+under `~/Source/nestjs-pipeline/.claude/tasks/`, if one exists, in the same session.
 
 ## Framework neutrality
 

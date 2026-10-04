@@ -17,8 +17,8 @@ container; the `@nestjs-pipeline/*` packages of the nestjs-pipeline repository a
 NestJS adapters over them. `api/` is the real-life example application of the packages.
 
 The DDD packages and the utilities moved from nestjs-pipeline with their history at 0.4.2;
-the pipeline engine and its behavior packages were copied and made framework-neutral by
-the active task `.claude/tasks/cqrs-ddd-pipeline.md`. `docs/` is the documentation site;
+the pipeline engine and its behavior packages were copied and made framework-neutral for
+the 0.5.0 release, which also added the NestJS adapter `@cqrs-ddd/nestjs`. `docs/` is the documentation site;
 its guides carry the usage code as snippets.
 <!-- context:manual-end purpose -->
 
@@ -35,7 +35,7 @@ its guides carry the usage code as snippets.
 ## Technology Stack
 
 <!-- context:generated-start technology-stack -->
-- **Languages** (file counts, excluded directories omitted): `.ts` 792, `.md` 74, `.grit` 7, `.mjs` 4, `.py` 3
+- **Languages** (file counts, excluded directories omitted): `.ts` 792, `.md` 110, `.grit` 7, `.mjs` 4, `.py` 3
 - **Runtime engines** (root `package.json`): `node` >=22.12.0, `pnpm` >=9.0.0
 - **Package manager evidence**: `pnpm-lock.yaml`.
 - **Integrations**: listed with their purpose under Dependencies and Integrations.
@@ -414,13 +414,13 @@ secret value.*
 ## Snapshot Metadata
 
 <!-- context:generated-start metadata -->
-- Generated at: 2026-10-04T16:06:33Z
-- Git commit: d2d6720d8e49bbb688a459411b57e4a8c7af6df9
-- Git branch: develop
+- Generated at: 2026-10-04T18:39:22Z
+- Git commit: c85685978f21b3e88f8d64f05245dcaf79037746
+- Git branch: master
 - Uncommitted changes when generated: yes
 - Generator: `scripts/update-claude-snapshot.py` version 1.0.0
 - Snapshot status: generated — structural inspection only, no code executed
-- Files inspected: 978
+- Files inspected: 1017
 - Included top-level directories: `.agents`, `.archify`, `.claude`, `.github`, `api`, `biome`, `docs`, `integration`, `packages`, `scripts`, `tools`
 - Excluded directory names: `.cache`, `.git`, `.gradle`, `.idea`, `.mypy_cache`, `.next`, `.nuxt`, `.parcel-cache`, `.pnpm-store`, `.pytest_cache`, `.ruff_cache`, `.svelte-kit`, `.terraform`, `.tmp`, `.tox`, `.turbo`, `.venv`, `.vscode`, `__pycache__`, `bower_components`, `build`, `coverage`, `dist`, `node_modules`, `out`, `target`, `vendor`, `venv`, `virtualenv`
 - Excluded file patterns: `.env`, `.env.*`, `*.env`, `*.pem`, `*.key`, `*.pfx`, `*.p12`, `*.jks`, `*.keystore`, `id_rsa*`, `id_ed25519*`, `*credentials*`, `*.secret`, `secrets.*`

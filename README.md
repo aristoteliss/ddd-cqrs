@@ -34,6 +34,25 @@ pnpm verify:all   # lint, tests, build, release check
 
 `AGENTS.md` holds the repository rules every contributor follows.
 
+### Releasing
+
+Every package is released in lockstep, at one version.
+
+1. Try the packages where they are used before publishing: publish them to the local
+   registry (`tools/local-registry/`, whose README holds the commands) and install them
+   there, in nestjs-pipeline's `api` for example.
+2. On a clean, up-to-date `master`: `pnpm install --frozen-lockfile`, `pnpm verify:all`,
+   `npm whoami`, then `pnpm publish:all --tag next`. It copies the license files and
+   publishes every package; each rebuilds in `prepublishOnly`, and `pnpm publish` skips a
+   version already on the registry.
+3. Once the release is confirmed, move `latest` to it for every package that `--tag next`
+   left on an older version:
+   `npm dist-tag add @cqrs-ddd/<name>@<version> latest`.
+4. Tag each package as `<name>@<version>` and the release as `v<version>`, then push the
+   tags; pushing `master` redeploys the documentation site.
+5. Projects that tried the local registry re-resolve the packages from npm
+   (`pnpm update "@cqrs-ddd/*"`): a rebuilt tarball has a different integrity hash.
+
 ## License and Commercial Use
 
 This software is **Dual-Licensed**.

@@ -9,6 +9,11 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'ddd-cqrs',
+      defaultLocale: 'root',
+      locales: {
+        root: { label: 'English', lang: 'en' },
+        el: { label: 'Ελληνικά', lang: 'el' },
+      },
       description:
         'Pipeline behaviors and DDD building blocks for TypeScript, with no framework.',
       social: [
@@ -62,21 +67,33 @@ export default defineConfig({
       sidebar: [
         {
           label: 'Start',
+          translations: { el: 'Ξεκίνημα' },
           items: [
-            { label: 'Overview', slug: 'overview' },
-            { label: 'Getting started', slug: 'getting-started' },
+            {
+              label: 'Overview',
+              translations: { el: 'Επισκόπηση' },
+              slug: 'overview',
+            },
+            {
+              label: 'Getting started',
+              translations: { el: 'Πρώτα βήματα' },
+              slug: 'getting-started',
+            },
           ],
         },
         {
           label: 'Concepts',
+          translations: { el: 'Έννοιες' },
           items: [{ autogenerate: { directory: 'concepts' } }],
         },
         {
           label: 'Guides',
+          translations: { el: 'Οδηγοί' },
           items: [{ autogenerate: { directory: 'guides' } }],
         },
         {
           label: 'Packages',
+          translations: { el: 'Πακέτα' },
           items: [{ autogenerate: { directory: 'packages' } }],
         },
         typeDocSidebarGroup,
