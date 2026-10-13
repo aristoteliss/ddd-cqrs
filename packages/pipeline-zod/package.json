@@ -61,5 +61,12 @@
   "dependencies": {
     "@cqrs-ddd/untyped": "workspace:^"
   },
-  "keywords": []
+  "keywords": [
+    "pipeline",
+    "cqrs",
+    "validation",
+    "zod",
+    "schema",
+    "behavior"
+  ]
 }

@@ -17,6 +17,14 @@
   "bugs": {
     "url": "https://github.com/aristoteliss/ddd-cqrs/issues"
   },
+  "keywords": [
+    "pipeline",
+    "cqrs",
+    "correlation-id",
+    "request-id",
+    "tracing",
+    "asynclocalstorage"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

@@ -35,7 +35,7 @@ its guides carry the usage code as snippets.
 ## Technology Stack
 
 <!-- context:generated-start technology-stack -->
-- **Languages** (file counts, excluded directories omitted): `.ts` 792, `.md` 110, `.grit` 7, `.mjs` 4, `.py` 3
+- **Languages** (file counts, excluded directories omitted): `.ts` 795, `.md` 114, `.grit` 7, `.mjs` 7, `.py` 3
 - **Runtime engines** (root `package.json`): `node` >=22.12.0, `pnpm` >=9.0.0
 - **Package manager evidence**: `pnpm-lock.yaml`.
 - **Integrations**: listed with their purpose under Dependencies and Integrations.
@@ -47,6 +47,7 @@ its guides carry the usage code as snippets.
 | Path | Role | Invocation |
 | --- | --- | --- |
 | `.github/workflows/docs.yml` | CI pipeline definition | Runs in CI |
+| `.github/workflows/verify.yml` | CI pipeline definition | Runs in CI |
 | `api/src/bootstrap.ts` | Application bootstrap / composition | workspace `ddd-cqrs-api` |
 | `api/src/main.ts` | Process entry point | workspace `ddd-cqrs-api` |
 | `api/src/tracing.ts` | Telemetry initialization (loaded before the framework) | workspace `ddd-cqrs-api` |
@@ -75,6 +76,7 @@ editor/tooling directories are excluded (see Snapshot Metadata).
 | `.github/` | Needs verification |
 | `api/` | The users API on @cqrs-ddd: Express and Fastify routes with Zod, the CQRS buses and pipelines, DDD aggregates and decorated repositories |
 | `biome/` | Needs verification |
+| `demo/` | The first example of the @cqrs-ddd packages, on their published versions: a validated and logged function on plain Node.js |
 | `docs/` | The documentation site of the @cqrs-ddd packages. |
 | `integration/` | Repository-wide checks and applications built on the packages one at a time: the Biome Grit plugin specs, the release verification, cross-package pipeline contracts, a pipeline-only payments service, a domain-only library, MikroORM repositories, a plain Node.js module, standard decorators and a NestJS application on the adapter, tested over HTTP |
 | `packages/` | Workspace container — 21 package(s); see the workspace table below |
@@ -182,7 +184,13 @@ path given before relying on it.*
   and Bun, and type-checks against `tsconfig.json` (NodeNext) and `tsconfig.bundler.json`.
 ### Site and runnable checks — `docs/`, `integration/`
 
-- The guides show focused snippets, never whole files. The code they show runs in
+- The guides show focused snippets, never whole files, except the three first examples,
+  each quoted whole and checked by a test that fails when a page differs from the file:
+  `integration/plain-node/create-order.mjs` (root README, getting-started pages, and
+  copied to `demo/`, which installs the published packages outside the workspace),
+  `integration/standard-decorators/create-user.mts` (the `@cqrs-ddd/cqrs` pages) and
+  `integration/nestjs/invoices.ts` (the `@cqrs-ddd/nestjs` pages). The code the guides
+  show runs in
   `integration/`: `integration/plain-node/` (`.mjs` run by `node --test` with no build),
   `integration/standard-decorators/` (a real `tsc` build with `experimentalDecorators:
   false`, then `node --test`) and `integration/profiles/` (Vitest). A change
@@ -366,7 +374,10 @@ Workspaces with the same scripts share a row.
   temporary directory and lints them with this repository's `biome.json` (plugin paths
   made absolute, every other rule off).
 - **Release**: `pnpm test:release` needs Bun on `PATH` and at least one package.
-- **Gaps**: no CI runs these checks; `pnpm verify:all` is a local responsibility.
+- **CI**: `.github/workflows/verify.yml` has three jobs. `verify` builds and runs
+  `pnpm verify:all` on Node.js 22.17.0 and 24, with Bun. `minimum-node` runs the package
+  tests on Node.js 22.12.0, without `mikro-orm` and without
+  `packages/core/domain/domain-entry-point.spec.ts`. `e2e` runs `pnpm test:e2e`.
 <!-- context:manual-end testing-strategy -->
 
 ## Security and Operational Notes
@@ -405,6 +416,10 @@ secret value.*
 - **`import './tracing.js'` must stay the first import of `api/src/bootstrap.ts`**, so the
   OpenTelemetry SDK patches `http` before Express or Fastify load; Biome does not reorder
   a side-effect import.
+- **pnpm 11 needs Node.js 22.13, and one core spec needs 22.15.** The packages declare
+  22.12.0, so the `minimum-node` job of `.github/workflows/verify.yml` installs and builds
+  on a newer Node.js and runs Vitest directly; `domain-entry-point.spec.ts` uses
+  `module.registerHooks` and is left out there.
 - **`pnpm test:release` cannot run on an empty workspace.** It stops with "Expected
   nonempty, unique publishable package names", and it reads the installed
   `@mikro-orm/core` manifest of the mikro-orm package for that package's `engines.node`
@@ -414,14 +429,14 @@ secret value.*
 ## Snapshot Metadata
 
 <!-- context:generated-start metadata -->
-- Generated at: 2026-10-04T18:39:22Z
-- Git commit: c85685978f21b3e88f8d64f05245dcaf79037746
-- Git branch: master
+- Generated at: 2026-10-16T11:34:51Z
+- Git commit: d4ea1f0901971bc23f4920a39e0943f63f4682bd
+- Git branch: promotion-readiness
 - Uncommitted changes when generated: yes
 - Generator: `scripts/update-claude-snapshot.py` version 1.0.0
 - Snapshot status: generated — structural inspection only, no code executed
-- Files inspected: 1017
-- Included top-level directories: `.agents`, `.archify`, `.claude`, `.github`, `api`, `biome`, `docs`, `integration`, `packages`, `scripts`, `tools`
+- Files inspected: 1031
+- Included top-level directories: `.agents`, `.archify`, `.claude`, `.github`, `api`, `biome`, `demo`, `docs`, `integration`, `packages`, `scripts`, `tools`
 - Excluded directory names: `.cache`, `.git`, `.gradle`, `.idea`, `.mypy_cache`, `.next`, `.nuxt`, `.parcel-cache`, `.pnpm-store`, `.pytest_cache`, `.ruff_cache`, `.svelte-kit`, `.terraform`, `.tmp`, `.tox`, `.turbo`, `.venv`, `.vscode`, `__pycache__`, `bower_components`, `build`, `coverage`, `dist`, `node_modules`, `out`, `target`, `vendor`, `venv`, `virtualenv`
 - Excluded file patterns: `.env`, `.env.*`, `*.env`, `*.pem`, `*.key`, `*.pfx`, `*.p12`, `*.jks`, `*.keystore`, `id_rsa*`, `id_ed25519*`, `*credentials*`, `*.secret`, `secrets.*`
 

@@ -17,7 +17,7 @@ sources for the tenant and the correlation id.
 pnpm add @cqrs-ddd/pipeline
 ```
 
-Requires Node.js 22.12 or later, or another runtime with `AsyncLocalStorage` (Bun, Deno).
+Requires Node.js 22.12 or later. The release check also loads every entry point in Bun; the test suites run on Node.js only, and no other runtime is tested.
 
 ## Usage
 

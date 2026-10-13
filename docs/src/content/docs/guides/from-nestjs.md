@@ -7,8 +7,10 @@ sidebar:
 
 Teams using NestJS have two architectural choices when adopting `@cqrs-ddd`:
 
-1. **Keep NestJS and enhance it** with [`@cqrs-ddd/nestjs`](/ddd-cqrs/packages/nestjs/): Keep your existing `@nestjs/cqrs` handlers, modules, dependency injection, and controllers. The adapter wraps handlers in behavior pipelines, provides global exception filtering, and manages correlation and job context.
-2. **Replace NestJS completely** with [`@cqrs-ddd/cqrs`](/ddd-cqrs/packages/cqrs/): Build framework-free applications on plain Node.js, Fastify, or Express, constructing handlers with `new` and registering them on `createCqrs()`.
+1. **Keep NestJS and add the adapter** [`@cqrs-ddd/nestjs`](/ddd-cqrs/packages/nestjs/): Keep your existing `@nestjs/cqrs` handlers, buses, modules, dependency injection, and controllers. The adapter wraps handlers in behavior pipelines, provides global exception filtering, and manages correlation and job context. Nothing is replaced.
+2. **Move to framework-free CQRS** with [`@cqrs-ddd/cqrs`](/ddd-cqrs/packages/cqrs/): Build applications without NestJS on plain Node.js, Fastify, or Express, constructing handlers with `new` and registering them on `createCqrs()`. It covers handlers and buses, not every feature of `@nestjs/cqrs`: see [What Is Not Included](#what-is-not-included).
+
+The two are independent. An existing NestJS application takes the first and never needs the second. An application on the `@nestjs-pipeline/*` 0.4.x packages starts with [From @nestjs-pipeline 0.4.x](/ddd-cqrs/guides/from-nestjs-pipeline/).
 
 ## Architectural Comparison
 
@@ -40,6 +42,8 @@ pnpm add @cqrs-ddd/nestjs @cqrs-ddd/pipeline @cqrs-ddd/core @nestjs/cqrs
 - Controllers inject `CommandBus` and `QueryBus` as usual.
 
 ### What You Add
+
+[Minimal Setup](/ddd-cqrs/packages/nestjs/#minimal-setup) is a complete root module with every import and provider, run by a test. The steps below show its parts.
 
 1. **`PipelineModule.forRoot()`** in `AppModule`:
    ```typescript
@@ -74,15 +78,16 @@ pnpm add @cqrs-ddd/nestjs @cqrs-ddd/pipeline @cqrs-ddd/core @nestjs/cqrs
      }
    }
    ```
+   Each behavior a handler names is a provider of a module: here `ZodValidationBehavior`, and `IdempotencyBehavior` built with its store.
 
 3. **Domain Event publication**:
-   Subclass `CommandBaseHandler` from `@cqrs-ddd/core/application` and pass the injected `@nestjs/cqrs` `EventBus`. When `handle(command)` returns an `AggregateRoot`, uncommitted domain events are automatically published through `eventBus.publishAll()` and uncommitted.
+   Subclass `CommandBaseHandler` from `@cqrs-ddd/core/application` and pass the injected `@nestjs/cqrs` `EventBus`. When `handle(command)` returns an `AggregateRoot`, uncommitted domain events are automatically published through `eventBus.publishAll()` and uncommitted. Delivery stays what that `EventBus` provides: the adapter adds no durable messaging and no outbox.
 
 ---
 
 ## Option 2: Migrating off NestJS to `@cqrs-ddd/cqrs`
 
-If your goal is to drop NestJS for a lightweight, framework-free architecture (Express, Fastify, AWS Lambda, Cloudflare Workers), use `@cqrs-ddd/cqrs`.
+If your goal is to drop NestJS for a framework-free architecture on plain Node.js, Express or Fastify, use `@cqrs-ddd/cqrs`.
 
 ```bash
 pnpm add @cqrs-ddd/cqrs @cqrs-ddd/pipeline @cqrs-ddd/core
@@ -90,7 +95,7 @@ pnpm add @cqrs-ddd/cqrs @cqrs-ddd/pipeline @cqrs-ddd/core
 
 ### What Carries Over
 
-The core CQRS API matches `@nestjs/cqrs`:
+The handler decorators, the handler interfaces and the bus names match `@nestjs/cqrs`:
 
 | `@nestjs/cqrs` | `@cqrs-ddd/cqrs` |
 | --- | --- |
@@ -101,6 +106,10 @@ The core CQRS API matches `@nestjs/cqrs`:
 | `IQueryHandler<TQuery>` | `IQueryHandler<TQuery>` from `@cqrs-ddd/cqrs` |
 | `IEventHandler<TEvent>` | `IEventHandler<TEvent>` from `@cqrs-ddd/cqrs` |
 | `CommandBus`, `QueryBus`, `EventBus` | Returned by `createCqrs()` |
+
+### What Is Not Included
+
+`@cqrs-ddd/cqrs` does not replace every feature of `@nestjs/cqrs`. It has no sagas, no `ofType` RxJS pipes, no `AsyncContext` and no `EventPublisher` merge mechanisms; aggregates publish events through `CommandBaseHandler`. Its `EventBus` delivers in process: it is not durable messaging and not an outbox. An application that relies on one of these keeps NestJS and takes Option 1.
 
 ### What the Application Does Itself
 
@@ -157,9 +166,8 @@ export function buildApplication(users: UsersRepository, auditSink: AuditSink) {
 - **Async missing handler errors**: In `@cqrs-ddd/cqrs`, `commandBus.execute()` and `queryBus.execute()` reject asynchronously with `CommandHandlerNotFoundException` or `QueryHandlerNotFoundException`. `@nestjs/cqrs` throws synchronously.
 - **Graceful shutdown**: `cqrs.close()` awaits all running asynchronous event handlers before resolving. In NestJS, `app.close()` does not track background event handler completion.
 - **Event error isolation**: As in `@nestjs/cqrs`, an event handler's failure goes to the `UnhandledExceptionBus` and the handler keeps receiving later events; `@cqrs-ddd/cqrs` also logs it, or rethrows it with `rethrowUnhandled: true`.
-- **Not included in `@cqrs-ddd/cqrs`**: Sagas, `ofType` RxJS pipes, `AsyncContext`, and `EventPublisher` merge mechanisms. Aggregates publish events through `CommandBaseHandler`.
 
 ## Choosing Between the Two
 
 - Choose **Option 1 (`@cqrs-ddd/nestjs`)** when working in an existing NestJS codebase, using NestJS microservices or GraphQL, or relying heavily on Nest's controller ecosystem and DI modules.
-- Choose **Option 2 (`@cqrs-ddd/cqrs`)** when building greenfield microservices, serverless functions, high-throughput APIs on Fastify, or applications where zero dependency-injection overhead and instant startup are required.
+- Choose **Option 2 (`@cqrs-ddd/cqrs`)** when building a new service on plain Node.js, Express or Fastify, or when you want explicit construction without a dependency-injection container and none of the features listed under [What Is Not Included](#what-is-not-included).

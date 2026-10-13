@@ -5,7 +5,7 @@ sidebar:
   order: 3
 ---
 
-Ο επίσημος adapter του NestJS για τα πακέτα [`@cqrs-ddd`](https://github.com/aristoteliss/ddd-cqrs).
+Ο adapter για NestJS των πακέτων [`@cqrs-ddd`](https://github.com/aristoteliss/ddd-cqrs).
 
 Μια εφαρμογή NestJS διατηρεί την ιδιωματική αρχιτεκτονική του NestJS: modules, dependency injection, controllers, και το επίσημο `@nestjs/cqrs` (`CqrsModule`, `CommandBus`, `QueryBus`, `EventBus`, `@CommandHandler`, `@QueryHandler`, `@EventsHandler`). Ο adapter παρέχει όσα λείπουν από το `@nestjs/cqrs`:
 
@@ -32,6 +32,70 @@ pnpm add @cqrs-ddd/nestjs @cqrs-ddd/pipeline @cqrs-ddd/core @nestjs/cqrs
   - `@cqrs-ddd/pipeline-job-context`, για το `@cqrs-ddd/nestjs/job-context`.
 
 Οποιοδήποτε άλλο πακέτο behavior (cache, resilience, audit, telemetry, dead letters) εκτελείται στα pipelines χωρίς να απαιτείται ειδική γνώση από τον adapter.
+
+## Ελάχιστη ρύθμιση
+
+Ένα πλήρες root module: το επίσημο `CqrsModule`, το `PipelineModule`, ένας provider για κάθε behavior που εκτελείται, και ένας handler. Σε μια εφαρμογή NestJS, εγκαταστήστε τον adapter και, για την επικύρωση, το `@cqrs-ddd/pipeline-zod`:
+
+```bash
+pnpm add @cqrs-ddd/nestjs @cqrs-ddd/pipeline @cqrs-ddd/core @cqrs-ddd/pipeline-zod zod @nestjs/cqrs
+```
+
+```typescript
+import { ErrorFilter, PipelineModule } from '@cqrs-ddd/nestjs';
+import { LoggingBehavior, logging, UsePipeline } from '@cqrs-ddd/pipeline';
+import { validated, ZodValidationBehavior } from '@cqrs-ddd/pipeline-zod';
+import { Logger, Module } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
+import { CommandHandler, CqrsModule, type ICommandHandler } from '@nestjs/cqrs';
+import { z } from 'zod';
+
+export class CreateInvoiceCommand {
+  constructor(
+    readonly customer: string,
+    readonly amount: number,
+  ) {}
+}
+
+@CommandHandler(CreateInvoiceCommand)
+@UsePipeline(
+  validated(
+    z.object({ customer: z.string().min(1), amount: z.number().positive() }),
+  ),
+)
+export class CreateInvoiceHandler
+  implements ICommandHandler<CreateInvoiceCommand>
+{
+  async execute(command: CreateInvoiceCommand) {
+    return { customer: command.customer, amount: command.amount };
+  }
+}
+
+@Module({
+  imports: [
+    CqrsModule.forRoot(),
+    PipelineModule.forRoot({ globalBehaviors: { before: [logging()] } }),
+  ],
+  providers: [
+    { provide: APP_FILTER, useClass: ErrorFilter },
+    {
+      provide: LoggingBehavior,
+      useFactory: () => new LoggingBehavior(new Logger('Pipeline')),
+    },
+    ZodValidationBehavior,
+    CreateInvoiceHandler,
+  ],
+})
+export class AppModule {}
+```
+
+Κάθε behavior που εκτελείται είναι provider: το `LoggingBehavior` μέσω factory, επειδή δέχεται logger, και το `ZodValidationBehavior` ως κλάση. Ένα behavior που αναφέρεται σε pipeline και δεν παρέχεται από κανένα module σταματά την εφαρμογή κατά την εκκίνηση. Ένας controller, ή οποιοσδήποτε άλλος provider, εκτελεί το command μέσω του `CommandBus` του `@nestjs/cqrs`:
+
+```typescript
+const invoice = await commandBus.execute(new CreateInvoiceCommand('acme', 120));
+```
+
+Ένα μη έγκυρο command απορρίπτεται με `ZodValidationError` πριν εκτελεστεί ο handler, και το `ErrorFilter` απαντά μέσω HTTP με 400 Bad Request. Το module αυτό είναι το [`integration/nestjs/invoices.ts`](https://github.com/aristoteliss/ddd-cqrs/blob/master/integration/nestjs/invoices.ts) του αποθετηρίου, που εκτελείται από το spec του· το [`integration/nestjs/app.ts`](https://github.com/aristoteliss/ddd-cqrs/blob/master/integration/nestjs/app.ts) είναι μια μεγαλύτερη εφαρμογή με controllers, εξουσιοδότηση και rate limiting, δοκιμασμένη μέσω HTTP σε Express και Fastify.
 
 ## Αρχιτεκτονικός κύκλος ζωής (Architectural Lifecycle)
 

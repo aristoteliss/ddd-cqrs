@@ -19,6 +19,7 @@
   },
   "keywords": [
     "nestjs",
+    "nestjs-cqrs",
     "cqrs",
     "ddd",
     "pipeline",

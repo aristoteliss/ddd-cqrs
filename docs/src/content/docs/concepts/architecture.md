@@ -34,7 +34,7 @@ Interactive visual architecture and dependency graph of all `@cqrs-ddd` packages
 - **Isolated Processors**: Background job workers (`SendWelcomeEmailProcessor`, `BatchUpdateUsersProcessor`) execute decorated with `@InJobContext`, restoring the full execution context without leaking between jobs.
 
 ### 3. Pure Domain & Persistence
-- **`@cqrs-ddd/core`**: Framework-neutral DDD primitives (`AggregateRoot`, `Entity`, `ValueObject`, `DomainEvent`, domain errors) with zero dependencies.
+- **`@cqrs-ddd/core`**: Framework-neutral DDD primitives (`AggregateRoot`, `Entity`, `ValueObject`, `DomainEvent`, domain errors) with no dependency outside the `@cqrs-ddd` utilities.
 - **`@cqrs-ddd/mikro-orm`**: Implements write-side repository abstractions with version-conditioned optimistic concurrency (`optimisticUpdate`) and anti-resurrection mutation barriers.
 - **Two-Layer Caching**: Repository entity snapshot caching (`@FromCache`, `@Cache`) is kept separate from composed pipeline response caching (`CacheBehavior`).
 

@@ -1,7 +1,70 @@
 ---
 title: Πρώτα βήματα
-description: Εγκαταστήστε το @cqrs-ddd/pipeline, δημιουργήστε ένα pipeline και τυλίξτε μια συνάρτηση και μια μέθοδο.
+description: Εκτελέστε ένα πρώτο παράδειγμα, έπειτα εγκαταστήστε το @cqrs-ddd/pipeline, δημιουργήστε ένα pipeline και τυλίξτε μια συνάρτηση και μια μέθοδο.
 ---
+
+## Μια πρώτη εκτέλεση
+
+Σε έναν άδειο κατάλογο, εγκαταστήστε το pipeline, το behavior επικύρωσης και το Zod:
+
+```bash
+pnpm add @cqrs-ddd/pipeline @cqrs-ddd/pipeline-zod zod
+```
+
+Αποθηκεύστε το παρακάτω ως `create-order.mjs`:
+
+```js
+import { createPipeline, logging } from '@cqrs-ddd/pipeline';
+import { validated, ZodValidationError } from '@cqrs-ddd/pipeline-zod';
+import { z } from 'zod';
+
+const pipeline = createPipeline({
+  globalBehaviors: { before: [logging({ requestResponseLogLevel: 'none' })] },
+});
+
+const order = z.object({
+  orderId: z.string().min(1),
+  amount: z.number().positive(),
+});
+
+const createOrder = pipeline.wrap(
+  { name: 'createOrder', kind: 'command' },
+  validated(order),
+)(async (input) => ({ id: input.orderId, status: 'created' }));
+
+console.log(await createOrder({ orderId: 'ord_123', amount: 49.99 }));
+
+try {
+  await createOrder({ orderId: 'ord_bad', amount: -1 });
+} catch (error) {
+  if (!(error instanceof ZodValidationError)) throw error;
+  console.log('Invalid order rejected before the function ran');
+}
+```
+
+Εκτελέστε το:
+
+```bash
+node create-order.mjs
+```
+
+Η standard output δείχνει την καταγεγραμμένη κλήση, το αποτέλεσμα της έγκυρης παραγγελίας
+και την απόρριψη της μη έγκυρης. Το correlation id και η διάρκεια διαφέρουν σε κάθε
+εκτέλεση:
+
+```text
+[0199c2d4-…] COMMAND createOrder → createOrder completed in 1.08ms createOrder
+{ id: 'ord_123', status: 'created' }
+Invalid order rejected before the function ran
+```
+
+Το `logging()` αναφέρει επίσης την απορριφθείσα κλήση στη standard error, ως
+`createOrder failed` με το `ZodValidationError` και το stack του. Πρόκειται για την
+καταγραφή της αποτυχίας που προκαλεί το ίδιο το παράδειγμα· η διεργασία τερματίζει με
+κωδικό 0. Η συνάρτηση επιστρέφει ένα αντικείμενο και δεν αποθηκεύει τίποτα: δεν υπάρχει
+βάση δεδομένων, framework ή βήμα build.
+
+Η υπόλοιπη σελίδα παρουσιάζει τα ίδια κομμάτια ένα προς ένα.
 
 ## Εγκατάσταση
 
@@ -9,9 +72,10 @@ description: Εγκαταστήστε το @cqrs-ddd/pipeline, δημιουργ�
 pnpm add @cqrs-ddd/pipeline
 ```
 
-Τα πακέτα απαιτούν Node.js 22.12 ή νεότερο, ή άλλο runtime με `AsyncLocalStorage`
-(Bun, Deno). Δημοσιεύονται ως ES modules· μια εφαρμογή CommonJS τα φορτώνει με
-`require()`.
+Τα πακέτα απαιτούν Node.js 22.12 ή νεότερο. Ο έλεγχος κυκλοφορίας (release check)
+φορτώνει επίσης κάθε entry point σε Bun· οι σουίτες δοκιμών εκτελούνται μόνο σε Node.js
+και κανένα άλλο runtime δεν δοκιμάζεται. Τα πακέτα δημοσιεύονται ως ES modules· μια
+εφαρμογή CommonJS τα φορτώνει με `require()`.
 
 ## Δημιουργία pipeline
 
@@ -40,8 +104,13 @@ export const pipeline = createPipeline({
 ```ts
 import { pipeline } from './pipeline.js';
 
+const prices = new Map([
+  ['apple', 120],
+  ['pear', 90],
+]);
+
 export const getPrice = pipeline.wrap({ name: 'getPrice', kind: 'query' })(
-  async (sku: string) => prices.find(sku),
+  async (sku: string) => prices.get(sku),
 );
 
 await getPrice('apple');
@@ -59,6 +128,8 @@ idempotency, για παράδειγμα, ισχύει για commands.
 
 ```ts
 class Prices {
+  private readonly store = new Map([['apple', 120]]);
+
   @pipeline.wrap({ kind: 'query' })
   async find(sku: string) {
     return this.store.get(sku);
@@ -85,7 +156,7 @@ import { z } from 'zod';
 export const placeOrder = pipeline.wrap(
   { name: 'placeOrder', kind: 'command' },
   validated(z.object({ sku: z.string(), qty: z.coerce.number().int().positive() })),
-)(async (order) => orders.place(order));
+)(async (order) => ({ ...order, status: 'placed' }));
 ```
 
 ## Επόμενα βήματα

@@ -57,5 +57,13 @@
   "dependencies": {
     "@cqrs-ddd/untyped": "workspace:^"
   },
-  "keywords": []
+  "keywords": [
+    "pipeline",
+    "cqrs",
+    "opentelemetry",
+    "tracing",
+    "metrics",
+    "observability",
+    "behavior"
+  ]
 }

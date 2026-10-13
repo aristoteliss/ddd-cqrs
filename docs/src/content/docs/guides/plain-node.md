@@ -42,7 +42,10 @@ const pipeline = createPipeline({
 ## A command
 
 `validated(order)` parses the input with Zod and hands the function the parsed copy;
-`idempotent()` runs it once per order id and replays the stored result for a repeated id.
+`idempotent()` deduplicates calls by order id and replays the stored result of a completed
+call for a repeated id. The memory store keeps its records in this process only:
+[Guarantees and Limits](/ddd-cqrs/packages/pipeline-idempotency/#guarantees-and-limits)
+says what that covers.
 
 ```js
 import { idempotent } from '@cqrs-ddd/pipeline-idempotency';

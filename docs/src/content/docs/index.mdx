@@ -1,10 +1,10 @@
 ---
-title: ddd-cqrs
-description: Pipeline behaviors and DDD building blocks for TypeScript that need no framework.
+title: CQRS-DDD
+description: Reusable behavior pipelines for TypeScript functions and CQRS handlers, with optional DDD building blocks and a NestJS adapter.
 template: splash
 editUrl: false
 hero:
-  tagline: Wrap plain functions and class methods with logging, validation, authorization, caching, idempotency and more, model the domain with aggregates and commands, and run commands, queries and events with the API of NestJS CQRS, all without a framework.
+  tagline: Reusable behavior pipelines for TypeScript functions and CQRS handlers, with optional DDD building blocks and a NestJS adapter. Add validation, authorization, caching and idempotency around application operations. Start with a function, add command and query buses when they help, or keep your existing NestJS application.
   actions:
     - text: Getting started
       link: /ddd-cqrs/getting-started/
@@ -19,13 +19,40 @@ hero:
 
 import { CardGrid, LinkCard } from '@astrojs/starlight/components';
 
+The repository is `ddd-cqrs`; the packages install from the npm scope `@cqrs-ddd/*`. They need Node.js 22.12 or later and no framework or dependency-injection container, and they are dual-licensed, AGPLv3 or commercial: see the [license](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use).
+
+## Choose a path
+
+<CardGrid>
+  <LinkCard
+    title="Functions"
+    description="One file, one command to install, one to run: a validated and logged function on plain Node.js."
+    href="/ddd-cqrs/getting-started/"
+  />
+  <LinkCard
+    title="CQRS without a framework"
+    description="A command, an event and their decorated handlers on the buses of createCqrs(), in one file."
+    href="/ddd-cqrs/packages/cqrs/#quick-example"
+  />
+  <LinkCard
+    title="NestJS"
+    description="Keep @nestjs/cqrs and its buses; a complete root module adds behavior pipelines around your handlers."
+    href="/ddd-cqrs/packages/nestjs/#minimal-setup"
+  />
+  <LinkCard
+    title="Domain building blocks"
+    description="Aggregates, domain events and repository contracts, usable without any pipeline package."
+    href="/ddd-cqrs/guides/ddd/"
+  />
+</CardGrid>
+
 ## What is here
 
 <CardGrid>
   <LinkCard
-    title="Getting started"
-    description="Install the engine, create a pipeline and wrap a function."
-    href="/ddd-cqrs/getting-started/"
+    title="Overview"
+    description="What the packages are, how they fit together and how they relate to what you already use."
+    href="/ddd-cqrs/overview/"
   />
   <LinkCard
     title="Concepts"

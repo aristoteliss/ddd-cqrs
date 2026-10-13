@@ -61,5 +61,13 @@
     "@vitest/coverage-v8": "^5.0.3",
     "vitest": "^5.0.3"
   },
-  "keywords": []
+  "keywords": [
+    "pipeline",
+    "cqrs",
+    "authorization",
+    "casl",
+    "permissions",
+    "abac",
+    "behavior"
+  ]
 }

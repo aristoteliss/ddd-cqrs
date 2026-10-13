@@ -11,9 +11,9 @@ shows one way to use some of them without the others. Private, never published.
 | `inventory/` | Repositories on the core persistence decorators: `@PersistedWrite`, `@Cache`, `@MapPersistenceErrors` and `@FromCache` over MikroORM on in-memory SQLite, with the cache in the same database | `core` (persistence), `mikro-orm` |
 | `profiles/` | A domain handler wrapped by the pipeline, without buses: the code of the DDD guide, with every command audited and its events published inside the pipeline | `core`, `pipeline`, `pipeline-audit` |
 | `members/` | The domain on the buses: an aggregate, its command, query and event handlers registered with `createCqrs()` | `core`, `cqrs` |
-| `nestjs/` | A NestJS support desk on the adapter: `@nestjs/cqrs` handlers run through their pipelines by `PipelineModule`, package errors answered by `ErrorFilter`, requests correlated by `CorrelationMiddleware`; its end-to-end spec drives it over HTTP on Express and on Fastify | `nestjs`, `core`, `pipeline`, `pipeline-casl`, `pipeline-correlation`, `pipeline-rate-limit`, `pipeline-zod` |
-| `plain-node/` | The pipeline on plain JavaScript functions, run by `node --test` with no build | `pipeline`, `pipeline-cache`, `pipeline-idempotency`, `pipeline-zod` |
-| `standard-decorators/` | The pipeline with TypeScript's standard decorators, compiled by `tsc` with `experimentalDecorators: false` | `pipeline`, `pipeline-cache`, `pipeline-tenant`, `pipeline-zod` |
+| `nestjs/` | A NestJS support desk on the adapter: `@nestjs/cqrs` handlers run through their pipelines by `PipelineModule`, package errors answered by `ErrorFilter`, requests correlated by `CorrelationMiddleware`; its end-to-end spec drives it over HTTP on Express and on Fastify. `invoices.ts` is the minimal setup the adapter's page quotes | `nestjs`, `core`, `pipeline`, `pipeline-casl`, `pipeline-correlation`, `pipeline-rate-limit`, `pipeline-zod` |
+| `plain-node/` | The pipeline on plain JavaScript functions, run by `node --test` with no build. `create-order.mjs` is the first example of the root README and of the getting-started page, which quote it unchanged | `pipeline`, `pipeline-cache`, `pipeline-idempotency`, `pipeline-zod` |
+| `standard-decorators/` | The pipeline with TypeScript's standard decorators, compiled by `tsc` with `experimentalDecorators: false`. `create-user.mts` is the first CQRS example, which the `@cqrs-ddd/cqrs` page quotes | `pipeline`, `pipeline-cache`, `pipeline-tenant`, `pipeline-zod`, `cqrs` |
 
 `checks/` holds what is a test by nature, with no application of its own:
 

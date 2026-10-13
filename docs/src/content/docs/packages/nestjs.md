@@ -33,6 +33,70 @@ pnpm add @cqrs-ddd/nestjs @cqrs-ddd/pipeline @cqrs-ddd/core @nestjs/cqrs
 
 Any other behavior package (cache, resilience, audit, telemetry, dead letters) runs in the pipelines without the adapter knowing it.
 
+## Minimal Setup
+
+A complete root module: the official `CqrsModule`, `PipelineModule`, a provider for each behavior that runs, and one handler. In a NestJS application, install the adapter and, for the validation, `@cqrs-ddd/pipeline-zod`:
+
+```bash
+pnpm add @cqrs-ddd/nestjs @cqrs-ddd/pipeline @cqrs-ddd/core @cqrs-ddd/pipeline-zod zod @nestjs/cqrs
+```
+
+```typescript
+import { ErrorFilter, PipelineModule } from '@cqrs-ddd/nestjs';
+import { LoggingBehavior, logging, UsePipeline } from '@cqrs-ddd/pipeline';
+import { validated, ZodValidationBehavior } from '@cqrs-ddd/pipeline-zod';
+import { Logger, Module } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
+import { CommandHandler, CqrsModule, type ICommandHandler } from '@nestjs/cqrs';
+import { z } from 'zod';
+
+export class CreateInvoiceCommand {
+  constructor(
+    readonly customer: string,
+    readonly amount: number,
+  ) {}
+}
+
+@CommandHandler(CreateInvoiceCommand)
+@UsePipeline(
+  validated(
+    z.object({ customer: z.string().min(1), amount: z.number().positive() }),
+  ),
+)
+export class CreateInvoiceHandler
+  implements ICommandHandler<CreateInvoiceCommand>
+{
+  async execute(command: CreateInvoiceCommand) {
+    return { customer: command.customer, amount: command.amount };
+  }
+}
+
+@Module({
+  imports: [
+    CqrsModule.forRoot(),
+    PipelineModule.forRoot({ globalBehaviors: { before: [logging()] } }),
+  ],
+  providers: [
+    { provide: APP_FILTER, useClass: ErrorFilter },
+    {
+      provide: LoggingBehavior,
+      useFactory: () => new LoggingBehavior(new Logger('Pipeline')),
+    },
+    ZodValidationBehavior,
+    CreateInvoiceHandler,
+  ],
+})
+export class AppModule {}
+```
+
+Every behavior that runs is a provider: `LoggingBehavior` through a factory, because it takes a logger, and `ZodValidationBehavior` as a class. A behavior that a pipeline names and no module provides stops the application at startup. A controller, or any other provider, runs the command through the `CommandBus` of `@nestjs/cqrs`:
+
+```typescript
+const invoice = await commandBus.execute(new CreateInvoiceCommand('acme', 120));
+```
+
+An invalid command rejects with `ZodValidationError` before the handler runs, and `ErrorFilter` answers it over HTTP with 400 Bad Request. This module is [`integration/nestjs/invoices.ts`](https://github.com/aristoteliss/ddd-cqrs/blob/master/integration/nestjs/invoices.ts) in the repository, run by its spec; [`integration/nestjs/app.ts`](https://github.com/aristoteliss/ddd-cqrs/blob/master/integration/nestjs/app.ts) is a larger application with controllers, authorization and rate limiting, tested over HTTP on Express and Fastify.
+
 ## Architectural Lifecycle
 
 The adapter operates via `PipelineBootstrap`, an `@Injectable()` service registered by `PipelineModule`:
