@@ -7,8 +7,10 @@ sidebar:
 
 Ομάδες που χρησιμοποιούν NestJS έχουν δύο αρχιτεκτονικές επιλογές όταν υιοθετούν το `@cqrs-ddd`:
 
-1. **Διατήρηση του NestJS και ενίσχυσή του** με το [`@cqrs-ddd/nestjs`](/ddd-cqrs/el/packages/nestjs/): Διατηρείτε τους υπάρχοντες handlers, τα modules, το dependency injection και τους controllers του `@nestjs/cqrs`. Ο adapter τυλίγει τους handlers σε pipelines συμπεριφορών (behaviors), παρέχει κεντρικό exception filtering και διαχειρίζεται το correlation και το job context.
-2. **Πλήρης αντικατάσταση του NestJS** με το [`@cqrs-ddd/cqrs`](/ddd-cqrs/el/packages/cqrs/): Δημιουργία εφαρμογών χωρίς framework σε απλό Node.js, Fastify ή Express, κατασκευάζοντας τους handlers με `new` και καταχωρίζοντάς τους στο `createCqrs()`.
+1. **Διατήρηση του NestJS και προσθήκη του adapter** [`@cqrs-ddd/nestjs`](/ddd-cqrs/el/packages/nestjs/): Διατηρείτε τους υπάρχοντες handlers, τα buses, τα modules, το dependency injection και τους controllers του `@nestjs/cqrs`. Ο adapter τυλίγει τους handlers σε pipelines συμπεριφορών (behaviors), παρέχει κεντρικό exception filtering και διαχειρίζεται το correlation και το job context. Τίποτα δεν αντικαθίσταται.
+2. **Μετάβαση σε CQRS χωρίς framework** με το [`@cqrs-ddd/cqrs`](/ddd-cqrs/el/packages/cqrs/): Δημιουργία εφαρμογών χωρίς NestJS σε απλό Node.js, Fastify ή Express, κατασκευάζοντας τους handlers με `new` και καταχωρίζοντάς τους στο `createCqrs()`. Καλύπτει handlers και buses, όχι κάθε δυνατότητα του `@nestjs/cqrs`: δείτε [Τι δεν περιλαμβάνεται](#τι-δεν-περιλαμβάνεται).
+
+Οι δύο επιλογές είναι ανεξάρτητες. Μια υπάρχουσα εφαρμογή NestJS ακολουθεί την πρώτη και δεν χρειάζεται ποτέ τη δεύτερη. Μια εφαρμογή στα πακέτα `@nestjs-pipeline/*` 0.4.x ξεκινά από το [Από το @nestjs-pipeline 0.4.x](/ddd-cqrs/el/guides/from-nestjs-pipeline/).
 
 ## Σύγκριση Αρχιτεκτονικής
 
@@ -20,7 +22,7 @@ sidebar:
 | **DI & Containers** | IoC container του NestJS | IoC container του NestJS παρέχει behaviors και handlers | Χωρίς container: ρητή χρήση `new` στο composition root |
 | **Exception Handling** | Χειροκίνητα exception filters | Αυτόματο `ErrorFilter` που μετατρέπει σφάλματα σε `HttpException` | Framework-neutral: το HTTP επίπεδο αντιστοιχίζει σφάλματα (`domainErrorHttpStatus`) |
 | **Διαγνωστικοί έλεγχοι εκκίνησης** | Σιωπηρή επικάλυψη σε διπλότυπους handlers | Επαληθεύει singleton scope, μοναδικότητα providers, συμβόλαια behaviors | Αποτυγχάνει σε διπλότυπους handlers, ελλιπείς decorators, παραβιάσεις συμβολαίων |
-| **Αποτύπωμα Runtime** | NestJS runtime (~40MB+ εκκίνηση) | NestJS runtime | Ελάχιστο (μηδενικό framework overhead, άμεση εκκίνηση) |
+| **Runtime** | NestJS | NestJS | Χωρίς framework: μόνο τα buses και τα pipelines |
 
 ---
 
@@ -41,13 +43,15 @@ pnpm add @cqrs-ddd/nestjs @cqrs-ddd/pipeline @cqrs-ddd/core @nestjs/cqrs
 
 ### Τι προσθέτετε
 
+Η [Ελάχιστη ρύθμιση](/ddd-cqrs/el/packages/nestjs/#ελάχιστη-ρύθμιση) είναι ένα πλήρες root module με κάθε import και provider, που εκτελείται από test. Τα παρακάτω βήματα δείχνουν τα μέρη του.
+
 1. **`PipelineModule.forRoot()`** στο `AppModule`:
    ```typescript
    @Module({
      imports: [
        CqrsModule.forRoot(),
        PipelineModule.forRoot({
-         sources: { tenantId: getTenantId, correlationId: getCorrelationId },
+         sources: { tenantId: tenantSource, correlationId: correlationSource },
          globalBehaviors: [{ scope: 'all', before: [logging()] }],
        }),
      ],
@@ -74,15 +78,16 @@ pnpm add @cqrs-ddd/nestjs @cqrs-ddd/pipeline @cqrs-ddd/core @nestjs/cqrs
      }
    }
    ```
+   Κάθε behavior που αναφέρει ένας handler είναι provider κάποιου module: εδώ το `ZodValidationBehavior`, και το `IdempotencyBehavior` κατασκευασμένο με το store του.
 
 3. **Δημοσίευση Domain Events**:
-   Κληρονομήστε από τον `CommandBaseHandler` του `@cqrs-ddd/core/application` και περάστε το injected `EventBus` του `@nestjs/cqrs`. Όταν η `handle(command)` επιστρέφει ένα `AggregateRoot`, τα μη καταχωρισμένα domain events δημοσιεύονται αυτόματα μέσω του `eventBus.publishAll()` και καθαρίζονται.
+   Κληρονομήστε από τον `CommandBaseHandler` του `@cqrs-ddd/core/application` και περάστε το injected `EventBus` του `@nestjs/cqrs`. Όταν η `handle(command)` επιστρέφει ένα `AggregateRoot`, τα μη καταχωρισμένα domain events δημοσιεύονται αυτόματα μέσω του `eventBus.publishAll()` και καθαρίζονται. Η παράδοση παραμένει ό,τι παρέχει αυτό το `EventBus`: ο adapter δεν προσθέτει ανθεκτική παράδοση μηνυμάτων ούτε outbox.
 
 ---
 
 ## Επιλογή 2: Μετάβαση από το NestJS στο `@cqrs-ddd/cqrs`
 
-Εάν ο στόχος σας είναι η κατάργηση του NestJS για μια ελαφριά αρχιτεκτονική χωρίς framework (Express, Fastify, AWS Lambda, Cloudflare Workers), χρησιμοποιήστε το `@cqrs-ddd/cqrs`:
+Εάν ο στόχος σας είναι η κατάργηση του NestJS για μια αρχιτεκτονική χωρίς framework σε απλό Node.js, Express ή Fastify, χρησιμοποιήστε το `@cqrs-ddd/cqrs`:
 
 ```bash
 pnpm add @cqrs-ddd/cqrs @cqrs-ddd/pipeline @cqrs-ddd/core
@@ -90,7 +95,7 @@ pnpm add @cqrs-ddd/cqrs @cqrs-ddd/pipeline @cqrs-ddd/core
 
 ### Τι μεταφέρεται αυτούσιο
 
-Το API του πυρήνα CQRS ταιριάζει με το `@nestjs/cqrs`:
+Οι decorators των handlers, τα interfaces των handlers και τα ονόματα των buses ταιριάζουν με το `@nestjs/cqrs`:
 
 | `@nestjs/cqrs` | `@cqrs-ddd/cqrs` |
 | --- | --- |
@@ -101,6 +106,10 @@ pnpm add @cqrs-ddd/cqrs @cqrs-ddd/pipeline @cqrs-ddd/core
 | `IQueryHandler<TQuery>` | `IQueryHandler<TQuery>` από το `@cqrs-ddd/cqrs` |
 | `IEventHandler<TEvent>` | `IEventHandler<TEvent>` από το `@cqrs-ddd/cqrs` |
 | `CommandBus`, `QueryBus`, `EventBus` | Επιστρέφονται από το `createCqrs()` |
+
+### Τι δεν περιλαμβάνεται
+
+Το `@cqrs-ddd/cqrs` δεν αντικαθιστά κάθε δυνατότητα του `@nestjs/cqrs`. Δεν έχει sagas, RxJS pipes με `ofType`, `AsyncContext` ούτε μηχανισμούς συγχώνευσης του `EventPublisher`· τα aggregates δημοσιεύουν events μέσω του `CommandBaseHandler`. Το `EventBus` του παραδίδει in-process: δεν είναι ανθεκτική παράδοση μηνυμάτων ούτε outbox. Μια εφαρμογή που βασίζεται σε κάποιο από αυτά διατηρεί το NestJS και ακολουθεί την Επιλογή 1.
 
 ### Τι αναλαμβάνει η ίδια η εφαρμογή
 
@@ -121,7 +130,7 @@ import {
   type ICommandHandler,
 } from '@cqrs-ddd/cqrs';
 import { UsePipeline, LoggingBehavior } from '@cqrs-ddd/pipeline';
-import { audit } from '@cqrs-ddd/pipeline-audit';
+import { AuditBehavior, type AuditSink, audit } from '@cqrs-ddd/pipeline-audit';
 
 class RegisterUserCommand {
   constructor(readonly email: string) {}
@@ -139,7 +148,7 @@ class RegisterUserHandler implements ICommandHandler<RegisterUserCommand> {
 }
 
 // Composition Root
-export function buildApplication(users: UsersRepository, auditSink: IAuditSink) {
+export function buildApplication(users: UsersRepository, auditSink: AuditSink) {
   const cqrs = createCqrs({
     behaviors: [new AuditBehavior(auditSink)],
     globalBehaviors: { before: [LoggingBehavior] },
@@ -156,10 +165,9 @@ export function buildApplication(users: UsersRepository, auditSink: IAuditSink) 
 - **Αυστηρή καταχώριση handlers**: Η καταχώριση δεύτερου handler για την ίδια εντολή ή ερώτημα αποτυγχάνει αμέσως στο `cqrs.register()`. Το NestJS σιωπηρά αντικαθιστά τους προηγούμενους με τον τελευταίο καταχωρισμένο.
 - **Ασύγχρονα σφάλματα απόντος handler**: Στο `@cqrs-ddd/cqrs`, τα `commandBus.execute()` και `queryBus.execute()` απορρίπτουν ασύγχρονα με `CommandHandlerNotFoundException` ή `QueryHandlerNotFoundException`. Το `@nestjs/cqrs` εκτοξεύει σύγχρονα.
 - **Ομαλός τερματισμός (Graceful Shutdown)**: Το `cqrs.close()` περιμένει την ολοκλήρωση όλων των ασύγχρονων event handlers πριν επιλυθεί. Στο NestJS, το `app.close()` δεν παρακολουθεί την ολοκλήρωση των παρασκηνιακών event handlers.
-- **Απομόνωση σφαλμάτων events**: Οι αποτυχίες των event handlers αποστέλλονται στο `UnhandledExceptionBus` και καταγράφονται. Σε αντίθεση με το `@nestjs/cqrs`, οι handlers συνεχίζουν να λαμβάνουν μεταγενέστερα events ακόμα και μετά από προηγούμενη αποτυχία.
-- **Δεν παρέχονται στο `@cqrs-ddd/cqrs`**: Sagas, RxJS pipes με `ofType`, `AsyncContext` και μηχανισμοί συγχώνευσης του `EventPublisher`. Τα aggregates δημοσιεύουν events μέσω του `CommandBaseHandler`.
+- **Απομόνωση σφαλμάτων events**: Όπως στο `@nestjs/cqrs`, η αποτυχία ενός event handler αποστέλλεται στο `UnhandledExceptionBus` και ο handler συνεχίζει να λαμβάνει μεταγενέστερα events· το `@cqrs-ddd/cqrs` επιπλέον την καταγράφει, ή την εκτοξεύει ξανά με `rethrowUnhandled: true`.
 
 ## Επιλέγοντας τη Σωστή Προσέγγιση
 
 - Επιλέξτε την **Επιλογή 1 (`@cqrs-ddd/nestjs`)** όταν εργάζεστε σε υπάρχουσα βάση κώδικα NestJS, χρησιμοποιείτε NestJS microservices ή GraphQL, ή βασίζεστε έντονα στο οικοσύστημα controllers και DI modules του Nest.
-- Επιλέξτε την **Επιλογή 2 (`@cqrs-ddd/cqrs`)** όταν χτίζετε νέα microservices, serverless functions, APIs υψηλής απόδοσης σε Fastify, ή εφαρμογές όπου απαιτείται μηδενική επιβάρυνση dependency injection και άμεση εκκίνηση.
+- Επιλέξτε την **Επιλογή 2 (`@cqrs-ddd/cqrs`)** όταν χτίζετε μια νέα υπηρεσία σε απλό Node.js, Express ή Fastify, ή όταν θέλετε ρητή κατασκευή χωρίς dependency-injection container και καμία από τις δυνατότητες της ενότητας [Τι δεν περιλαμβάνεται](#τι-δεν-περιλαμβάνεται).

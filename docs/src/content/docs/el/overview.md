@@ -3,7 +3,9 @@ title: Επισκόπηση
 description: Τι είναι τα πακέτα @cqrs-ddd και πώς συνδυάζονται.
 ---
 
-Τα πακέτα `@cqrs-ddd` είναι δομικά στοιχεία TypeScript που λειτουργούν χωρίς δέσμευση σε framework. Χωρίζονται σε δύο ανεξάρτητες βασικές οικογένειες (το pipeline και τα στοιχεία DDD) και συμπληρώνονται από δύο runtimes εφαρμογής: το `@cqrs-ddd/cqrs`, χωρίς framework, και τον επίσημο adapter για NestJS, το `@cqrs-ddd/nestjs`.
+Τα πακέτα `@cqrs-ddd` είναι δομικά στοιχεία TypeScript που λειτουργούν χωρίς δέσμευση σε framework. Χωρίζονται σε δύο ανεξάρτητες βασικές οικογένειες (το pipeline και τα στοιχεία DDD) και συμπληρώνονται από δύο runtimes εφαρμογής: το `@cqrs-ddd/cqrs`, χωρίς framework, και το `@cqrs-ddd/nestjs`, τον adapter αυτού του έργου για NestJS.
+
+Το αποθετήριο ονομάζεται `ddd-cqrs`· κάθε πακέτο εγκαθίσταται από το npm scope `@cqrs-ddd/*`.
 
 ## Η οικογένεια του pipeline
 
@@ -53,6 +55,26 @@ description: Τι είναι τα πακέτα @cqrs-ddd και πώς συνδ�
 - Το `PipelineModule.forRoot()` συνθέτει τα behaviors του `@cqrs-ddd/pipeline` γύρω από τους handlers του `@nestjs/cqrs` κατά την εκκίνηση.
 - Το `ErrorFilter` μετατρέπει κάθε σφάλμα των `@cqrs-ddd` σε `HttpException` του NestJS, με το τυπικό σώμα JSON απάντησης του Nest.
 - Προσφέρει τα `CorrelationMiddleware` και `JobContextModule` για tracing και ουρές εργασιών. Δείτε το [NestJS & @cqrs-ddd](/ddd-cqrs/el/guides/from-nestjs/) και τη [σελίδα του πακέτου `@cqrs-ddd/nestjs`](/ddd-cqrs/el/packages/nestjs/).
+
+## Runtimes
+
+| Runtime | Κατάσταση |
+| --- | --- |
+| Node.js 22.12 ή νεότερο | Υποστηρίζεται. Κάθε σουίτα δοκιμών εκτελείται σε Node.js. Το `@cqrs-ddd/mikro-orm` χρειάζεται 22.17 ή νεότερο, όπως και το MikroORM. |
+| Bun | Ο έλεγχος κυκλοφορίας (release check) φορτώνει κάθε entry point κάθε πακέτου σε Bun. Οι σουίτες δοκιμών δεν εκτελούνται σε αυτό. |
+| Deno, Cloudflare Workers, browsers | Δεν έχουν δοκιμαστεί. Το pipeline χρησιμοποιεί το `AsyncLocalStorage` του `node:async_hooks`, και αρκετά πακέτα το `node:crypto`. |
+
+Ένα behavior που επικοινωνεί με μια υπηρεσία χρειάζεται τον client της, τον οποίο εγκαθιστά η εφαρμογή: η σελίδα κάθε πακέτου τον αναφέρει.
+
+## Πώς σχετίζονται με όσα ήδη χρησιμοποιείτε
+
+| Επιλογή | Η ευθύνη της | Πώς σχετίζονται τα πακέτα αυτά |
+| --- | --- | --- |
+| Απλές συναρτήσεις και δικοί σας wrappers | Η λογική της εφαρμογής, με σύνθεση στο χέρι | Συχνά αρκούν. Μια βιβλιοθήκη αξίζει τη θέση της όταν αφαιρεί πραγματική επανάληψη ή κίνδυνο λάθους στη ρύθμιση. |
+| Middleware του Express ή του Fastify | Το αίτημα και η απάντηση HTTP | Κρατήστε το για ό,τι αφορά το HTTP. Ένα pipeline τυλίγει τη λειτουργία, οπότε τα ίδια behaviors εκτελούνται και όταν την καλεί ένας worker ή ένα script. |
+| `@nestjs/cqrs` | Commands, queries και events μέσα στο NestJS | Το `@cqrs-ddd/nestjs` εκτελεί pipelines από behaviors γύρω από τους handlers του· τα buses παραμένουν αυτά του NestJS. |
+| `@cqrs-ddd/cqrs` | Buses και pipelines handlers χωρίς framework | Έχει τους decorators των handlers και τα ονόματα των buses του `@nestjs/cqrs`, όχι [κάθε δυνατότητα](/ddd-cqrs/el/guides/from-nestjs/#τι-δεν-περιλαμβάνεται). |
+| Ένα dependency-injection container | Η κατασκευή και η επίλυση των εξαρτήσεων | Διαφορετική ευθύνη. Τα πακέτα αυτά δεν χρειάζονται container· η εφαρμογή τα συνδέει όπως θέλει. |
 
 ## Χρήση μαζί
 

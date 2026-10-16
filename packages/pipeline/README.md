@@ -14,8 +14,9 @@ the `@cqrs-ddd/pipeline-<name>` packages provide the behaviors.
 pnpm add @cqrs-ddd/pipeline
 ```
 
-Requires Node.js 22.12 or later, or another runtime with `AsyncLocalStorage` (Bun, Deno).
-Published as an ES module; a CommonJS application loads it with `require()`.
+Requires Node.js 22.12 or later. The release check also loads every entry point in Bun;
+the test suites run on Node.js only, and no other runtime is tested. Published as an ES
+module; a CommonJS application loads it with `require()`.
 
 ## Example
 

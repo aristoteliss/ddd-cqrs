@@ -1,10 +1,10 @@
 ---
-title: ddd-cqrs
-description: Behaviors pipeline και δομικά στοιχεία DDD για TypeScript, χωρίς framework.
+title: CQRS-DDD
+description: Επαναχρησιμοποιήσιμα pipelines από behaviors για συναρτήσεις TypeScript και handlers CQRS, με προαιρετικά δομικά στοιχεία DDD και adapter για NestJS.
 template: splash
 editUrl: false
 hero:
-  tagline: Τυλίξτε απλές συναρτήσεις και μεθόδους κλάσεων με logging, επικύρωση, εξουσιοδότηση, caching, idempotency και άλλα, μοντελοποιήστε το domain με aggregates και commands, και εκτελέστε commands, queries και events με το API του NestJS CQRS, όλα χωρίς framework.
+  tagline: Επαναχρησιμοποιήσιμα pipelines από behaviors για συναρτήσεις TypeScript και handlers CQRS, με προαιρετικά δομικά στοιχεία DDD και adapter για NestJS. Προσθέστε επικύρωση, εξουσιοδότηση, caching και idempotency γύρω από τις λειτουργίες της εφαρμογής. Ξεκινήστε με μια συνάρτηση, προσθέστε command και query buses όταν βοηθούν, ή κρατήστε την υπάρχουσα εφαρμογή σας σε NestJS.
   actions:
     - text: Πρώτα βήματα
       link: /ddd-cqrs/el/getting-started/
@@ -19,13 +19,40 @@ hero:
 
 import { CardGrid, LinkCard } from '@astrojs/starlight/components';
 
+Το αποθετήριο είναι το `ddd-cqrs`· τα πακέτα εγκαθίστανται από το npm scope `@cqrs-ddd/*`. Χρειάζονται Node.js 22.12 ή νεότερο και κανένα framework ή dependency-injection container, και διατίθενται με διπλή άδεια, AGPLv3 ή εμπορική: δείτε την [άδεια](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use).
+
+## Διαλέξτε διαδρομή
+
+<CardGrid>
+  <LinkCard
+    title="Συναρτήσεις"
+    description="Ένα αρχείο, μία εντολή εγκατάστασης, μία εκτέλεσης: μια συνάρτηση με επικύρωση και logging σε απλό Node.js."
+    href="/ddd-cqrs/el/getting-started/"
+  />
+  <LinkCard
+    title="CQRS χωρίς framework"
+    description="Ένα command, ένα event και οι handlers τους με decorators, πάνω στα buses του createCqrs(), σε ένα αρχείο."
+    href="/ddd-cqrs/el/packages/cqrs/#γρήγορο-παράδειγμα"
+  />
+  <LinkCard
+    title="NestJS"
+    description="Κρατήστε το @nestjs/cqrs και τα buses του· ένα πλήρες root module προσθέτει pipelines από behaviors γύρω από τους handlers σας."
+    href="/ddd-cqrs/el/packages/nestjs/#ελάχιστη-ρύθμιση"
+  />
+  <LinkCard
+    title="Δομικά στοιχεία domain"
+    description="Aggregates, domain events και συμβόλαια repositories, που χρησιμοποιούνται χωρίς κανένα πακέτο pipeline."
+    href="/ddd-cqrs/el/guides/ddd/"
+  />
+</CardGrid>
+
 ## Τι θα βρείτε εδώ
 
 <CardGrid>
   <LinkCard
-    title="Πρώτα βήματα"
-    description="Εγκαταστήστε τη μηχανή, δημιουργήστε ένα pipeline και τυλίξτε μια συνάρτηση."
-    href="/ddd-cqrs/el/getting-started/"
+    title="Επισκόπηση"
+    description="Τι είναι τα πακέτα, πώς συνδυάζονται και πώς σχετίζονται με όσα ήδη χρησιμοποιείτε."
+    href="/ddd-cqrs/el/overview/"
   />
   <LinkCard
     title="Έννοιες"

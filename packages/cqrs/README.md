@@ -33,6 +33,9 @@ cqrs.register(new CreateUserHandler(users));
 await cqrs.commandBus.execute(new CreateUserCommand('Ann'));
 ```
 
+`audit()` and `AuditBehavior` come from `@cqrs-ddd/pipeline-audit`, installed separately.
+The guide has a complete application in one file, with the commands that run it.
+
 ## License
 
 Dual-licensed under **AGPLv3** and a **Commercial License**. See `LICENSE` and

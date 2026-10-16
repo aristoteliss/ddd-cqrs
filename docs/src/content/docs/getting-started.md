@@ -1,7 +1,68 @@
 ---
 title: Getting started
-description: Install @cqrs-ddd/pipeline, create a pipeline and wrap a function and a method.
+description: Run a first example, then install @cqrs-ddd/pipeline, create a pipeline and wrap a function and a method.
 ---
+
+## A first run
+
+In an empty directory, install the pipeline, the validation behavior and Zod:
+
+```bash
+pnpm add @cqrs-ddd/pipeline @cqrs-ddd/pipeline-zod zod
+```
+
+Save this as `create-order.mjs`:
+
+```js
+import { createPipeline, logging } from '@cqrs-ddd/pipeline';
+import { validated, ZodValidationError } from '@cqrs-ddd/pipeline-zod';
+import { z } from 'zod';
+
+const pipeline = createPipeline({
+  globalBehaviors: { before: [logging({ requestResponseLogLevel: 'none' })] },
+});
+
+const order = z.object({
+  orderId: z.string().min(1),
+  amount: z.number().positive(),
+});
+
+const createOrder = pipeline.wrap(
+  { name: 'createOrder', kind: 'command' },
+  validated(order),
+)(async (input) => ({ id: input.orderId, status: 'created' }));
+
+console.log(await createOrder({ orderId: 'ord_123', amount: 49.99 }));
+
+try {
+  await createOrder({ orderId: 'ord_bad', amount: -1 });
+} catch (error) {
+  if (!(error instanceof ZodValidationError)) throw error;
+  console.log('Invalid order rejected before the function ran');
+}
+```
+
+Run it:
+
+```bash
+node create-order.mjs
+```
+
+Standard output shows the logged call, the result of the valid order and the rejection of
+the invalid one. The correlation id and the duration differ on every run:
+
+```text
+[0199c2d4-…] COMMAND createOrder → createOrder completed in 1.08ms createOrder
+{ id: 'ord_123', status: 'created' }
+Invalid order rejected before the function ran
+```
+
+`logging()` also reports the rejected call on standard error, as `createOrder failed` with
+the `ZodValidationError` and its stack. That is the log of the failure the example
+provokes; the process exits with code 0. The function returns an object and stores
+nothing: there is no database, no framework and no build step.
+
+The rest of this page takes the same pieces one at a time.
 
 ## Install
 
@@ -9,9 +70,9 @@ description: Install @cqrs-ddd/pipeline, create a pipeline and wrap a function a
 pnpm add @cqrs-ddd/pipeline
 ```
 
-The packages require Node.js 22.12 or later, or another runtime with `AsyncLocalStorage`
-(Bun, Deno). They are published as ES modules; a CommonJS application loads them with
-`require()`.
+The packages require Node.js 22.12 or later. The release check also loads every entry
+point in Bun; the test suites run on Node.js only, and no other runtime is tested. The
+packages are published as ES modules; a CommonJS application loads them with `require()`.
 
 ## Create a pipeline
 
@@ -40,8 +101,13 @@ new async function that runs the behaviors around it:
 ```ts
 import { pipeline } from './pipeline.js';
 
+const prices = new Map([
+  ['apple', 120],
+  ['pear', 90],
+]);
+
 export const getPrice = pipeline.wrap({ name: 'getPrice', kind: 'query' })(
-  async (sku: string) => prices.find(sku),
+  async (sku: string) => prices.get(sku),
 );
 
 await getPrice('apple');
@@ -58,6 +124,8 @@ The same wrapper decorates a method, with TypeScript's standard decorators or wi
 
 ```ts
 class Prices {
+  private readonly store = new Map([['apple', 120]]);
+
   @pipeline.wrap({ kind: 'query' })
   async find(sku: string) {
     return this.store.get(sku);
@@ -83,7 +151,7 @@ import { z } from 'zod';
 export const placeOrder = pipeline.wrap(
   { name: 'placeOrder', kind: 'command' },
   validated(z.object({ sku: z.string(), qty: z.coerce.number().int().positive() })),
-)(async (order) => orders.place(order));
+)(async (order) => ({ ...order, status: 'placed' }));
 ```
 
 ## Next

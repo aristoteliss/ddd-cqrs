@@ -3,7 +3,9 @@ title: Overview
 description: What the @cqrs-ddd packages are and how they fit together.
 ---
 
-The `@cqrs-ddd` packages are TypeScript building blocks designed to operate without framework lock-in. They fall into two independent core families (the pipeline and DDD primitives), complemented by two application runtimes: framework-free `@cqrs-ddd/cqrs` and the official NestJS adapter `@cqrs-ddd/nestjs`.
+The `@cqrs-ddd` packages are TypeScript building blocks designed to operate without framework lock-in. They fall into two independent core families (the pipeline and DDD primitives), complemented by two application runtimes: framework-free `@cqrs-ddd/cqrs` and `@cqrs-ddd/nestjs`, this project's adapter for NestJS.
+
+The repository is named `ddd-cqrs`; every package installs from the npm scope `@cqrs-ddd/*`.
 
 ## The pipeline family
 
@@ -53,6 +55,26 @@ Depending on your target architecture, two application runtimes run handlers thr
 - `PipelineModule.forRoot()` compiles `@cqrs-ddd/pipeline` behaviors around `@nestjs/cqrs` handlers at bootstrap.
 - `ErrorFilter` maps all `@cqrs-ddd` errors to NestJS `HttpException` instances matching Nest's standard JSON response body.
 - Provides `CorrelationMiddleware` and `JobContextModule` for tracing and worker queues. See [NestJS & @cqrs-ddd](/ddd-cqrs/guides/from-nestjs/) and the [`@cqrs-ddd/nestjs` package guide](/ddd-cqrs/packages/nestjs/).
+
+## Runtimes
+
+| Runtime | Status |
+| --- | --- |
+| Node.js 22.12 or later | Supported. Every test suite runs on Node.js. `@cqrs-ddd/mikro-orm` needs 22.17 or later, as MikroORM does. |
+| Bun | The release check loads every entry point of every package in Bun. The test suites do not run on it. |
+| Deno, Cloudflare Workers, browsers | Not tested. The pipeline uses `AsyncLocalStorage` from `node:async_hooks`, and several packages use `node:crypto`. |
+
+A behavior that talks to a service needs that service's client, which the application installs: each package page lists it.
+
+## How they relate to what you already use
+
+| Choice | Its responsibility | How these packages relate |
+| --- | --- | --- |
+| Plain functions and your own wrappers | Application logic, composed by hand | Often enough. A library earns its place when it removes real repetition or configuration risk. |
+| Express or Fastify middleware | The HTTP request and response | Keep it for HTTP concerns. A pipeline wraps the operation, so the same behaviors run when a worker or a script calls it. |
+| `@nestjs/cqrs` | Commands, queries and events inside NestJS | `@cqrs-ddd/nestjs` runs behavior pipelines around its handlers; the buses stay those of NestJS. |
+| `@cqrs-ddd/cqrs` | Buses and handler pipelines without a framework | It has the handler decorators and bus names of `@nestjs/cqrs`, not [every feature](/ddd-cqrs/guides/from-nestjs/#what-is-not-included). |
+| A dependency-injection container | Constructing and resolving dependencies | A different responsibility. These packages need no container; an application wires them as it likes. |
 
 ## Using them together
 

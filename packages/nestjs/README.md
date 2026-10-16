@@ -34,7 +34,7 @@ export class AppModule {}
 ## Install
 
 ```bash
-pnpm add @cqrs-ddd/nestjs @cqrs-ddd/pipeline @cqrs-ddd/core
+pnpm add @cqrs-ddd/nestjs @cqrs-ddd/pipeline @cqrs-ddd/core @nestjs/cqrs
 ```
 
 Peers: `@nestjs/common`, `@nestjs/core` and `@nestjs/cqrs` 12, `@cqrs-ddd/pipeline` and

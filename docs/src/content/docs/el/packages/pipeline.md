@@ -17,7 +17,7 @@ sidebar:
 pnpm add @cqrs-ddd/pipeline
 ```
 
-Απαιτεί Node.js 22.12 ή νεότερο, ή άλλο runtime με υποστήριξη `AsyncLocalStorage` (Bun, Deno).
+Απαιτεί Node.js 22.12 ή νεότερο. Ο έλεγχος κυκλοφορίας (release check) φορτώνει επίσης κάθε entry point σε Bun· οι σουίτες δοκιμών εκτελούνται μόνο σε Node.js και κανένα άλλο runtime δεν δοκιμάζεται.
 
 ## Χρήση
 

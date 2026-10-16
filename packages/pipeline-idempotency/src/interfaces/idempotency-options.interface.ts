@@ -102,9 +102,10 @@ export interface IdempotencyBehaviorOptions {
   replayScopeFactory?: IdempotencyReplayScopeFactory;
 
   /**
-   * When the handler throws, release the key so the client can safely retry
-   * (`true`, default). Set `false` to keep the key claimed and surface a
-   * conflict on retry (favors strict at-most-once over retryability).
+   * When the handler throws, release the key so a retry runs the handler again
+   * (`true`, default), including any effect the failed attempt had before it
+   * threw. Set `false` to keep the key claimed until it expires and surface a
+   * conflict on retry (favors at-most-once over retryability).
    */
   releaseOnError?: boolean;
 }

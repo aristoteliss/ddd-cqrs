@@ -1,0 +1,19 @@
+{
+  "name": "cqrs-ddd-demo",
+  "private": true,
+  "version": "0.5.0",
+  "description": "The first example of the @cqrs-ddd packages, on their published versions: a validated and logged function on plain Node.js",
+  "license": "SEE LICENSE IN ../LICENSE",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "start": "node create-order.mjs"
+  },
+  "dependencies": {
+    "@cqrs-ddd/pipeline": "0.5.0",
+    "@cqrs-ddd/pipeline-zod": "0.5.0",
+    "zod": "4.6.7"
+  }
+}

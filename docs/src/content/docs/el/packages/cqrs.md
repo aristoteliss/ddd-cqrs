@@ -9,7 +9,7 @@ sidebar:
 
 Τα `@CommandHandler`, `@QueryHandler` και `@EventsHandler` σηματοδοτούν κλάσεις handler. Τα `@UsePipeline` και `@SkipPipeline` από το `@cqrs-ddd/pipeline` δηλώνουν τα behaviors τους. Το `createCqrs()` κατασκευάζει τα runtime buses (`CommandBus`, `QueryBus`, `EventBus`, `UnhandledExceptionBus`). Δεν υπάρχει dependency-injection container ή framework: η εφαρμογή δημιουργεί τα instances των handlers με `new`, περνά τις απαραίτητες εξαρτήσεις άμεσα, και τα καταχωρεί.
 
-Χρησιμοποιήστε το `@cqrs-ddd/cqrs` για αρχιτεκτονικές χωρίς framework (απλό Node.js, Fastify, Express, serverless). Εάν αναπτύσσετε σε NestJS, χρησιμοποιήστε το [`@cqrs-ddd/nestjs`](/ddd-cqrs/el/packages/nestjs/) για να κάνετε wrap τους επίσημους handlers του `@nestjs/cqrs`.
+Χρησιμοποιήστε το `@cqrs-ddd/cqrs` για αρχιτεκτονικές χωρίς framework (απλό Node.js, Fastify, Express). Εάν αναπτύσσετε σε NestJS, χρησιμοποιήστε το [`@cqrs-ddd/nestjs`](/ddd-cqrs/el/packages/nestjs/) για να κάνετε wrap τους επίσημους handlers του `@nestjs/cqrs`.
 
 ## Εγκατάσταση
 
@@ -21,57 +21,115 @@ pnpm add @cqrs-ddd/cqrs @cqrs-ddd/pipeline
 
 ## Γρήγορο παράδειγμα
 
-```typescript
+Μια πλήρης εφαρμογή σε ένα αρχείο: ένα command με επικυρωμένο payload, ο handler του, ένα event και ο handler του, κατασκευασμένα και καταχωρισμένα χωρίς container. Σε έναν άδειο κατάλογο:
+
+```bash
+pnpm add @cqrs-ddd/cqrs @cqrs-ddd/pipeline @cqrs-ddd/pipeline-zod zod
+pnpm add -D typescript @types/node
+```
+
+Αποθηκεύστε το παρακάτω ως `tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "strict": true,
+    "types": ["node"],
+    "outDir": "dist"
+  },
+  "include": ["create-user.mts"]
+}
+```
+
+Αποθηκεύστε το παρακάτω ως `create-user.mts`· η κατάληξη `.mts` το κάνει ES module χωρίς ρύθμιση στο `package.json`:
+
+```ts
 import {
   CommandHandler,
   createCqrs,
   type EventBus,
+  EventsHandler,
   type ICommandHandler,
+  type IEventHandler,
 } from '@cqrs-ddd/cqrs';
-import { LoggingBehavior, UsePipeline } from '@cqrs-ddd/pipeline';
-import { AuditBehavior, audit } from '@cqrs-ddd/pipeline-audit';
-import { validated } from '@cqrs-ddd/pipeline-zod';
+import { UsePipeline } from '@cqrs-ddd/pipeline';
+import { validated, ZodValidationError } from '@cqrs-ddd/pipeline-zod';
 import { z } from 'zod';
-
-const CreateUserSchema = z.object({ email: z.string().email() });
 
 class CreateUserCommand {
   constructor(readonly email: string) {}
 }
 
-@CommandHandler(CreateUserCommand)
-@UsePipeline(
-  validated(CreateUserSchema),
-  audit({ action: 'user.create' }),
-)
-class CreateUserHandler implements ICommandHandler<CreateUserCommand> {
+class UserCreatedEvent {
   constructor(
-    private readonly users: UsersRepository,
+    readonly id: string,
+    readonly email: string,
+  ) {}
+}
+
+@CommandHandler(CreateUserCommand)
+@UsePipeline(validated(z.object({ email: z.email() })))
+class CreateUserHandler implements ICommandHandler<CreateUserCommand, string> {
+  constructor(
+    private readonly users: Map<string, string>,
     private readonly events: EventBus,
   ) {}
 
   async execute(command: CreateUserCommand): Promise<string> {
-    const user = await this.users.create(command.email);
-    this.events.publish(new UserCreatedEvent(user.id));
-    return user.id;
+    const id = `user_${this.users.size + 1}`;
+    this.users.set(id, command.email);
+    this.events.publish(new UserCreatedEvent(id, command.email));
+    return id;
   }
 }
 
-// Composition Root
-const cqrs = createCqrs({
-  behaviors: [new AuditBehavior(postgresAuditSink)],
-  globalBehaviors: { before: [LoggingBehavior] },
-});
+@EventsHandler(UserCreatedEvent)
+class WelcomeUser implements IEventHandler<UserCreatedEvent> {
+  async handle(event: UserCreatedEvent): Promise<void> {
+    console.log(`Welcome, ${event.email}`);
+  }
+}
 
-cqrs.register(new CreateUserHandler(usersRepo, cqrs.eventBus));
-
-// Dispatch
-const userId = await cqrs.commandBus.execute<CreateUserCommand, string>(
-  new CreateUserCommand('user@example.com'),
+const cqrs = createCqrs();
+cqrs.register(
+  new CreateUserHandler(new Map(), cqrs.eventBus),
+  new WelcomeUser(),
 );
+
+const id = await cqrs.commandBus.execute<CreateUserCommand, string>(
+  new CreateUserCommand('ada@example.com'),
+);
+console.log(`Created ${id}`);
+
+try {
+  await cqrs.commandBus.execute(new CreateUserCommand('not-an-email'));
+} catch (error) {
+  if (!(error instanceof ZodValidationError)) throw error;
+  console.log('Invalid email rejected before the handler ran');
+}
 
 await cqrs.close();
 ```
+
+Κάντε compile και εκτελέστε το:
+
+```bash
+pnpm exec tsc
+node dist/create-user.mjs
+```
+
+Τυπώνει:
+
+```text
+Wrapping CreateUserHandler.execute() [command] with pipeline: [ZodValidationBehavior]
+Welcome, ada@example.com
+Created user_1
+Invalid email rejected before the handler ran
+```
+
+Η πρώτη γραμμή είναι η σύνοψη που καταγράφει το `register()` για κάθε handler που κάνει compile, στο επίπεδο `bootstrapLogLevel`. Ο event handler εκτελείται μόλις δημοσιευτεί το event, πριν το command επιστρέψει το αποτέλεσμά του. Οι χρήστες ζουν σε ένα `Map`: τίποτα δεν αποθηκεύεται. Ο οδηγός [CQRS χωρίς NestJS](/ddd-cqrs/el/guides/cqrs/) χτίζει μια μεγαλύτερη εφαρμογή με ports, ένα query και behaviors που παίρνουν δικά τους instances.
 
 ## Επιλογές παραμετροποίησης `createCqrs`
 
@@ -114,7 +172,7 @@ const result = await cqrs.queryBus.execute<GetUserQuery, UserDto>(new GetUserQue
 Οι handlers δηλώνουν το pipeline τους χρησιμοποιώντας τα `@UsePipeline(...entries)` και `@SkipPipeline(...Behaviors)` από το `@cqrs-ddd/pipeline`:
 
 1. **Compilation κατά την καταχώριση**: Όταν εκτελείται το `cqrs.register(...handlers)`, το pipeline κάθε handler γίνεται compile σε μία βελτιστοποιημένη συνάρτηση runner μία φορά. Δεν πραγματοποιείται δυναμικό reflection μεταδεδομένων κατά το runtime dispatch.
-2. **Σειρά των behaviors**: Τα global `before` behaviors περιβάλλουν τα εξωτερικά behaviors του handler, ακολουθούμενα από τα εσωτερικά behaviors, την επιχειρησιακή μέθοδο του handler, και τα `after` behaviors. Δείτε [Σειρά εκτέλεσης](/ddd-cqrs/el/concepts/execution-order/).
+2. **Σειρά των behaviors**: Μια κλήση περνά πρώτα από τα global `before` behaviors, έπειτα από τα behaviors του ίδιου του handler με τη σειρά δήλωσής τους, έπειτα από τα global `after` behaviors, και φτάνει τελευταία στη μέθοδο `execute` του handler· το αποτέλεσμα επιστρέφει μέσα από τα ίδια behaviors με αντίστροφη σειρά. Το `after` δηλώνει θέση, την πλησιέστερη στον handler, όχι βήμα που εκτελείται αφού τελειώσει ο handler. Δείτε [Σειρά εκτέλεσης](/ddd-cqrs/el/concepts/execution-order/).
 3. **Execution context**: Κάθε εκτέλεση λαμβάνει ένα `IPipelineContext` που περιέχει τα `handlerName`, `requestName`, `requestKind`, `correlationId`, `tenantId`, και typed `items`.
 4. **Skip isolation**: Το `@SkipPipeline(LoggingBehavior)` αφαιρεί το καθορισμένο global behavior για τον συγκεκριμένο handler χωρίς να επηρεάζει άλλους handlers.
 
@@ -138,6 +196,7 @@ const result = await cqrs.queryBus.execute<GetUserQuery, UserDto>(new GetUserQue
 - **Dispatch**: Τα `eventBus.publish(event)` και `eventBus.publishAll(events)` ειδοποιούν όλους τους καταχωρημένους event handlers.
 - **Ασύγχρονη μη-μπλοκαριστική εκτέλεση**: Το `publish()` πυροδοτεί τους handlers και επιστρέφει άμεσα χωρίς να περιμένει την ολοκλήρωση των promises. Η σύγχρονη αρχικοποίηση εκτελείται πριν από την επιστροφή.
 - **Ελλείποντες handlers**: Events που δημοσιεύονται χωρίς καταχωρημένους handlers αγνοούνται με ασφάλεια.
+- **In-process παράδοση**: Ένα event υπάρχει μόνο στη μνήμη μέχρι να εκτελεστούν οι handlers του. Ένα pipeline γύρω από έναν handler δεν προσθέτει ανθεκτική παράδοση μηνυμάτων ούτε outbox: δείτε τα [Σημεία προσοχής](#σημεία-προσοχής--οδηγίες-παραγωγής).
 - **DDD Integration**: Το `EventBus` υλοποιεί το `IDomainEventPublisher` από το `@cqrs-ddd/core/application`, επιτρέποντας στο `CommandBaseHandler` να δημοσιεύει άμεσα τα buffered domain events των aggregates.
 
 ### `UnhandledExceptionBus`
