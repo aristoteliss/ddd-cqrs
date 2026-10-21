@@ -58,7 +58,10 @@ Canonical examples:
 - `role.rename(...)`
 - `role.delete()`
 
-Aggregate setters (`id`, `createdAt`, `updatedAt`, `version`, `username`, `department`, `name`) are `private` and exist only for MikroORM `accessor: true` hydration; do not add a public setter. `biome/plugins/aggregate-identity.grit` checks known hydration properties on receivers named `user`, `role`, `aggregate`, or `entity` in application layers, including literal bracket writes, compound assignments and updates. It is a syntax-only naming convention: types, aliases, dynamic keys, destructuring and reflection are outside its coverage. Domain-method mutation remains mandatory regardless of lint coverage.
+`user.update(...)` is the generic patch the PATCH use case keeps; a new behavior gets a
+method named for its business verb (`.agents/skills/cqrs-ddd-readability/SKILL.md`, D3).
+
+Aggregate setters (`id`, `createdAt`, `updatedAt`, `version`, `username`, `department`, `name`) are `private` and exist only for MikroORM `accessor: true` hydration; do not add a public setter. `biome/plugins/aggregate-identity.grit` checks known hydration properties on receivers named `user`, `role`, `aggregate`, or `entity` in `packages/core/application/`, its only scope in `biome.json` (`api/` and `integration/` are unchecked), including literal bracket writes, compound assignments and updates. It is a syntax-only naming convention: types, aliases, dynamic keys, destructuring and reflection are outside its coverage. Domain-method mutation remains mandatory regardless of lint coverage.
 
 Do not instantiate aggregates in application code with `new Aggregate(snapshot)` merely to trigger a repository operation. Prefer a real domain operation or an explicit application port whose name expresses the intent.
 
@@ -107,7 +110,7 @@ Query repositories and decorators:
 - Concurrent reads: when an in-flight query races a concurrent write that updates the cache, `@FromCache` detects the newer cached version (`newerCheck(current, snapshot)`) and returns the hydrated newer version rather than stale database data. A stale fill must never replace newer cache state; separate read/check/write steps do not prove that guarantee, so verify the coordination through the final write.
 - Anti-resurrection: `@Cache` writes a `CacheMutationBarrier` sentinel on deletions and secondary key invalidations, and `@FromCache` fills only through a revision-fenced `IVersionedCache`: it observes the key's revision before the database read and commits with `tryFill` only if nothing advanced it, so a stale snapshot cannot overwrite a barrier; a rejected fill re-reads and boundedly retries. An adapter with only `get`/`set` cannot be fenced, so `@FromCache` bypasses it for both reads and fills. Test invalidation after the last read but before fill, absence/expiry ABA, delete/recreate and retry exhaustion; the presence of barriers is not proof that all races are prevented, and DB commit plus cache maintenance remains a separate consistency boundary.
 - Cache adapters (`ICache<TSnapshot>`) store strictly serializable snapshots, never live domain aggregates. `MemoryCache` enforces deep detachment parity with database caches via JSON cloning on `set()` and `get()`.
-- `MikroOrmCache` (`packages/ddd-core`) executes queries outside the identity map (`{ disableIdentityMap: true }`) and never deletes an expired row: it reports it as `expired` and keeps its revision, so an expired reader cannot purge a concurrent fresh write.
+- `MikroOrmCache` (`packages/mikro-orm/src/cache/mikro-orm.cache.ts`) executes queries outside the identity map (`{ disableIdentityMap: true }`) and never deletes an expired row: it reports it as `expired` and keeps its revision, so an expired reader cannot purge a concurrent fresh write.
 
 Query handlers:
 
@@ -164,7 +167,7 @@ Persistence adapters may observe ORM/driver-specific conflict signals. Repositor
   - On 0 affected rows, runs a refreshed diagnostic read: raises `EntityNotFoundException` if entity is gone, or `ConcurrencyConflictError` if version mismatch.
 - **Deletes**: Execute conditional `nativeDelete(entityType, { id: aggregate.id, version: aggregate.getExpectedVersion() })`.
   - On 0 affected rows, perform a refreshed existence check to raise `EntityNotFoundException` or `ConcurrencyConflictError`.
-- **Lint Enforcement**: Persistence structure and conventional aggregate property writes are checked by Biome Grit plugins (`biome/plugins/persistence-lifecycle.grit`, `aggregate-identity.grit`). Run `pnpm lint:persistence` and `pnpm check` to verify.
+- **Lint Enforcement**: No Grit plugin checks the persistence structure; review and the decorator specs do. `aggregate-identity.grit` checks conventional aggregate property writes in `packages/core/application/`. Run `pnpm lint:plugins` and `pnpm check` to verify.
 
 ## Domain model rules
 
@@ -175,6 +178,10 @@ Domain models must remain free from:
 - queue/broker APIs
 - environment variables
 - logging/telemetry
+
+In an application (`api/`, `integration/`), the checkable form of this rule: a domain
+source file imports only `@cqrs-ddd/core/domain` and files under its own context's
+`domain/`.
 
 Use `DomainException` subclasses for invariants/business errors. Declare a field's value constraints once with `textRule`/`numberRule` (`@cqrs-ddd/core/domain`) in the aggregate's static `rules`, parse through them in the constructor and the `@Mutable` normalizer, and read their limits in request schemas; a value exception extends `InvalidValueException`.
 

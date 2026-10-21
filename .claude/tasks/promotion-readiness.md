@@ -185,6 +185,9 @@ Steps 1–5 gate targeted evaluation; the launch (step 8) waits for green public
 - Owner, 2026-10-16: the launch texts are the owner's own. The agent writes no article, Show HN
   text, comment or reply, and does not rewrite the owner's texts; it supplies verified facts,
   checks and the tracker. A Show HN links the repository.
+- Owner, 2026-10-16: all 21 packages stay dual-licensed, with AGPL-3.0 as the open-source
+  side and the commercial terms of the committed `COMMERCIAL_LICENSE.txt` (marginal brackets,
+  $50,000 cap, worked example). Rejected: a permissive core licence.
 - Owner, 2026-10-16: launch material lives in `.claude/launch/`, git-ignored; the drafts were
   removed from the pull request branch by amending its commit (`f145753` → `d4ea1f0`).
 
@@ -224,7 +227,21 @@ Node.js 24.13.0 and 22.12.0: all six exit 0 with the documented output. The Nest
 `integration/nestjs/invoices.ts` with a small entry that executes a valid and an invalid
 command. Also: `pnpm lint:plugins` clean (896 files).
 
-Not verified: the demo on StackBlitz; the `master` run that the badge reads.
+On 2026-10-16, the licence: the owner confirmed the committed `COMMERCIAL_LICENSE.txt` (marginal
+brackets, worked example) as the new terms. All 43 copies have one checksum: both roots, the 21
+packages here, and the 20 git-ignored package copies in nestjs-pipeline after `pnpm
+copy-licenses`. The only page that restated the fees, the nestjs-pipeline README table, now
+states marginal brackets and the example, folded by fixup and autosquash into `8eeae0af`, now
+`b3df90a4` on its local `master`; `origin/master` still holds `8eeae0af` until a force push.
+`.claude/launch/` had gone missing; both files were restored from the transcript of the session
+that wrote them (its last read plus the edits after it), git-ignored as before. Their line
+numbers follow `d4ea1f0`/`8e07660`, not `2c67478`.
+
+Not verified: the demo on StackBlitz; the `master` run that the badge reads; `in_progress`
+answered with 409 over a live HTTP server (source and unit specs only); the Bun version CI
+uses (`oven-sh/setup-bun@v2` takes no version input); the delivery semantics of the
+`@nestjs/cqrs` `EventBus`; legal readings of the AGPL summary in `README.md` and of
+`COMMERCIAL_LICENSE.txt`.
 
 ## Risks
 
@@ -242,20 +259,24 @@ Not verified: the demo on StackBlitz; the `master` run that the badge reads.
 - The first example prints a stack trace on standard error for the rejection it provokes; the
   pages say so, but a newcomer may read it as a crash.
 - The licence is the likeliest first topic of a Hacker News thread: revenue-based fees and a
-  contact requirement for the free tier.
+  contact requirement for the free tier. `COMMERCIAL_LICENSE.txt` defines neither
+  "commercial", "gross revenue" nor "organization", and has no section saying who needs it
+  (only `README.md:189` does). Derived from its brackets: $29,500 at $50,000,000; the
+  $50,000 cap is reached at $255,000,000.
 - Little social proof (1 star, about a dozen weekly downloads): no launch outcome is promised.
 
 ## Open Questions
 
-- **Blocking for step 5 and the launch:** does the project keep AGPL/commercial dual licensing
-  as is, or move the core to a permissive license? The review expects the revenue-based terms
-  and the contact requirement on the free tier to slow developer-led adoption, and recommends
-  counsel review.
+- The Node.js minimum in `README.md:14,22`, `getting-started.md:73` and its Greek mirror
+  reads "22.12 or later" for "the packages", with no `@cqrs-ddd/mikro-orm` exception on those
+  lines (it needs 22.17; `README.md:130-131` and `overview.md:63` state it). Add the exception
+  there too?
 - Should the 0.5.0 documentation fixes go out as a README-only patch release, or wait for the
   next version? A patch on the default tag would also restore the five npm READMEs.
 - With the Redis or PostgreSQL store, a crashed handler leaves a claim that refuses retries
-  with `in_progress` for the whole `ttl`, 24 hours by default. Is that default intended, or should the in-progress claim get its own,
-  shorter lifetime? That would be a package change, outside this task.
+  with `in_progress` for the whole `ttl`, 24 hours by default. Is that default intended, or
+  should the in-progress claim get its own, shorter lifetime? That would be a package change,
+  outside this task.
 - Who are the three to five evaluators for step 7?
 - Two package findings from the facts check, both package changes outside this task (code-path
   findings, not reproduced defects): the JSDoc of `IdempotencyBehavior` and
@@ -266,10 +287,14 @@ Not verified: the demo on StackBlitz; the `master` run that the badge reads.
 
 ## Next Steps
 
-Owner review of pull request 1, the Greek wording in particular; then merge. After the merge:
-check the badge and the redeployed site, open the demo on StackBlitz, and publish a release on
-the default tag. After the deploy, check that `guides/from-nestjs-pipeline/` answers 200 and
-link it from the nestjs-pipeline README (its task, step 5).
+The owner force-pushes nestjs-pipeline `master` (`b3df90a4` replaces `8eeae0af`). Owner review
+of pull request 1, the Greek wording in particular; then merge. After the merge:
+check the badge and the redeployed site (the anchors `#guarantees-and-limits`,
+`#minimal-setup`, `#what-is-not-included` and `#runtimes` resolve; "exactly once" is gone
+from `/packages/pipeline-idempotency/` and "instant startup" from `/guides/from-nestjs/`),
+open the demo on StackBlitz, and publish a release on the default tag. After the deploy,
+check that `guides/from-nestjs-pipeline/` answers 200 and link it from the nestjs-pipeline
+README (its task, step 5).
 
 ## Snapshot Impact
 

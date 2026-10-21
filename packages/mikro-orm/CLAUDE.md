@@ -48,7 +48,7 @@ Do not add another copy of any of them anywhere.
   and no driver package (`src/package-manifest.spec.ts`). The application supplies the
   driver through its ORM options.
 - No NestJS import (`biome/plugins/framework-independence.grit`), no `process.env`
-  (`core-environment.grit`), no transport exceptions (`transport-neutral-errors.grit`).
+  (`core-environment.grit`), no transport exceptions (no plugin checks this; review does).
 - Import core through its layered entry points (`@cqrs-ddd/core/domain`, `/application`,
   `/persistence`), never through relative paths into its source.
 
@@ -66,6 +66,7 @@ pnpm test:release                         # installs and loads it standalone
 - `vitest.config.ts` enforces 100% statements, branches, functions and lines per file.
 - `src/cache/cache-adapter-conformance.spec.ts` keeps `MikroOrmCache` and core's
   `MemoryCache` behaviorally identical; keep both sides passing.
-- Real-database coverage lives in the nestjs-pipeline example application, `api/test/` (`mikro-orm-cache.postgres.e2e-spec.ts`,
-  the update-lifecycle suites); `api/test/schema-uniques.spec.ts` builds the dialect from
-  the api's real schemas and checks every unique constraint.
+- Real-database coverage lives in this repository's example application:
+  `api/test/e2e/infrastructure/mikro-orm-cache.postgres.e2e-spec.ts` and the cache and
+  write-side suites under `api/test/e2e/`; `api/src/persistence/schema-ddl.spec.ts` builds
+  the dialect from the api's real schemas and checks every unique constraint.

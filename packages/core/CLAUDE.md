@@ -20,9 +20,8 @@ Four entry points, and they are the boundary consumers import from:
 | `persistence/index.ts` | Repository interfaces/abstracts, `ICache`, `MemoryCache`, lifecycle decorators, cache helpers |
 | `http/index.ts` | `domainErrorHttpStatus`: this package's errors → HTTP status, reason phrase and safe message |
 
-`index.ts` at the package root is a compatibility barrel;
-`biome/plugins/ddd-entry-points.grit` requires application code to import the layered
-entry points instead.
+`index.ts` at the package root is a compatibility barrel; application code imports the
+layered entry points instead. No Grit plugin checks this; review does.
 
 Names follow [AGENTS.md → Naming](../../AGENTS.md#naming): short and declarative, with no
 prefix or suffix their context already gives. An exported name is a published contract.
@@ -42,7 +41,7 @@ application configures and extends them. This package owns:
 
 Do not add another copy of any of them anywhere. MikroORM adapters, including the
 aggregate repository base, `optimisticUpdate`, `MikroOrmCache` and the root-entity schema
-mapping, belong to `packages/ddd-mikro-orm` (see its `CLAUDE.md`).
+mapping, belong to `packages/mikro-orm` (see its `CLAUDE.md`).
 
 ## Independence from NestJS and from any ORM
 
@@ -50,7 +49,7 @@ This package is framework- and ORM-neutral and is published as its own npm packa
 code here, specs included, may import `@nestjs/*`, another `nestjs`-named package, any
 `@nestjs-pipeline/*` package, an ORM or a database driver. Nest integration, such as DI
 providers, logger adapters, tenant wiring and HTTP exception filters, belongs in the
-application; ORM adapters belong in their own package. Four checks enforce this:
+NestJS adapter `@cqrs-ddd/nestjs` or the application; ORM adapters belong in their own package. Four checks enforce this:
 - `biome/plugins/framework-independence.grit` rejects the NestJS imports and
   `biome/plugins/orm-independence.grit` the ORM and driver imports (`pnpm lint:plugins`);
 - `package-manifest.spec.ts` rejects NestJS and MikroORM packages in every dependency
@@ -101,8 +100,8 @@ pnpm lint:plugins                                # Grit plugin diagnostics
   of a barrier is not proof a race is prevented — test the coordination through the final write.
 - The repository-wide Grit plugins, including the persistence rules that apply to this
   package, are tested in `integration/checks/lint/`; this package's specs name no other workspace.
-  The nestjs-pipeline example application exercises these decorators against real
-  databases in its end-to-end suites.
+  The example application `api/` exercises these decorators against real databases in
+  its end-to-end suites (`api/test/e2e/`).
   Keep those specs passing rather than loosening a plugin.
 
 ## Local security and compatibility rules
@@ -110,12 +109,12 @@ pnpm lint:plugins                                # Grit plugin diagnostics
 - `ICache<TSnapshot>` stores strictly serializable snapshots — never a live aggregate.
 - Write repositories use `@PersistedWrite(...)`, or apply the lifecycle decorators outermost
   to innermost: `@Cache(...)` → `@AcknowledgePersisted(...)` → `@MapPersistenceErrors(...)`.
-  Inverting the order, or stacking an individual decorator on `@PersistedWrite`, is a defect,
-  and `biome/plugins/persistence-lifecycle.grit` fails the build.
+  Inverting the order, or stacking an individual decorator on `@PersistedWrite`, is a defect.
+  No Grit plugin checks the order; review does.
 - `acknowledgePersisted()` may only advance after durable persistence succeeds.
 - Version conflicts surface as framework-neutral `ConcurrencyConflictError`; no MikroORM
   error class may leak into application or domain code.
-- No `process.env` and no transport exceptions in this package
-  (`core-environment.grit`, `transport-neutral-errors.grit`).
+- No `process.env` and no transport exceptions in this package (`core-environment.grit`
+  checks `process.env`; no plugin checks transport exceptions, so review does).
 - A defect in a cache abstraction is repaired inside the abstraction, with a regression
   test — it is not grounds for moving the feature to another layer.

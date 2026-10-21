@@ -8,9 +8,11 @@ The framework-neutral packages of the `@cqrs-ddd` organization: the DDD primitiv
 (`@cqrs-ddd/core`, `@cqrs-ddd/mikro-orm`), the dependency-free utilities
 (`@cqrs-ddd/uuidv7`, `@cqrs-ddd/safe-stringify`, `@cqrs-ddd/untyped`) and the pipeline
 behaviors (`@cqrs-ddd/pipeline`, `@cqrs-ddd/pipeline-<name>`), and the CQRS buses with
-their handler decorators (`@cqrs-ddd/cqrs`). Every package runs without a framework or a
-dependency-injection container. Applications on a framework, such as the NestJS `api` of
-nestjs-pipeline, depend on these packages, never the other way round.
+their handler decorators (`@cqrs-ddd/cqrs`). Every package except the NestJS adapter
+`@cqrs-ddd/nestjs` runs without a framework or a dependency-injection container. `api/` is
+the real-life example application of the packages, on Express and Fastify. Applications on
+a framework, such as the NestJS `api` of nestjs-pipeline, depend on these packages, never
+the other way round.
 
 ## The two repositories
 
@@ -23,7 +25,6 @@ repository relies on.
 | Path | `~/Source/ddd-cqrs` | `~/Source/nestjs-pipeline` |
 | GitHub | https://github.com/aristoteliss/ddd-cqrs | https://github.com/aristoteliss/nestjs-pipeline |
 | Owns | The one implementation: the framework-neutral `@cqrs-ddd/*` packages and their NestJS adapter `@cqrs-ddd/nestjs`, published from 0.5.0; the example application `api/` on Express and Fastify; the documentation site https://aristoteliss.github.io/ddd-cqrs/; the local registry `tools/local-registry/` | The NestJS application `api/`, which from 0.5.0 installs the `@cqrs-ddd/*` packages; the old `@nestjs-pipeline/*` packages, stopped at 0.4.x and kept on npm with every version, and `@nestjs-pipeline/cqrs-ddd`, a facade that re-exports `@cqrs-ddd/nestjs` |
-| Active task | none: the 0.5.0 release is done (2026-10-04) | none: `api` runs on `@cqrs-ddd` 0.5.0 from npm and the 0.4.3 notices are published (2026-10-04) |
 
 How they connect:
 
@@ -49,7 +50,9 @@ How they connect:
   nestjs-pipeline's changes; then the 0.4.3 notices. The owner publishes and pushes;
   agents commit only after asking, never on `master`.
 - **Keep both sides current.** When work in one repository changes something the other
-  relies on, update the other repository's active task file in the same session.
+  relies on, update the other repository's active task file (under its `.claude/tasks/`,
+  if one exists) in the same session. The task files, not this table, carry each side's
+  status.
 
 ## Architecture-sensitive changes
 
@@ -62,6 +65,10 @@ models, domain events or a pipeline behavior, read the nested `CLAUDE.md` of the
 - authorization, tenant context
 - idempotency, retries, rate limiting, auditing, metrics, tracing
 - pipeline behaviors, their ordering and their keys
+
+Before adding or changing a command, query, handler, aggregate, domain event or route, or
+reviewing such a diff, read `.agents/skills/cqrs-ddd-readability/SKILL.md`. Both skills are
+also linked under `.claude/skills/`, where Claude Code discovers them.
 
 ## Source of truth
 
@@ -94,7 +101,9 @@ Write the minimum code that solves the problem. Nothing speculative.
 - No error handling for impossible scenarios.
 - If you write 200 lines and it could be 50, rewrite it.
 
-Ask: would a senior engineer call this overcomplicated? If yes, simplify.
+Ask: would a senior engineer call this overcomplicated? If yes, simplify. The limits a
+reviewer can count (function length, nesting, parameters, constructor dependencies) are
+rules G1 to G5 of the readability skill.
 
 ### Surgical changes
 
@@ -140,6 +149,105 @@ The map is an index, not an authority: verify any claim against the source befor
 on it, and prefer the code when they disagree. Regenerate the generated sections with
 `pnpm context:update`, update the human-owned sections by hand, and verify with
 `pnpm context:validate`. Never place secret values in a context or task file.
+
+### Reading order before a large task
+
+1. This file — working discipline and non-negotiable repository rules. It wins over
+   `CLAUDE.md`.
+2. `.agents/skills/cqrs-ddd-architecture/SKILL.md` — before touching domain models,
+   persistence, caching, idempotency or behaviors.
+3. `.agents/skills/cqrs-ddd-readability/SKILL.md` — before adding or changing commands,
+   queries, handlers, aggregates, domain events or routes, and when reviewing a diff.
+4. `.claude/codebase-map.md` — the codebase map: shape, stack, entry points, directories,
+   commands, gotchas.
+5. The nested `CLAUDE.md` of the package you are editing, if one exists.
+6. The active task context file under `.claude/tasks/`, if the task has one.
+
+### How to use the codebase map
+
+- It is a **compact orientation map, not a replacement for reading source**. Use it to
+  find where to look, then open the actual files.
+- **Verify before relying on it.** Confirm any claim that drives a change against the
+  source file it names.
+- **Source wins.** When the map, a README, or a summary disagrees with the code, the code
+  is authoritative; fix the map afterwards rather than coding to the summary.
+- Sections wrapped in `context:generated-*` markers are machine-written and are rewritten
+  on every regeneration. Sections wrapped in `context:manual-*` markers are human-owned and
+  are preserved; edit those by hand.
+
+### Progressive disclosure
+
+1. Start with the map's Repository Shape, Directory Map, and Critical Modules.
+2. Read only the nested `CLAUDE.md` files and the documentation of the packages in scope.
+3. Open only the modules and symbols the task touches, plus their direct callers and tests.
+4. Do not scan the whole repository. Repo-wide sweeps need an explicit reason (a rename, a
+   contract audit, a security review) — say what it is before doing one.
+
+### Task context files
+
+For any task that is large, multi-step, or likely to span sessions, create
+`.claude/tasks/<task-id>.md` from `.claude/tasks/TEMPLATE.md`.
+
+- Use a short, stable, descriptive task id (`cache-barrier-retry`, not `fix-1`).
+- Update it after each meaningful milestone: status, decisions, modified files,
+  verification results, next steps.
+- Record what was *verified*, not what was intended. Name commands and their outcome.
+- Never put secrets, credentials, tokens, customer data, or personal information in a
+  task id or a task file.
+- `.claude/tasks/` is for active work. When the task is done, move anything durable to the
+  place that owns it — source, a documentation page or a README — then delete the task
+  file. Only `TEMPLATE.md` stays.
+
+### Keeping the map current
+
+Propose a map update — do not silently skip it — when a change affects architecture,
+module responsibilities, dependencies, entry points, commands, or repository conventions.
+
+1. Run `pnpm context:update` (regenerates the generated sections only).
+2. Hand-edit the manual sections that the change invalidates (Architecture, Critical
+   Modules, Conventions, Testing Strategy, Security and Operational Notes, Gotchas).
+3. Run `pnpm context:validate`.
+4. Mention the map change in your summary so the owner can review it.
+
+### Secrets
+
+Never place secret values, tokens, private keys, passwords, connection strings with
+credentials, or personal data in `CLAUDE.md`, the codebase map, task files, or any other
+context file. Environment variable **names** are fine; values are not. `.env*` files are
+never read into context files.
+
+### After compaction or when uncertain
+
+Re-read, in this order: `CLAUDE.md` → `AGENTS.md` → `.claude/codebase-map.md` → the active
+`.claude/tasks/<task-id>.md` → the nested `CLAUDE.md` for the area in scope. If a
+checkpoint exists at `.claude/state/context-checkpoint.md`, read it too — it records which
+task files and which working-tree paths were active before compaction.
+
+## Commands
+
+Use repository-native commands. Never invent an equivalent, and never `npm`/`yarn` here.
+
+| Purpose | Command |
+| --- | --- |
+| Install | `pnpm install` |
+| Tests of every workspace, after the Grit plugin diagnostics | `pnpm test` |
+| One workspace's tests | `pnpm --filter <package-name> test` |
+| The api's end-to-end suites (needs Docker) | `pnpm test:e2e` |
+| Type checks across workspaces | `pnpm lint` |
+| Grit plugin diagnostics | `pnpm lint:plugins` |
+| Format and lint (Biome) | `pnpm check`, `pnpm format` |
+| Build | `pnpm build` |
+| Release check: packs every package and loads it from its tarball (needs Bun) | `pnpm test:release` |
+| Everything above | `pnpm verify:all` |
+| Everything above, recorded to `verify-run.log`, every stage even after a failure | `pnpm verify:log` |
+| Review the recorded run: stages, workspaces, coverage, verdict | `pnpm verify:review` |
+| The output of every failure in the recorded run, per workspace | `pnpm verify:fails` |
+| Regenerate the codebase map | `pnpm context:update` |
+| Check the map is current | `pnpm context:check` |
+| Validate all context files | `pnpm context:validate` |
+
+Prefer the narrowest relevant check first; run the affected package's tests plus
+`pnpm lint:plugins` before reporting work as done.
 
 ## Library scope and review discipline
 
@@ -223,6 +331,8 @@ context, or the thing it names does too much.
   status words (`legacy`, `old`, `new`, `v2`, `temp`). The architectural role suffixes
   (`…Command`, `…Handler`, `…Query`, `…Event`, `…Behavior`, `…Repository`,
   `…Exception`/`…Error`) and the `I` prefix of ports stay, because they name the role.
+  `…Exception` names a business-rule violation; `…Error` names a technical,
+  configuration, concurrency or protocol failure.
 - A name states what the thing is or does, and stays true to its behavior.
 - Booleans read as yes/no statements (`isExpired`, `hasPipeline`, `includeStack`), never as
   a bare noun phrase and never negated (`notEnabled`).
@@ -238,7 +348,38 @@ context, or the thing it names does too much.
 - Do not lengthen a name to carry what its JSDoc should say. Renaming a published export
   is a breaking change.
 - Files are kebab-case with their role suffix (`cache.behavior.ts`,
-  `user-created.event.ts`, `memory.store.ts`).
+  `user-created.event.ts`, `memory.store.ts`). The suffixes the application uses are
+  listed in `.agents/skills/cqrs-ddd-readability/references/conventions.md`.
+
+## Readable DDD/CQRS code
+
+These rules apply to new and changed code in `api/` and the `integration/` applications;
+`CLAUDE.md` leads with the same rules. Their detail, before/after examples and the
+conventions as the code uses them are in `.agents/skills/cqrs-ddd-readability/`.
+
+- **Behavior in the aggregate.** State changes go through a factory or an `@ApplyMutation`
+  method named for the business verb; the aggregate enforces its invariants through the
+  value rules in its static `rules`. A value object is added only for a concept whose
+  fields travel together or that has behavior of its own (skill D2 to D5).
+- **One verb per use case.** A command, the aggregate method it calls and the event that
+  method records share one verb (`RenameRole` → `rename` → `RoleRenamedEvent`). Queries are
+  `Get<WhatItReturns>Query` and never change state (C1, C2, C4, D6).
+- **Thin handlers.** A handler loads, throws `EntityNotFoundException`, authorizes against
+  the real aggregate, calls one domain method, saves and returns the aggregate, so that
+  `CommandBaseHandler` publishes its events; no other code publishes them (C3, C5).
+- **Pipeline for cross-cutting concerns.** Authorization by type, rate limits, idempotency,
+  audit, retries and caching are `@UsePipeline` entries, never inline code (C6, C7).
+- **One owner per validation rule.** Limits live in `Aggregate.rules`, the command schema
+  reads them and route schemas derive from the command schema (C10).
+- **Bounded contexts read, never write, each other.** A context may import another's query,
+  query-repository port, read model or domain types; it never changes another context's
+  aggregate (C11). A route dispatches exactly one command or query (C12).
+- **Measurable size.** `handle`/`execute` bodies at most 30 lines, other bodies at most 40,
+  nesting at most 3, at most 3 positional parameters and 6 constructor dependencies, no
+  nested ternary (G1 to G5).
+- **No speculative abstraction.** No interface with one implementation outside a real
+  boundary, no generic repository or base handler, no new behavior, domain service, layer
+  or context without need and, for the last three, an owner decision (A1 to A6).
 
 ## Non-negotiable repository rules
 
@@ -293,10 +434,12 @@ context, or the thing it names does too much.
    default tenant.
 7. **Aggregate mutation.** Mutate aggregates through factories and domain methods, not
    direct setters or synthetic snapshots constructed only to trigger persistence.
-   Aggregates inherit from the framework-neutral `AggregateRoot` of `@cqrs-ddd/core/domain`.
+   Aggregates inherit from the framework-neutral `AggregateRoot` of `@cqrs-ddd/core/domain`;
+   a persisted aggregate extends its subclass `RootEntity`.
    Aggregate setters are `private` and exist only for ORM hydration.
    `aggregate-identity.grit` flags syntactic property writes on receivers named `user`,
-   `role`, `aggregate`, or `entity` in application layers; it cannot resolve types,
+   `role`, `aggregate`, or `entity` in `packages/core/application/`, its only scope in
+   `biome.json`; it does not check `api/` or `integration/`, and it cannot resolve types,
    aliases, or dynamic keys, so domain-method mutation remains mandatory outside its
    coverage.
 8. **Event publication.** `CommandBaseHandler` publishes an aggregate's buffered events
@@ -337,7 +480,8 @@ context, or the thing it names does too much.
 14. **Cache coordination.** Protect newer state from stale fills and writes: `@Cache`
     write-through uses CAS version comparison (`isCacheNewer`), `@FromCache` returns the
     newer cached snapshot when a mutation races a database read, and `MikroOrmCache`
-    bypasses the identity map and deletes expired entries conditionally. Verify these
+    bypasses the identity map and never deletes an expired entry on read: it reports it as
+    expired and keeps its revision, so an expired reader cannot purge a fresh write. Verify these
     mechanisms rather than assume them: their presence does not prove safety across the
     final-check/write gap, expiry/absence ABA, delete/recreate, secondary lookups or retry
     exhaustion. A database commit and a cache mutation are not one transaction; document
@@ -375,6 +519,7 @@ context, or the thing it names does too much.
 
 - Run the narrowest relevant typecheck and tests, then the affected packages' tests and
   `pnpm lint:plugins`.
-- Every package keeps its 100% per-file coverage thresholds; close a gap with a behavior
+- Every workspace under `packages/` and `integration/` keeps its 100% per-file coverage
+  thresholds (`api` reports coverage without thresholds); close a gap with a behavior
   test, not an ignore directive.
 - Update the documentation when a deliberate repository decision changes.
