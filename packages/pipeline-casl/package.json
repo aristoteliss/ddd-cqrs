@@ -1,6 +1,6 @@
 {
   "name": "@cqrs-ddd/pipeline-casl",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "CASL authorization for @cqrs-ddd/pipeline: type-level checks before the handler, entity and field checks after it",
   "author": "Aristotelis",
   "license": "SEE LICENSE IN LICENSE",
@@ -56,10 +56,10 @@
     "@cqrs-ddd/pipeline": "workspace:^"
   },
   "devDependencies": {
-    "@casl/ability": "^7.0.1",
+    "@casl/ability": "^7.0.2",
     "@cqrs-ddd/pipeline": "workspace:*",
-    "@vitest/coverage-v8": "^5.0.3",
-    "vitest": "^5.0.3"
+    "@vitest/coverage-v8": "^5.0.5",
+    "vitest": "^5.0.5"
   },
   "keywords": [
     "pipeline",

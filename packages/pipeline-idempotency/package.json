@@ -1,6 +1,6 @@
 {
   "name": "@cqrs-ddd/pipeline-idempotency",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Idempotency for @cqrs-ddd/pipeline: deduplicates commands by an operation key and replays completed responses within the caller's scope",
   "author": "Aristotelis",
   "license": "SEE LICENSE IN LICENSE",
@@ -62,8 +62,8 @@
   },
   "devDependencies": {
     "@cqrs-ddd/pipeline": "workspace:*",
-    "@vitest/coverage-v8": "^5.0.3",
-    "vitest": "^5.0.3"
+    "@vitest/coverage-v8": "^5.0.5",
+    "vitest": "^5.0.5"
   },
   "dependencies": {
     "@cqrs-ddd/safe-stringify": "workspace:^",

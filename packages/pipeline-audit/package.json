@@ -1,6 +1,6 @@
 {
   "name": "@cqrs-ddd/pipeline-audit",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Audit records for @cqrs-ddd/pipeline: who did what, in which tenant, with redacted payloads, to a log or PostgreSQL sink",
   "author": "Aristotelis",
   "license": "SEE LICENSE IN LICENSE",
@@ -60,8 +60,8 @@
   },
   "devDependencies": {
     "@cqrs-ddd/pipeline": "workspace:*",
-    "@vitest/coverage-v8": "^5.0.3",
-    "vitest": "^5.0.3"
+    "@vitest/coverage-v8": "^5.0.5",
+    "vitest": "^5.0.5"
   },
   "dependencies": {
     "@cqrs-ddd/safe-stringify": "workspace:^",

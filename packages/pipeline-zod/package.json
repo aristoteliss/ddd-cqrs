@@ -1,6 +1,6 @@
 {
   "name": "@cqrs-ddd/pipeline-zod",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Zod validation for @cqrs-ddd/pipeline: validates and parses the input of a command, query, event or wrapped function",
   "author": "Aristotelis",
   "license": "SEE LICENSE IN LICENSE",
@@ -54,9 +54,9 @@
   },
   "devDependencies": {
     "@cqrs-ddd/pipeline": "workspace:*",
-    "@vitest/coverage-v8": "^5.0.3",
-    "vitest": "^5.0.3",
-    "zod": "^4.6.5"
+    "@vitest/coverage-v8": "^5.0.5",
+    "vitest": "^5.0.5",
+    "zod": "^4.6.7"
   },
   "dependencies": {
     "@cqrs-ddd/untyped": "workspace:^"

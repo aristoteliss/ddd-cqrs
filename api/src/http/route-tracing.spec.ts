@@ -4,7 +4,11 @@ import type { Server } from 'node:http';
 import { createRequire } from 'node:module';
 import { SpanKind } from '@opentelemetry/api';
 import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
-import { NodeSDK, tracing } from '@opentelemetry/sdk-node';
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import {
+  InMemorySpanExporter,
+  SimpleSpanProcessor,
+} from '@opentelemetry/sdk-trace';
 import type { Express } from 'express';
 import pino from 'pino';
 import request from 'supertest';
@@ -17,10 +21,10 @@ import { fastifyApp } from './fastify.js';
 import { HttpError } from './http-error.js';
 import { route } from './route.js';
 
-const exporter = new tracing.InMemorySpanExporter();
+const exporter = new InMemorySpanExporter();
 const sdk = new NodeSDK({
   resourceDetectors: [],
-  spanProcessors: [new tracing.SimpleSpanProcessor(exporter)],
+  spanProcessors: [new SimpleSpanProcessor({ exporter })],
   instrumentations: [new HttpInstrumentation()],
 });
 

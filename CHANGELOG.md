@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.5.1
+
+A patch release. No export, signature, error message or documented behavior changes. Every
+package is released at 0.5.1 on the `latest` dist-tag.
+
+### Changed
+
+- The source of every package is reorganized for readability: long functions split into
+  named steps where that reads better, early exits instead of nested blocks, and one blank
+  line between the steps of a function. The order of every read, check, write and `await`
+  in the cache, idempotency and concurrency code is unchanged. Some exported classes have
+  new private members; a subclass that declares a member of the same name no longer
+  compiles.
+- The packages are developed and tested against the latest releases of their peers within
+  the declared ranges: NestJS 12.2, `@nestjs/cqrs` 12.1.1, MikroORM 7.2.5, zod 4.6.7,
+  `@casl/ability` 7.0.2, `@opentelemetry/api` 1.10.0 and `rate-limiter-flexible` 11.2.3.
+  No peer range changes.
+- `@cqrs-ddd/mikro-orm` and `@cqrs-ddd/nestjs` take the other `@cqrs-ddd` packages at
+  `^0.5.1`, as every release moves in lockstep.
+
+### Example application (`api/`, not published)
+
+- A refresh runs on the command bus as `RefreshAuthCommand`, with its rate limit as a
+  pipeline entry and no dead-letter capture. Login is `StartAuthCommand`, which records
+  `AuthStartedEvent`; renaming a role is `RenameRoleCommand`, which records
+  `RoleRenamedEvent`. The HTTP routes, bodies, statuses and audit actions are unchanged;
+  logs and metrics name the new commands.
+- The OpenTelemetry SDK 0.300 replaces 0.222. BullMQ stays on 5.
+
 ## 0.5.0
 
 The first release. Every package is released at 0.5.0, first under the `next` dist-tag.

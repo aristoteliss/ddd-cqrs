@@ -31,7 +31,7 @@ Adapters για το MikroORM 7 για το [`@cqrs-ddd/core`](https://www.npmjs
 pnpm add @cqrs-ddd/mikro-orm @cqrs-ddd/core @mikro-orm/core
 ```
 
-Απαιτεί Node.js 22.17 ή νεότερο (όπως και το MikroORM 7). Τα `@cqrs-ddd/core` `^0.5.0` και `@mikro-orm/core` `^7.2.3` είναι peer dependencies. Προσθέστε τον driver του MikroORM που χρησιμοποιείτε, όπως `@mikro-orm/postgresql`.
+Απαιτεί Node.js 22.17 ή νεότερο (όπως και το MikroORM 7). Τα `@cqrs-ddd/core` `^0.5.1` και `@mikro-orm/core` `^7.2.3` είναι peer dependencies. Προσθέστε τον driver του MikroORM που χρησιμοποιείτε, όπως `@mikro-orm/postgresql`.
 
 ## Entity manager source
 

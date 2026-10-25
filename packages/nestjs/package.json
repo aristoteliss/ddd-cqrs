@@ -1,6 +1,6 @@
 {
   "name": "@cqrs-ddd/nestjs",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "NestJS adapter for the @cqrs-ddd packages: runs @nestjs/cqrs handlers through their pipelines, answers every package error as a NestJS HttpException, and wires correlation and job context",
   "author": "Aristotelis",
   "license": "SEE LICENSE IN LICENSE",
@@ -98,7 +98,7 @@
     }
   },
   "devDependencies": {
-    "@casl/ability": "^7.0.1",
+    "@casl/ability": "^7.0.2",
     "@cqrs-ddd/core": "workspace:*",
     "@cqrs-ddd/pipeline": "workspace:*",
     "@cqrs-ddd/pipeline-casl": "workspace:*",
@@ -108,14 +108,14 @@
     "@cqrs-ddd/pipeline-job-context": "workspace:*",
     "@cqrs-ddd/pipeline-rate-limit": "workspace:*",
     "@cqrs-ddd/pipeline-zod": "workspace:*",
-    "@nestjs/common": "^12.1.1",
-    "@nestjs/core": "^12.1.1",
-    "@nestjs/cqrs": "^12.1.0",
+    "@nestjs/common": "^12.2.0",
+    "@nestjs/core": "^12.2.0",
+    "@nestjs/cqrs": "^12.1.1",
     "@openfeature/server-sdk": "^1.23.0",
-    "@vitest/coverage-v8": "^5.0.3",
+    "@vitest/coverage-v8": "^5.0.5",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
-    "vitest": "^5.0.3",
-    "zod": "^4.6.5"
+    "vitest": "^5.0.5",
+    "zod": "^4.6.7"
   }
 }

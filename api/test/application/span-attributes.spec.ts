@@ -19,7 +19,11 @@ import {
 } from '@cqrs-ddd/pipeline-feature-flags';
 import { TypedInMemoryProvider } from '@openfeature/server-sdk';
 import { trace } from '@opentelemetry/api';
-import { tracing } from '@opentelemetry/sdk-node';
+import {
+  InMemorySpanExporter,
+  SimpleSpanProcessor,
+  TracerProvider,
+} from '@opentelemetry/sdk-trace';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { GLOBAL_BEHAVIORS } from '../../src/app.js';
 import { DEAD_LETTER_DEFAULTS } from '../../src/common/dead-letter/dead-letter.options.js';
@@ -38,7 +42,7 @@ class ProbeHandler implements ICommandHandler<ProbeCommand> {
 }
 
 describe('the span attributes of the application behaviors', () => {
-  const exporter = new tracing.InMemorySpanExporter();
+  const exporter = new InMemorySpanExporter();
   const records: DeadLetterRecord[] = [];
   let app: Cqrs;
   let bus: CommandBus;
@@ -53,8 +57,8 @@ describe('the span attributes of the application behaviors', () => {
 
   beforeAll(async () => {
     trace.setGlobalTracerProvider(
-      new tracing.BasicTracerProvider({
-        spanProcessors: [new tracing.SimpleSpanProcessor(exporter)],
+      new TracerProvider({
+        spanProcessors: [new SimpleSpanProcessor({ exporter })],
       }),
     );
     const silent = { log() {}, warn() {}, error() {} };

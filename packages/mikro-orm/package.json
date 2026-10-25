@@ -1,6 +1,6 @@
 {
   "name": "@cqrs-ddd/mikro-orm",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "MikroORM persistence adapters for @cqrs-ddd/core: authoritative aggregate loading, version-conditioned writes, a revision-fenced cache and root-entity schema mapping.",
   "author": "Aristotelis",
   "license": "SEE LICENSE IN LICENSE",
@@ -59,8 +59,8 @@
   "devDependencies": {
     "@cqrs-ddd/core": "workspace:^",
     "@mikro-orm/core": "^7.2.3",
-    "@vitest/coverage-v8": "^5.0.3",
+    "@vitest/coverage-v8": "^5.0.5",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.5"
   }
 }

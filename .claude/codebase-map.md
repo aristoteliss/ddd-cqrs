@@ -28,14 +28,14 @@ its guides carry the usage code as snippets.
 - **Shape**: monorepo — workspace globs `api`, `docs`, `integration`, `packages/*` (24 workspace packages).
 - **Publishable packages**: 21; private: `api`, `docs`, `integration`.
 - **Runnable workspaces**: `api`, `docs`.
-- **Versions**: `0.5.0`.
+- **Versions**: `0.5.1`.
 - **Packages**: see the Workspace packages table under Directory Map.
 <!-- context:generated-end repository-shape -->
 
 ## Technology Stack
 
 <!-- context:generated-start technology-stack -->
-- **Languages** (file counts, excluded directories omitted): `.ts` 795, `.md` 118, `.grit` 7, `.mjs` 7, `.py` 3
+- **Languages** (file counts, excluded directories omitted): `.ts` 800, `.md` 119, `.grit` 7, `.mjs` 7, `.py` 3
 - **Runtime engines** (root `package.json`): `node` >=22.12.0, `pnpm` >=9.0.0
 - **Package manager evidence**: `pnpm-lock.yaml`.
 - **Integrations**: listed with their purpose under Dependencies and Integrations.
@@ -72,7 +72,7 @@ editor/tooling directories are excluded (see Snapshot Metadata).
 | --- | --- |
 | `.agents/` | Guide changes to the framework-neutral @cqrs-ddd packages — domain models, persistence lifecycle, repository and pipeline caching, short-circuit keys — preserving their contracts and race protections. |
 | `.archify/` | Needs verification |
-| `.claude/` | Needs verification |
+| `.claude/` | Applies the cqrs-ddd-readability rules to an assigned, disjoint set of files in this repository and reports measured results. Use for delegated readability refactors that span more than one workspace. |
 | `.github/` | Needs verification |
 | `api/` | The users API on @cqrs-ddd: Express and Fastify routes with Zod, the CQRS buses and pipelines, DDD aggregates and decorated repositories |
 | `biome/` | Needs verification |
@@ -400,6 +400,17 @@ secret value.*
 <!-- context:manual-start gotchas -->
 *Manual section — the generator never overwrites it. Every entry cites a source.*
 
+- **BullMQ stays on `^5.81.5`; do not move to 6 in a dependency update.** 5.81.5 is the
+  first 5.x release with "worker: backport blocking client recovery to v5.x" (taskforcesh/bullmq
+  #4722): after a Redis reconnect a worker's blocking read could stop settling and the worker
+  stopped taking jobs. BullMQ 6 fixed that area separately (6.0.7, #4484; 6.3.3, #4586) but
+  breaks the API: `ioredis` becomes an optional peer the application installs, the
+  `Connection` parameter becomes a `BackendFactory`, and legacy repeatable jobs, `debounce`
+  and `Job#discard()` are removed. Moving to 6 is a planned migration in both repositories,
+  tested end to end (release notes of v5.81.5 and v6.0.0, read 2026-10-25).
+- **`pnpm test` can fail with `ENOTEMPTY ... node_modules/.vitest-cache`.** Workspaces run
+  in parallel and share that cache folder; a run occasionally races on removing it. Rerun;
+  two reruns on 2026-10-25 passed (Vitest 5.0.5).
 - **The generated dependency table and environment variable list show fixture text.**
   NestJS, MikroORM, `pg`, libSQL, `DATABASE_URL`, `DB_DEFAULT_SCHEMA` and `REDIS_URL` appear
   there because `integration/checks/lint/biome-plugins.spec.ts` uses them in fixtures; no
@@ -429,13 +440,13 @@ secret value.*
 ## Snapshot Metadata
 
 <!-- context:generated-start metadata -->
-- Generated at: 2026-10-23T07:48:15Z
-- Git commit: 11fdbb0394d9e5075907cdfe0b58f3f2ea8b1903
+- Generated at: 2026-10-25T06:28:29Z
+- Git commit: b5eef8e5e4ac262bedaf33f8d07fb9947abeb238
 - Git branch: agent-readability-rules
 - Uncommitted changes when generated: yes
 - Generator: `scripts/update-claude-snapshot.py` version 1.0.0
 - Snapshot status: generated — structural inspection only, no code executed
-- Files inspected: 1037
+- Files inspected: 1043
 - Included top-level directories: `.agents`, `.archify`, `.claude`, `.github`, `api`, `biome`, `demo`, `docs`, `integration`, `packages`, `scripts`, `tools`
 - Excluded directory names: `.cache`, `.git`, `.gradle`, `.idea`, `.mypy_cache`, `.next`, `.nuxt`, `.parcel-cache`, `.pnpm-store`, `.pytest_cache`, `.ruff_cache`, `.svelte-kit`, `.terraform`, `.tmp`, `.tox`, `.turbo`, `.venv`, `.vscode`, `__pycache__`, `bower_components`, `build`, `coverage`, `dist`, `node_modules`, `out`, `target`, `vendor`, `venv`, `virtualenv`
 - Excluded file patterns: `.env`, `.env.*`, `*.env`, `*.pem`, `*.key`, `*.pfx`, `*.p12`, `*.jks`, `*.keystore`, `id_rsa*`, `id_ed25519*`, `*credentials*`, `*.secret`, `secrets.*`

@@ -6,7 +6,7 @@ import type { INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { CommandBus } from '@nestjs/cqrs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { CreateInvoiceCommand, AppModule } from './invoices.js';
+import { AppModule, CreateInvoiceCommand } from './invoices.js';
 
 describe('the minimal NestJS setup of the documentation', () => {
   let app: INestApplicationContext;

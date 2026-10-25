@@ -1,6 +1,6 @@
 {
   "name": "@cqrs-ddd/pipeline",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Framework-neutral pipeline engine: wrap functions and methods with behaviors such as logging, caching or idempotency",
   "author": "Aristotelis",
   "license": "SEE LICENSE IN LICENSE",
@@ -59,7 +59,7 @@
     "@cqrs-ddd/uuidv7": "workspace:^"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^5.0.3",
-    "vitest": "^5.0.3"
+    "@vitest/coverage-v8": "^5.0.5",
+    "vitest": "^5.0.5"
   }
 }

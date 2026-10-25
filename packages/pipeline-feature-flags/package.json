@@ -1,6 +1,6 @@
 {
   "name": "@cqrs-ddd/pipeline-feature-flags",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Feature flags for @cqrs-ddd/pipeline through OpenFeature: an operation runs only while its flag is on",
   "author": "Aristotelis",
   "license": "SEE LICENSE IN LICENSE",
@@ -65,7 +65,7 @@
   "devDependencies": {
     "@cqrs-ddd/pipeline": "workspace:*",
     "@openfeature/server-sdk": "^1.23.0",
-    "@vitest/coverage-v8": "^5.0.3",
-    "vitest": "^5.0.3"
+    "@vitest/coverage-v8": "^5.0.5",
+    "vitest": "^5.0.5"
   }
 }

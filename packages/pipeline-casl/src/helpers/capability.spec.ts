@@ -435,7 +435,7 @@ describe('capability codec', () => {
     });
   });
 
-  describe('normalizeCapability', () => {
+  describe('normalizeCapability input shapes and refusals', () => {
     it('parses capability strings', () => {
       expect(normalizeCapability('Post|read|*')).toEqual({
         subject: 'Post',
