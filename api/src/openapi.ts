@@ -12,7 +12,7 @@ const { version } = JSON.parse(
 
 // Documenting reads only the routes' schemas; their handlers, and so the buses they
 // close over, are never called. No database, Redis or other system is contacted.
-const table = routes({ cqrs: {}, logins: {} } as unknown as App);
+const table = routes({ cqrs: {} } as unknown as App);
 
 const document = openApiDocument(table, {
   info: {

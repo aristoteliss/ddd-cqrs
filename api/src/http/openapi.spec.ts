@@ -90,7 +90,7 @@ describe('openApiDocument', () => {
 
   it('documents the 14 operations of the application', () => {
     const application = openApiDocument(
-      routes({ cqrs: {}, logins: {} } as unknown as App),
+      routes({ cqrs: {} } as unknown as App),
       { info, security },
     );
     const operations = Object.entries(application.paths).flatMap(

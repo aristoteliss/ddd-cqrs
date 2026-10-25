@@ -16,7 +16,7 @@ export class UserCreatedHandler implements IEventHandler<UserCreatedEvent> {
   async handle(event: UserCreatedEvent): Promise<void> {
     const { id: userId, username, email } = event.payload;
 
-    await this.welcomeEmailDispatcher.enqueueWelcomeEmail({
+    await this.welcomeEmailDispatcher.enqueue({
       userId,
       username,
       email,

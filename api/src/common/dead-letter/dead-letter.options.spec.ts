@@ -32,9 +32,9 @@ import { ZodValidationError } from '@cqrs-ddd/pipeline-zod';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { ZodError } from 'zod';
 import {
-  AuthConfigurationException,
+  AuthConfigurationError,
   InvalidLoginCredentialsException,
-} from '../../auths/domain/errors/authentication.exception.js';
+} from '../../auths/domain/models/errors/authentication.exception.js';
 import {
   InvalidTenantSchemaError,
   UnknownTenantSchemaError,
@@ -68,7 +68,7 @@ const CAPTURED_ERRORS: readonly ErrorClass[] = [
   TransientOperationError,
   UnknownMutableFieldError,
   MissingTenantContextError,
-  AuthConfigurationException,
+  AuthConfigurationError,
   InvalidTenantSchemaError,
   UnknownTenantSchemaError,
 ];
@@ -261,7 +261,7 @@ describe('application dead-letter classification', () => {
     ['an unexpected processor failure', new Error('connection reset')],
     [
       'an authentication misconfiguration',
-      new AuthConfigurationException('JWT secret is not configured'),
+      new AuthConfigurationError('JWT secret is not configured'),
     ],
     ['a missing tenant context', new MissingTenantContextError('users.create')],
   ])('dead-letters %s exactly once', async (_label, error) => {

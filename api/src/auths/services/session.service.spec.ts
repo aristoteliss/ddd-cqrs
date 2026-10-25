@@ -20,7 +20,7 @@ const COOKIE_OPTIONS = {
 
 function result(refreshToken?: string): AuthResult {
   return {
-    aggregate: Auth.create('user-1', 'hash', 9_000_000),
+    aggregate: Auth.start('user-1', 'hash', 9_000_000),
     userId: 'user-1',
     principalType: 'user',
     tenant: 'tenant_alpha',

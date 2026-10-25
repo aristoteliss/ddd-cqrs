@@ -9,10 +9,11 @@ import {
   isTransientOperationError,
 } from '@cqrs-ddd/core/domain';
 import { CommandHandler, EventBus } from '@cqrs-ddd/cqrs';
-import { type IPipelineContext, UsePipeline } from '@cqrs-ddd/pipeline';
+import { UsePipeline } from '@cqrs-ddd/pipeline';
 import { AUDIT_SEVERITY, audit } from '@cqrs-ddd/pipeline-audit';
 import { CaslAuthorizer, requires } from '@cqrs-ddd/pipeline-casl';
 import { resilience } from '@cqrs-ddd/pipeline-resilience';
+import { targetMetadata } from '../../../../common/audit/audit.options.js';
 import {
   APP_ACTIONS,
   APP_SUBJECTS,
@@ -27,10 +28,7 @@ import { DeleteUserCommand } from './delete-user.command.js';
   audit({
     action: AUDIT_ACTIONS.USER_DELETE,
     severity: AUDIT_SEVERITY.HIGH,
-    metadata: (ctx: IPipelineContext) => {
-      const cmd = ctx.request as DeleteUserCommand | undefined;
-      return cmd?.id ? { targetUserId: cmd.id } : {};
-    },
+    metadata: targetMetadata('targetUserId'),
   }),
   resilience({
     handle: isTransientOperationError,
@@ -62,9 +60,13 @@ export class DeleteUserHandler extends CommandBaseHandler<
     if (!user) {
       throw new EntityNotFoundException('User', command.id);
     }
+
     this.authorizer.authorize('delete', user);
+
     user.delete();
+
     await this.commandRepository.save(user);
+
     return user;
   }
 }

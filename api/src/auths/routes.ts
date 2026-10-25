@@ -3,13 +3,13 @@
 import type { CommandBus } from '@cqrs-ddd/cqrs';
 import { z } from 'zod';
 import { type Route, route } from '../http/route.js';
-import { CreateAuthCommand } from './application/cqrs/commands/create-auth.command.js';
+import { RefreshAuthCommand } from './application/cqrs/commands/refresh-auth.command.js';
 import { RevokeAuthCommand } from './application/cqrs/commands/revoke-auth.command.js';
+import { StartAuthCommand } from './application/cqrs/commands/start-auth.command.js';
 import type { AuthResult } from './application/results/auth.result.js';
-import { InvalidRefreshTokenError } from './domain/errors/refresh-token.errors.js';
+import { InvalidRefreshTokenError } from './domain/models/errors/refresh-token.errors.js';
 import { LoginDtoSchema } from './dtos/login.dto.js';
 import { RefreshTokenDtoSchema } from './dtos/refresh-token.dto.js';
-import type { PrincipalLoginService } from './services/principal-login.service.js';
 import { REFRESH_COOKIE } from './services/session.service.js';
 
 /**
@@ -48,6 +48,7 @@ function refreshToken(
 ): string {
   const parsed = RefreshTokenDtoSchema.safeParse(cookies[REFRESH_COOKIE]);
   if (!parsed.success) throw new InvalidRefreshTokenError();
+
   return parsed.data;
 }
 
@@ -59,13 +60,10 @@ function refreshToken(
  *
  * @example
  * ```ts
- * expressApp({ routes: authRoutes(cqrs.commandBus, logins), context, logger });
+ * expressApp({ routes: authRoutes(cqrs.commandBus), context, logger });
  * ```
  */
-export function authRoutes(
-  commandBus: CommandBus,
-  logins: PrincipalLoginService,
-): Route[] {
+export function authRoutes(commandBus: CommandBus): Route[] {
   return [
     route({
       method: 'POST',
@@ -78,8 +76,8 @@ export function authRoutes(
       response: SessionBody,
       handle: async ({ body, ip }) =>
         sessionBody(
-          await commandBus.execute<CreateAuthCommand, AuthResult>(
-            new CreateAuthCommand({ ...body, clientIp: ip }),
+          await commandBus.execute<StartAuthCommand, AuthResult>(
+            new StartAuthCommand({ ...body, clientIp: ip }),
           ),
         ),
     }),
@@ -92,7 +90,14 @@ export function authRoutes(
         'Exchanges the refresh cookie for a new access token; a rotation sets a new cookie.',
       response: SessionBody,
       handle: async ({ cookies, ip }) =>
-        sessionBody(await logins.refresh(refreshToken(cookies), ip)),
+        sessionBody(
+          await commandBus.execute<RefreshAuthCommand, AuthResult>(
+            new RefreshAuthCommand({
+              refreshToken: refreshToken(cookies),
+              clientIp: ip,
+            }),
+          ),
+        ),
     }),
     route({
       method: 'POST',
@@ -101,18 +106,25 @@ export function authRoutes(
       anonymous: true,
       summary:
         'Revokes the session of the refresh cookie and clears the cookies, also for an unknown one.',
-      handle: async ({ cookies, ip }) => {
-        try {
-          await commandBus.execute(
-            new RevokeAuthCommand({
-              refreshToken: cookies[REFRESH_COOKIE] || undefined,
-              clientIp: ip,
-            }),
-          );
-        } catch (error) {
-          if (!(error instanceof InvalidRefreshTokenError)) throw error;
-        }
-      },
+      handle: async ({ cookies, ip }) =>
+        revokeUnlessUnknown(
+          commandBus,
+          new RevokeAuthCommand({
+            refreshToken: cookies[REFRESH_COOKIE] || undefined,
+            clientIp: ip,
+          }),
+        ),
     }),
   ];
+}
+
+async function revokeUnlessUnknown(
+  commandBus: CommandBus,
+  command: RevokeAuthCommand,
+): Promise<void> {
+  try {
+    await commandBus.execute(command);
+  } catch (error) {
+    if (!(error instanceof InvalidRefreshTokenError)) throw error;
+  }
 }

@@ -14,7 +14,7 @@ import { runWithTenant } from '@cqrs-ddd/pipeline-tenant';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { UniqueRoleNameException } from '../domain/models/errors/role-name.exception.js';
 import { Role, type RoleSnapshot } from '../domain/models/role.entity.js';
-import { UpdateRoleCommandRepository } from './update-role.command-repository.js';
+import { RenameRoleCommandRepository } from './rename-role.command-repository.js';
 
 /** Reports the `name` constraint for `taken`, as the MikroORM dialect does for a real violation. */
 const taken = new Error('name already taken');
@@ -27,7 +27,7 @@ function useFakeDialect() {
   afterAll(() => setPersistenceDialect(undefined));
 }
 
-describe('UpdateRoleCommandRepository', () => {
+describe('RenameRoleCommandRepository', () => {
   useFakeDialect();
 
   it('updates role and refreshes cache snapshot by id', async () => {
@@ -44,7 +44,7 @@ describe('UpdateRoleCommandRepository', () => {
         return { nativeUpdate, isInTransaction: () => false };
       },
     };
-    const repository = new UpdateRoleCommandRepository(cache, store as never);
+    const repository = new RenameRoleCommandRepository(cache, store as never);
 
     const result = await runWithTenant('tenant', () => repository.save(role));
 
@@ -86,7 +86,7 @@ describe('UpdateRoleCommandRepository', () => {
         return { nativeUpdate, findOne, isInTransaction: () => false };
       },
     };
-    const repository = new UpdateRoleCommandRepository(cache, store as never);
+    const repository = new RenameRoleCommandRepository(cache, store as never);
 
     await expect(repository.save(role)).rejects.toBeInstanceOf(
       EntityNotFoundException,
@@ -114,7 +114,7 @@ describe('UpdateRoleCommandRepository', () => {
         return { nativeUpdate, findOne, isInTransaction: () => false };
       },
     };
-    const repository = new UpdateRoleCommandRepository(cache, store as never);
+    const repository = new RenameRoleCommandRepository(cache, store as never);
 
     await expect(repository.save(role)).rejects.toThrow(
       ConcurrencyConflictError,
@@ -138,7 +138,7 @@ describe('UpdateRoleCommandRepository', () => {
         };
       },
     };
-    const repository = new UpdateRoleCommandRepository(cache, store as never);
+    const repository = new RenameRoleCommandRepository(cache, store as never);
 
     await expect(repository.save(role)).rejects.toThrow(
       UniqueRoleNameException,
@@ -160,7 +160,7 @@ describe('UpdateRoleCommandRepository', () => {
         return { nativeUpdate, isInTransaction: () => false };
       },
     };
-    const repository = new UpdateRoleCommandRepository(cache, store as never);
+    const repository = new RenameRoleCommandRepository(cache, store as never);
 
     await repository.save(role);
     expect(role.getExpectedVersion()).toBe(2);
@@ -199,7 +199,7 @@ describe('decorated versioned update lifecycle', () => {
       cache,
       em,
       role,
-      repository: new UpdateRoleCommandRepository(cache, { em } as never),
+      repository: new RenameRoleCommandRepository(cache, { em } as never),
     };
   }
 

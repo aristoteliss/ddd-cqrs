@@ -47,6 +47,7 @@ export class RenameMemberHandler extends CommandBaseHandler<
   async handle(command: RenameMemberCommand): Promise<Member> {
     const member = this.members.get(command.memberId);
     if (!member) throw new EntityNotFoundException('Member', command.memberId);
+
     return member.rename(command.name);
   }
 }
@@ -58,6 +59,7 @@ export class GetMemberHandler {
 
   async execute(query: GetMemberQuery) {
     const member = this.members.get(query.memberId);
+
     return member ? { id: member.id, name: member.name } : null;
   }
 }
@@ -89,10 +91,12 @@ export function startMembers(
 ) {
   const cqrs = createCqrs({ bootstrapLogLevel: 'none', ...options });
   const announcements = new AnnounceRename();
+
   cqrs.register(
     new RenameMemberHandler(members, cqrs.eventBus),
     new GetMemberHandler(members),
     announcements,
   );
+
   return { cqrs, announcements };
 }

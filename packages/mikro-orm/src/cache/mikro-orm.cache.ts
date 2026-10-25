@@ -132,44 +132,7 @@ export class MikroOrmCache<T> implements IVersionedCache<T> {
    * Retains the entry to prevent ABA races during concurrent fills.
    */
   async invalidate(key: string): Promise<string> {
-    return this.store.transactional(async (em) => {
-      for (let attempt = 0; attempt < MAX_CAS_ATTEMPTS; attempt++) {
-        const existing = await readCommittedEntry(em, key);
-
-        if (!existing) {
-          // `onConflictAction: 'ignore'` keeps a lost insert race from aborting
-          // the surrounding transaction, so the loop can re-read and retry.
-          await em.upsert(
-            CacheEntry,
-            { key, value: '', expiresAt: null, revision: '1' },
-            { onConflictAction: 'ignore' },
-          );
-          const inserted = await readCommittedEntry(em, key);
-          if (inserted && (inserted.revision ?? '0').toString() === '1') {
-            return '1';
-          }
-          continue;
-        }
-
-        const currentRev = (existing.revision ?? '0').toString();
-        const nextRevision = (BigInt(currentRev) + 1n).toString();
-        const affected = await em.nativeUpdate(
-          CacheEntry,
-          { key, revision: existing.revision },
-          {
-            value: '',
-            expiresAt: null,
-            revision: nextRevision,
-          },
-        );
-
-        if (affected > 0) {
-          return nextRevision;
-        }
-      }
-
-      throw new CacheCasExhaustedError('invalidate', key);
-    });
+    return this.store.transactional((em) => invalidateEntry(em, key));
   }
 
   /**
@@ -190,34 +153,7 @@ export class MikroOrmCache<T> implements IVersionedCache<T> {
       const nextRevision = (BigInt(observedRevision) + 1n).toString();
 
       if (observedRevision === '0') {
-        const existing = await readCommittedEntry(em, key);
-
-        if (!existing) {
-          await em.upsert(
-            CacheEntry,
-            { key, value: serialized, expiresAt, revision: '1' },
-            { onConflictAction: 'ignore' },
-          );
-          const inserted = await readCommittedEntry(em, key);
-          // A competing writer won the insert; this fill observed revision 0
-          // and must not overwrite it.
-          return inserted !== null && inserted.value === serialized;
-        }
-
-        if ((existing.revision ?? '0').toString() === '0') {
-          const affected = await em.nativeUpdate(
-            CacheEntry,
-            { key, revision: existing.revision },
-            {
-              value: serialized,
-              expiresAt,
-              revision: '1',
-            },
-          );
-          return affected > 0;
-        }
-
-        return false;
+        return fillFirstRevision(em, { key, serialized, expiresAt });
       }
 
       const affected = await em.nativeUpdate(
@@ -251,7 +187,7 @@ export class MikroOrmCache<T> implements IVersionedCache<T> {
     const isNewer = options?.isNewer;
     const serialized = JSON.stringify(value);
 
-    await this.store.transactional(async (em) => {
+    const writeWithCas = async (em: EntityManager): Promise<void> => {
       for (let attempt = 0; attempt < MAX_CAS_ATTEMPTS; attempt++) {
         const existing = await readCommittedEntry(em, key);
 
@@ -264,23 +200,8 @@ export class MikroOrmCache<T> implements IVersionedCache<T> {
           continue;
         }
 
-        if (isNewer && existing.value) {
-          if (existing.expiresAt === null || existing.expiresAt >= Date.now()) {
-            let parsed: unknown;
-            try {
-              parsed = JSON.parse(existing.value);
-            } catch {
-              // An unparsable entry is treated as absent so the CAS update can heal corrupted data.
-              safeWarn(
-                this.logger,
-                `Failed to parse cached value (key digest: ${createHash('sha256').update(key).digest('hex')}); treating as absent.`,
-              );
-            }
-            if (parsed !== undefined && isNewer(parsed, value)) {
-              return;
-            }
-          }
-        }
+        const cached = isNewer ? this.unexpiredValue(existing, key) : undefined;
+        if (isNewer && cached !== undefined && isNewer(cached, value)) return;
 
         const currentRev = (existing.revision ?? '0').toString();
         const nextRevision = (BigInt(currentRev) + 1n).toString();
@@ -298,7 +219,9 @@ export class MikroOrmCache<T> implements IVersionedCache<T> {
       }
 
       throw new CacheCasExhaustedError('set', key);
-    });
+    };
+
+    await this.store.transactional(writeWithCas);
   }
 
   /**
@@ -308,4 +231,116 @@ export class MikroOrmCache<T> implements IVersionedCache<T> {
   async delete(key: string): Promise<void> {
     await this.invalidate(key);
   }
+
+  /**
+   * The parsed value of an entry that holds one and has not expired; an
+   * unparsable value is reported and read as absent.
+   */
+  private unexpiredValue(entry: CacheEntry, key: string): unknown {
+    const hasLiveValue =
+      !!entry.value &&
+      (entry.expiresAt === null || entry.expiresAt >= Date.now());
+    if (!hasLiveValue) return undefined;
+    try {
+      return JSON.parse(entry.value);
+    } catch {
+      // An unparsable entry is treated as absent so the CAS update can heal corrupted data.
+      safeWarn(
+        this.logger,
+        `Failed to parse cached value (key digest: ${createHash('sha256').update(key).digest('hex')}); treating as absent.`,
+      );
+      return undefined;
+    }
+  }
+}
+
+/**
+ * Advances the revision of `key` and clears its value in one compare-and-set
+ * loop, inserting the row at revision 1 when it does not exist.
+ */
+async function invalidateEntry(
+  em: EntityManager,
+  key: string,
+): Promise<string> {
+  for (let attempt = 0; attempt < MAX_CAS_ATTEMPTS; attempt++) {
+    const existing = await readCommittedEntry(em, key);
+
+    if (!existing) {
+      // `onConflictAction: 'ignore'` keeps a lost insert race from aborting
+      // the surrounding transaction, so the loop can re-read and retry.
+      await em.upsert(
+        CacheEntry,
+        { key, value: '', expiresAt: null, revision: '1' },
+        { onConflictAction: 'ignore' },
+      );
+      const inserted = await readCommittedEntry(em, key);
+      if (inserted && (inserted.revision ?? '0').toString() === '1') {
+        return '1';
+      }
+      continue;
+    }
+
+    const currentRev = (existing.revision ?? '0').toString();
+    const nextRevision = (BigInt(currentRev) + 1n).toString();
+    const affected = await em.nativeUpdate(
+      CacheEntry,
+      { key, revision: existing.revision },
+      {
+        value: '',
+        expiresAt: null,
+        revision: nextRevision,
+      },
+    );
+
+    if (affected > 0) {
+      return nextRevision;
+    }
+  }
+
+  throw new CacheCasExhaustedError('invalidate', key);
+}
+
+/** A value serialized for the row of `key`, and its expiry in Unix ms. */
+interface SerializedEntry {
+  readonly key: string;
+  readonly serialized: string;
+  readonly expiresAt: number | null;
+}
+
+/**
+ * Fills a key observed at revision 0, absent or never revised, as revision 1;
+ * a row that a competing writer revised first is left as it is.
+ */
+async function fillFirstRevision(
+  em: EntityManager,
+  { key, serialized, expiresAt }: SerializedEntry,
+): Promise<boolean> {
+  const existing = await readCommittedEntry(em, key);
+
+  if (!existing) {
+    await em.upsert(
+      CacheEntry,
+      { key, value: serialized, expiresAt, revision: '1' },
+      { onConflictAction: 'ignore' },
+    );
+    const inserted = await readCommittedEntry(em, key);
+    // A competing writer won the insert; this fill observed revision 0
+    // and must not overwrite it.
+    return inserted !== null && inserted.value === serialized;
+  }
+
+  if ((existing.revision ?? '0').toString() === '0') {
+    const affected = await em.nativeUpdate(
+      CacheEntry,
+      { key, revision: existing.revision },
+      {
+        value: serialized,
+        expiresAt,
+        revision: '1',
+      },
+    );
+    return affected > 0;
+  }
+
+  return false;
 }

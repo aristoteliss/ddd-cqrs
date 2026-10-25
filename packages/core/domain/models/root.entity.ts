@@ -145,6 +145,7 @@ export abstract class RootEntity<
     if (Number.isNaN(parsed.getTime()) || parsed.getUTCFullYear() <= 1) {
       throw new Error('Date must be a valid non-empty date.');
     }
+
     return parsed;
   }
 
@@ -185,6 +186,7 @@ export abstract class RootEntity<
     } else if (candidate instanceof RootEntity) {
       return candidate as T;
     }
+
     // biome-ignore lint/complexity/noThisInStatic: Polymorphic static rehydration
     const ctor = this as unknown as { fromJSON(snapshot: TSnapshot): T };
     if (typeof ctor.fromJSON === 'function') {

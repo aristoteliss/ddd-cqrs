@@ -1,14 +1,14 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
 import { describe, expect, it } from 'vitest';
+import { AuthRefreshedEvent } from '../events/auth-refreshed.event.js';
+import { AuthRevokedEvent } from '../events/auth-revoked.event.js';
+import { AuthStartedEvent } from '../events/auth-started.event.js';
+import { Auth } from './auth.entity.js';
 import {
   InvalidRefreshTokenError,
   RefreshTokenReuseError,
-} from '../errors/refresh-token.errors.js';
-import { AuthCreatedEvent } from '../events/auth-created.event.js';
-import { AuthRefreshedEvent } from '../events/auth-refreshed.event.js';
-import { AuthRevokedEvent } from '../events/auth-revoked.event.js';
-import { Auth } from './auth.entity.js';
+} from './errors/refresh-token.errors.js';
 
 const USER = '019488e0-0000-7000-8000-000000000001';
 const START = 1_000_000;
@@ -16,14 +16,14 @@ const EXPIRES = START + 60_000;
 const GRACE = 30_000;
 
 function session(): Auth {
-  const auth = Auth.create(USER, 'hash-a', EXPIRES);
+  const auth = Auth.start(USER, 'hash-a', EXPIRES);
   auth.uncommit();
   return auth;
 }
 
 describe('Auth session', () => {
-  it('starts with the current hash and fixed expiry, recording a creation event without token material', () => {
-    const auth = Auth.create(USER, 'hash-a', EXPIRES);
+  it('starts with the current hash and fixed expiry, recording a start event without token material', () => {
+    const auth = Auth.start(USER, 'hash-a', EXPIRES);
 
     expect(auth).toMatchObject({
       userId: USER,
@@ -35,7 +35,7 @@ describe('Auth session', () => {
       version: 1,
     });
     const [event] = auth.getUncommittedEvents();
-    expect(event).toBeInstanceOf(AuthCreatedEvent);
+    expect(event).toBeInstanceOf(AuthStartedEvent);
     expect(JSON.stringify(event)).not.toContain('hash-a');
   });
 
@@ -133,7 +133,7 @@ describe('Auth session', () => {
 });
 
 describe('Auth.fromJSON', () => {
-  it('rehydrates a snapshot without recording a creation event', () => {
+  it('rehydrates a snapshot without recording a start event', () => {
     const now = new Date();
     const auth = Auth.fromJSON({
       id: '038f2d5e-4b6a-7b3f-8c1d-2e3f4a5b6c7d',

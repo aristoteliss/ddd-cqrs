@@ -38,6 +38,7 @@ export function buildRateLimitKey(
   }
 
   const base = options.keyFactory(context);
+
   // Only the prefix is escaped. `base` is already a complete key — a partitioned
   // factory has escaped its own segments — so re-escaping it here would mangle
   // the documented "<prefix>:<key>" shape.

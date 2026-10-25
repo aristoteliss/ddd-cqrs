@@ -27,6 +27,7 @@ export class UpdateUserCommandRepository extends AggregateRepository<
   })
   async save(user: User): Promise<UserSnapshot> {
     const snapshot = user.toJSON();
+
     await optimisticUpdate(
       this.store.em,
       User,
@@ -38,6 +39,7 @@ export class UpdateUserCommandRepository extends AggregateRepository<
       },
       'User',
     );
+
     return snapshot;
   }
 }

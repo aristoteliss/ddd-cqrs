@@ -26,6 +26,7 @@ export function authenticate(resolver: RequestPrincipalResolver): Around {
       headers: request.headers,
       session,
     });
+
     return sessionPrincipalStore.run(principal, () =>
       httpExchangeStore.run({ session, response: request.response }, work),
     );

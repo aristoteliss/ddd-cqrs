@@ -26,20 +26,23 @@ export class GetUserHandler
   ) {}
 
   async execute(query: GetUserQuery): Promise<UserReadModel | null> {
-    const user = await this.queryRepository.find(
-      this.authorizer.dependsOnEntity(APP_ACTIONS.READ, APP_SUBJECTS.USER) &&
-        !query.refresh
-        ? new GetUserQuery(
-            {
-              userId: query.userId,
-              email: query.email,
-              department: query.department,
-            },
-            { hydrate: query.hydrate, refresh: true },
-            query.sessionPrincipal,
-          )
-        : query,
-    );
+    const user = await this.queryRepository.find(this.toRefreshed(query));
+
     return user ? projectUserRead(this.authorizer, user) : null;
+  }
+
+  private toRefreshed(query: GetUserQuery): GetUserQuery {
+    const needsRefresh =
+      this.authorizer.dependsOnEntity(APP_ACTIONS.READ, APP_SUBJECTS.USER) &&
+      !query.refresh;
+    if (!needsRefresh) return query;
+
+    const { userId, email, department, hydrate, sessionPrincipal } = query;
+
+    return new GetUserQuery(
+      { userId, email, department },
+      { hydrate, refresh: true },
+      sessionPrincipal,
+    );
   }
 }

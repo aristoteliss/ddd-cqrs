@@ -30,7 +30,7 @@ const UNIQUES = [
     key: 'name',
   },
   {
-    entity: () => Auth.create('019488e0-0000-7000-8000-000000000001', 'h', 1),
+    entity: () => Auth.start('019488e0-0000-7000-8000-000000000001', 'h', 1),
     name: 'auth_refresh_token_hash_unique',
     columns: 'auth.refresh_token_hash',
     key: 'refreshTokenHash',

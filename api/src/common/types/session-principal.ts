@@ -68,6 +68,7 @@ export function principalSegments(
 ): [PrincipalType, string] | undefined {
   const id = typeof principal?.id === 'string' ? principal.id.trim() : '';
   const type = principal?.type;
+
   return id && isPrincipalType(type) ? [type, id] : undefined;
 }
 

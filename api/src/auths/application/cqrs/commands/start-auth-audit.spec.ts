@@ -4,15 +4,15 @@ import { REDACTED } from '@cqrs-ddd/pipeline-audit';
 import { runWithTenant } from '@cqrs-ddd/pipeline-tenant';
 import { afterAll, describe, expect, it } from 'vitest';
 import { memoryCqrs } from '../../../../../test/support/harness.js';
-import { InvalidLoginCredentialsException } from '../../../domain/errors/authentication.exception.js';
+import { InvalidLoginCredentialsException } from '../../../domain/models/errors/authentication.exception.js';
 import { NodeRefreshTokens } from '../../../infrastructure/node-refresh-tokens.js';
 import type { PrincipalLoginService } from '../../../services/principal-login.service.js';
-import { CreateAuthCommand } from './create-auth.command.js';
-import { CreateAuthHandler } from './create-auth.handler.js';
+import { StartAuthCommand } from './start-auth.command.js';
+import { StartAuthHandler } from './start-auth.handler.js';
 
-const { cqrs, audits } = await memoryCqrs('create-auth-audit-spec');
+const { cqrs, audits } = await memoryCqrs('start-auth-audit-spec');
 cqrs.register(
-  new CreateAuthHandler(
+  new StartAuthHandler(
     cqrs.eventBus,
     {
       authenticate: async () => {
@@ -32,12 +32,12 @@ cqrs.register(
 
 afterAll(() => cqrs.close());
 
-describe('CreateAuthHandler audit', () => {
+describe('StartAuthHandler audit', () => {
   it('audits a refused login with the claimed email and without the login code', async () => {
     await expect(
       runWithTenant('tenant_a', () =>
         cqrs.commandBus.execute(
-          new CreateAuthCommand({
+          new StartAuthCommand({
             email: 'ann@example.test',
             code: '123456',
             clientIp: '203.0.113.7',

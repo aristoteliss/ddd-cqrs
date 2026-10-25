@@ -54,10 +54,12 @@ export async function openInventory(): Promise<Inventory> {
     entities: [ProductSchema, CacheEntrySchema],
     debug: false,
   });
+
   const connection = orm.em.getConnection();
   await connection.execute(PRODUCTS_TABLE);
   await connection.execute(PRODUCTS_SKU_UNIQUE);
   await connection.execute(createCacheTableSql());
+
   setPersistenceDialect(new MikroOrmDialect(orm));
   setTenantResolver(() => 'single');
 
@@ -68,6 +70,7 @@ export async function openInventory(): Promise<Inventory> {
     transactional: <T>(work: (em: EntityManager) => Promise<T>) =>
       orm.em.fork().transactional(work),
   };
+
   return {
     orm,
     store,

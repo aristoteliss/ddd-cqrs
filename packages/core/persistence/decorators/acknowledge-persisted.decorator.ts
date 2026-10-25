@@ -90,8 +90,10 @@ export function AcknowledgePersisted<TArgs extends unknown[]>(options: {
     descriptor.value = async function (...args: TArgs): Promise<TResult> {
       const entity = options.entity(args);
       const version = entity.version;
+
       const result = await original.apply(this, args);
       entity.acknowledgePersisted(version);
+
       return result;
     };
   };

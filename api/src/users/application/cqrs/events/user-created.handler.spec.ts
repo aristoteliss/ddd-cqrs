@@ -8,8 +8,8 @@ import { UserCreatedHandler } from './user-created.handler.js';
 
 describe('UserCreatedHandler', () => {
   it('dispatches only application data; logging/correlation are cross-cutting concerns', async () => {
-    const enqueueWelcomeEmail = vi.fn().mockResolvedValue(undefined);
-    const dispatcher = { enqueueWelcomeEmail } as IWelcomeEmailDispatcher;
+    const enqueue = vi.fn().mockResolvedValue(undefined);
+    const dispatcher = { enqueue } as IWelcomeEmailDispatcher;
     const handler = new UserCreatedHandler(dispatcher);
 
     const user = User.create('john_doe', 'john@example.com', 'Engineering');
@@ -17,8 +17,8 @@ describe('UserCreatedHandler', () => {
 
     await handler.handle(event);
 
-    expect(enqueueWelcomeEmail).toHaveBeenCalledTimes(1);
-    expect(enqueueWelcomeEmail).toHaveBeenCalledWith({
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(enqueue).toHaveBeenCalledWith({
       userId: user.id,
       username: 'john_doe',
       email: 'john@example.com',
@@ -26,8 +26,8 @@ describe('UserCreatedHandler', () => {
   });
 
   it('isolates handler execution from subsequent in-memory aggregate mutations', async () => {
-    const enqueueWelcomeEmail = vi.fn().mockResolvedValue(undefined);
-    const dispatcher = { enqueueWelcomeEmail } as IWelcomeEmailDispatcher;
+    const enqueue = vi.fn().mockResolvedValue(undefined);
+    const dispatcher = { enqueue } as IWelcomeEmailDispatcher;
     const handler = new UserCreatedHandler(dispatcher);
 
     const user = User.create('alice_original', 'alice@example.com');
@@ -40,7 +40,7 @@ describe('UserCreatedHandler', () => {
 
     await handler.handle(event);
 
-    expect(enqueueWelcomeEmail).toHaveBeenCalledWith({
+    expect(enqueue).toHaveBeenCalledWith({
       userId: user.id,
       username: 'alice_original',
       email: 'alice@example.com',

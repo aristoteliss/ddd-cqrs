@@ -28,6 +28,7 @@ export function requestContext(
 ): Middleware {
   const log = pinoHttp({ logger }) as unknown as Middleware;
   const chain: Middleware[] = [log, httpCorrelation(), ...steps];
+
   return (req, res, next) => {
     const step = (index: number) => (error?: unknown) => {
       if (error !== undefined) return next(error);

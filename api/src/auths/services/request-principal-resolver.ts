@@ -46,12 +46,12 @@ export class RequestPrincipalResolver {
   ): Promise<SessionPrincipal | undefined> {
     const existingUser = req.session?.user;
     if (existingUser) {
-      if (
+      const isCookieInvalid =
         this.sessionService.isExpired(existingUser) ||
         !isPrincipalType(existingUser.type) ||
         typeof existingUser.sid !== 'string' ||
-        existingUser.sid.trim().length === 0
-      ) {
+        existingUser.sid.trim().length === 0;
+      if (isCookieInvalid) {
         this.sessionService.discard(req.session);
       } else {
         this.assertCurrentTenant(existingUser.tenant);

@@ -5,9 +5,9 @@ import { runWithTenant } from '@cqrs-ddd/pipeline-tenant';
 import { describe, expect, it, vi } from 'vitest';
 import { UserPermissionRule } from '../../persistence/entities/user-permission-rule.entity.js';
 import { GetUserPermissionRulesQuery } from '../application/cqrs/queries/get-user-permission-rules.query.js';
-import { GetUserPermissionRulesRepository } from './get-user-permission-rules.query-repository.js';
+import { GetUserPermissionRulesQueryRepository } from './get-user-permission-rules.query-repository.js';
 
-describe('GetUserPermissionRulesRepository', () => {
+describe('GetUserPermissionRulesQueryRepository', () => {
   it('reads materialized rules ordered by inverted and position', async () => {
     const rawRows = [
       {
@@ -41,7 +41,7 @@ describe('GetUserPermissionRulesRepository', () => {
     const find = vi.fn().mockResolvedValue(rawRows);
     const store = { em: { find } };
     const cache = { get: vi.fn(), set: vi.fn(), delete: vi.fn() };
-    const repo = new GetUserPermissionRulesRepository(
+    const repo = new GetUserPermissionRulesQueryRepository(
       cache as never,
       store as never,
     );
@@ -91,7 +91,7 @@ describe('GetUserPermissionRulesRepository', () => {
     const find = vi.fn().mockResolvedValue(rawRows);
     const store = { em: { find } };
     const cache = new MemoryCache({ defaultTtlMs: 60_000 });
-    const repo = new GetUserPermissionRulesRepository(
+    const repo = new GetUserPermissionRulesQueryRepository(
       cache as never,
       store as never,
     );
@@ -153,7 +153,7 @@ describe('GetUserPermissionRulesRepository', () => {
     const find = vi.fn().mockResolvedValue(rawRows);
     const store = { em: { find } };
     const cache = new MemoryCache();
-    const repo = new GetUserPermissionRulesRepository(
+    const repo = new GetUserPermissionRulesQueryRepository(
       cache as never,
       store as never,
     );
@@ -186,7 +186,7 @@ describe('GetUserPermissionRulesRepository', () => {
     const find = vi.fn().mockResolvedValue([]);
     const store = { em: { find } };
     const cache = new MemoryCache();
-    const repo = new GetUserPermissionRulesRepository(
+    const repo = new GetUserPermissionRulesQueryRepository(
       cache as never,
       store as never,
     );

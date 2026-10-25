@@ -117,6 +117,7 @@ export class User extends RootEntity<UserSnapshot> {
       username: fields.username ?? undefined,
       department: fields.department,
     });
+
     return this;
   }
 

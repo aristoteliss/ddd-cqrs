@@ -9,7 +9,7 @@ import { isSessionPrincipalValid } from '../../common/types/session-principal.js
 import { MikroOrmStore } from '../../persistence/mikro-orm.store.js';
 import { User } from '../../users/domain/models/user.entity.js';
 import { GetUserPermissionRulesQuery } from '../application/cqrs/queries/get-user-permission-rules.query.js';
-import { GetUserPermissionRulesRepository } from './get-user-permission-rules.query-repository.js';
+import { GetUserPermissionRulesQueryRepository } from './get-user-permission-rules.query-repository.js';
 
 /**
  * Resolves the authenticated principal and their rules for `CaslBehavior`.
@@ -25,7 +25,7 @@ import { GetUserPermissionRulesRepository } from './get-user-permission-rules.qu
 export class CaslPermissionSource implements ICaslPermissionSource {
   constructor(
     private readonly store: MikroOrmStore,
-    private readonly permissionRules: GetUserPermissionRulesRepository,
+    private readonly permissionRules: GetUserPermissionRulesQueryRepository,
   ) {}
 
   async load(): Promise<CaslAuthorizationInput | null> {

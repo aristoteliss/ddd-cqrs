@@ -115,6 +115,7 @@ export function createPostgresOrmOptions(schema?: string) {
   const tenant =
     schema === undefined ? config.defaultSchema : tenantSchema(schema);
   const shared = sharedOptions(config, tenant);
+
   return {
     ...shared,
     driver: PostgreSqlDriver,

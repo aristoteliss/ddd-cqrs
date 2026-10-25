@@ -9,15 +9,17 @@ import {
   type MigratedDb,
   migratedDb,
 } from '../../../test/support/permission-rules-db.js';
+import { RefreshAuthCommand } from '../application/cqrs/commands/refresh-auth.command.js';
+import { RefreshAuthHandler } from '../application/cqrs/commands/refresh-auth.handler.js';
 import { GetAuthByConsumedTokenHashQuery } from '../application/cqrs/queries/get-auth-by-consumed-token-hash.query.js';
 import { GetAuthByTokenHashQuery } from '../application/cqrs/queries/get-auth-by-token-hash.query.js';
-import { RefreshTokenReuseError } from '../domain/errors/refresh-token.errors.js';
 import { Auth, type AuthSnapshot } from '../domain/models/auth.entity.js';
+import { RefreshTokenReuseError } from '../domain/models/errors/refresh-token.errors.js';
 import { NodeRefreshTokens } from '../infrastructure/node-refresh-tokens.js';
 import { PrincipalLoginService } from '../services/principal-login.service.js';
-import { CreateAuthCommandRepository } from './create-auth.command-repository.js';
 import { GetAuthByConsumedTokenHashQueryRepository } from './get-auth-by-consumed-token-hash.query-repository.js';
 import { GetAuthByTokenHashQueryRepository } from './get-auth-by-token-hash.query-repository.js';
+import { StartAuthCommandRepository } from './start-auth.command-repository.js';
 import { UpdateAuthCommandRepository } from './update-auth.command-repository.js';
 
 const ALICE = '019de10c-b680-7000-8000-000000000006';
@@ -52,9 +54,9 @@ describe('Auth session persistence', () => {
   });
 
   async function start(hash: string, expiresAt = Date.now() + DAY) {
-    const auth = Auth.create(ALICE, hash, expiresAt);
+    const auth = Auth.start(ALICE, hash, expiresAt);
     await inTenant(() =>
-      new CreateAuthCommandRepository(cache, store as never).save(auth),
+      new StartAuthCommandRepository(cache, store as never).save(auth),
     );
     return auth;
   }
@@ -123,14 +125,22 @@ describe('Auth session persistence', () => {
         embedPermissions: false,
       },
       { find: vi.fn() } as never,
+      updates(),
+    );
+    const handler = new RefreshAuthHandler(
+      { publishAll: vi.fn() } as never,
       byTokenHash(),
       byConsumedTokenHash(),
-      updates(),
       tokens,
       { save: vi.fn(), clear: vi.fn() },
+      service,
     );
+    const command = new RefreshAuthCommand({
+      refreshToken: 'token-a',
+      clientIp: '127.0.0.1',
+    });
     await expect(
-      inTenant(() => service.refresh('token-a', '127.0.0.1')),
+      inTenant(() => handler.execute(command)),
     ).rejects.toBeInstanceOf(RefreshTokenReuseError);
     const persisted = await updates().findById(auth.id);
     expect(persisted?.revokedAt).not.toBeNull();
@@ -173,14 +183,22 @@ describe('Auth session persistence', () => {
         embedPermissions: false,
       },
       { find: vi.fn() } as never,
+      repository,
+    );
+    const handler = new RefreshAuthHandler(
+      { publishAll: vi.fn() } as never,
       byTokenHash(),
       byConsumedTokenHash(),
-      repository,
       tokens,
       { save: vi.fn(), clear: vi.fn() },
+      service,
     );
+    const command = new RefreshAuthCommand({
+      refreshToken: 'token-a',
+      clientIp: '127.0.0.1',
+    });
     await expect(
-      inTenant(() => service.refresh('token-a', '127.0.0.1')),
+      inTenant(() => handler.execute(command)),
     ).rejects.toBeInstanceOf(RefreshTokenReuseError);
     const persisted = await byTokenHash().find(
       new GetAuthByTokenHashQuery({ tokenHash: tokens.hash('token-d') }),

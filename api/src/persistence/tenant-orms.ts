@@ -32,5 +32,6 @@ export async function forEachTenantOrm<T>(
       await orm.close();
     }
   }
+
   return results;
 }

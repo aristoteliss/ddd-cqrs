@@ -24,6 +24,7 @@ export class GetUsersHandler
 
   async execute(query: GetUsersQuery): Promise<UserReadModel[]> {
     const users = await this.queryRepository.find(query);
+
     return users
       .filter((user) => this.authorizer.can(APP_ACTIONS.READ, user))
       .map((user) => projectUserRead(this.authorizer, user));

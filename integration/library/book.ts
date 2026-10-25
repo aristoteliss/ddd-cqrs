@@ -76,6 +76,7 @@ export class Book extends RootEntity<BookSnapshot> {
   static add(title: string, copies: number): Book {
     const book = new Book({ title, copies });
     book.apply(new BookAddedEvent(book));
+
     return book;
   }
 
@@ -101,7 +102,9 @@ export class Book extends RootEntity<BookSnapshot> {
         `Member ${memberId} already holds a copy.`,
       );
     }
+
     this.applyPatch({ borrowers: [...this._borrowers, memberId] });
+
     return this;
   }
 
@@ -110,9 +113,11 @@ export class Book extends RootEntity<BookSnapshot> {
     if (!this._borrowers.includes(memberId)) {
       throw new NotOnLoanException(memberId);
     }
+
     this.applyPatch({
       borrowers: this._borrowers.filter((id) => id !== memberId),
     });
+
     return this;
   }
 

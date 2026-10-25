@@ -48,8 +48,9 @@ import { ZodValidationBehavior } from '@cqrs-ddd/pipeline-zod';
 import { TypedInMemoryProvider } from '@openfeature/server-sdk';
 import { Queue, Worker } from 'bullmq';
 import { RateLimiterMemory } from 'rate-limiter-flexible';
-import { CreateAuthHandler } from './auths/application/cqrs/commands/create-auth.handler.js';
+import { RefreshAuthHandler } from './auths/application/cqrs/commands/refresh-auth.handler.js';
 import { RevokeAuthHandler } from './auths/application/cqrs/commands/revoke-auth.handler.js';
+import { StartAuthHandler } from './auths/application/cqrs/commands/start-auth.handler.js';
 import { GetUserPermissionRulesHandler } from './auths/application/cqrs/queries/get-user-permission-rules.handler.js';
 import type { AuthTokenPolicy } from './auths/application/ports/auth-token-policy.port.js';
 import { authenticate } from './auths/authenticate.js';
@@ -58,10 +59,10 @@ import { NodeRefreshTokens } from './auths/infrastructure/node-refresh-tokens.js
 import { SessionJobPrincipal } from './auths/infrastructure/session-job-principal.js';
 import { SharedDemoLoginCodeVerifier } from './auths/infrastructure/shared-demo-login-code.verifier.js';
 import { CaslPermissionSource } from './auths/persistence/casl-permission.source.js';
-import { CreateAuthCommandRepository } from './auths/persistence/create-auth.command-repository.js';
 import { GetAuthByConsumedTokenHashQueryRepository } from './auths/persistence/get-auth-by-consumed-token-hash.query-repository.js';
 import { GetAuthByTokenHashQueryRepository } from './auths/persistence/get-auth-by-token-hash.query-repository.js';
-import { GetUserPermissionRulesRepository } from './auths/persistence/get-user-permission-rules.query-repository.js';
+import { GetUserPermissionRulesQueryRepository } from './auths/persistence/get-user-permission-rules.query-repository.js';
+import { StartAuthCommandRepository } from './auths/persistence/start-auth.command-repository.js';
 import { UpdateAuthCommandRepository } from './auths/persistence/update-auth.command-repository.js';
 import { ApiClientAuthenticator } from './auths/services/api-client-authenticator.js';
 import { JwtAuthenticator } from './auths/services/jwt-authenticator.js';
@@ -85,14 +86,14 @@ import { persistenceConfig } from './persistence/persistence.config.js';
 import { TenantSchemaContext } from './persistence/tenant-schema.context.js';
 import { CreateRoleHandler } from './roles/application/cqrs/commands/create-role.handler.js';
 import { DeleteRoleHandler } from './roles/application/cqrs/commands/delete-role.handler.js';
-import { UpdateRoleHandler } from './roles/application/cqrs/commands/update-role.handler.js';
+import { RenameRoleHandler } from './roles/application/cqrs/commands/rename-role.handler.js';
 import { GetRoleHandler } from './roles/application/cqrs/queries/get-role.handler.js';
 import { GetRolesHandler } from './roles/application/cqrs/queries/get-roles.handler.js';
 import { CreateRoleCommandRepository } from './roles/persistence/create-role.command-repository.js';
 import { DeleteRoleCommandRepository } from './roles/persistence/delete-role.command-repository.js';
 import { GetRoleQueryRepository } from './roles/persistence/get-role.query-repository.js';
 import { GetRolesQueryRepository } from './roles/persistence/get-roles.query-repository.js';
-import { UpdateRoleCommandRepository } from './roles/persistence/update-role.command-repository.js';
+import { RenameRoleCommandRepository } from './roles/persistence/rename-role.command-repository.js';
 import { CreateUserHandler } from './users/application/cqrs/commands/create-user.handler.js';
 import { DeleteUserHandler } from './users/application/cqrs/commands/delete-user.handler.js';
 import { UpdateUserHandler } from './users/application/cqrs/commands/update-user.handler.js';
@@ -105,7 +106,10 @@ import {
   BATCH_UPDATE_USERS_QUEUE,
   BatchUpdateUsersProcessor,
 } from './users/jobs/batch-update-users.processor.js';
-import { BullMqUserEventDispatcher } from './users/jobs/bullmq-user-event-dispatcher.adapter.js';
+import {
+  BullMqUserBatchDispatcher,
+  BullMqWelcomeEmailDispatcher,
+} from './users/jobs/bullmq-user-event-dispatcher.adapter.js';
 import {
   SendWelcomeEmailProcessor,
   WELCOME_EMAIL_QUEUE,
@@ -171,8 +175,6 @@ export const GLOBAL_BEHAVIORS: GlobalBehaviorsOptions[] = [
 export interface App {
   readonly cqrs: Cqrs;
   readonly tenants: TenantSchemaContext;
-  /** Logins and refreshes of sessions, outside the buses for the refresh. */
-  readonly logins: PrincipalLoginService;
   /** Authenticates the caller of every route; see `authenticate`. */
   readonly around: Around;
   /**
@@ -194,6 +196,7 @@ export interface App {
  */
 export async function createApp(): Promise<App> {
   setTenantResolver(currentTenantId);
+
   const tenants = new TenantSchemaContext();
   const store = new MikroOrmStore(tenants, logger);
   await store.open();
@@ -214,7 +217,10 @@ export async function createApp(): Promise<App> {
   });
 
   const sessions = new UpdateAuthCommandRepository(cache(), store);
-  const permissionRules = new GetUserPermissionRulesRepository(cache(), store);
+  const permissionRules = new GetUserPermissionRulesQueryRepository(
+    cache(),
+    store,
+  );
   const authByTokenHash = new GetAuthByTokenHashQueryRepository(cache(), store);
   const refreshTokens = new NodeRefreshTokens();
   const cookies = new SessionService();
@@ -225,7 +231,6 @@ export async function createApp(): Promise<App> {
   };
 
   const log = pinoLogger(logger);
-  const limiter = new RateLimiterMemory(RATE_LIMIT_CAPACITY);
   const cqrs = createCqrs({
     logger: log,
     sources: { tenantId: tenantSource, correlationId: correlationSource },
@@ -237,7 +242,11 @@ export async function createApp(): Promise<App> {
         { environment: process.env.NODE_ENV ?? 'development' },
         log,
       ),
-      new RateLimitBehavior(limiter, undefined, log),
+      new RateLimitBehavior(
+        new RateLimiterMemory(RATE_LIMIT_CAPACITY),
+        undefined,
+        log,
+      ),
       new MetricsBehavior(log),
       new IdempotencyBehavior(new MemoryIdempotencyStore(), undefined, log),
       new CacheBehavior(queryCache, undefined, log),
@@ -256,7 +265,6 @@ export async function createApp(): Promise<App> {
   const { eventBus } = cqrs;
   const user = new GetUserQueryRepository(cache(), store);
   const roles = new GetRolesQueryRepository(store);
-  const dispatcher = new BullMqUserEventDispatcher(welcomeEmails, userBatches);
   const logins = new PrincipalLoginService(
     user,
     new SharedDemoLoginCodeVerifier(),
@@ -265,13 +273,7 @@ export async function createApp(): Promise<App> {
     ),
     policy,
     permissionRules,
-    authByTokenHash,
-    new GetAuthByConsumedTokenHashQueryRepository(cache(), store),
     sessions,
-    refreshTokens,
-    cookies,
-    eventBus,
-    limiter,
   );
   cqrs.register(
     new GetRoleHandler(new GetRoleQueryRepository(cache(), store), authorizer),
@@ -281,8 +283,8 @@ export async function createApp(): Promise<App> {
       authorizer,
       eventBus,
     ),
-    new UpdateRoleHandler(
-      new UpdateRoleCommandRepository(cache(), store),
+    new RenameRoleHandler(
+      new RenameRoleCommandRepository(cache(), store),
       authorizer,
       eventBus,
     ),
@@ -314,15 +316,23 @@ export async function createApp(): Promise<App> {
       authorizer,
       eventBus,
     ),
-    new UserCreatedHandler(dispatcher),
-    new UserUpdatedHandler(dispatcher),
-    new CreateAuthHandler(
+    new UserCreatedHandler(new BullMqWelcomeEmailDispatcher(welcomeEmails)),
+    new UserUpdatedHandler(new BullMqUserBatchDispatcher(userBatches)),
+    new StartAuthHandler(
       eventBus,
       logins,
-      new CreateAuthCommandRepository(cache(), store),
+      new StartAuthCommandRepository(cache(), store),
       refreshTokens,
       policy,
       cookies,
+    ),
+    new RefreshAuthHandler(
+      eventBus,
+      authByTokenHash,
+      new GetAuthByConsumedTokenHashQueryRepository(cache(), store),
+      refreshTokens,
+      cookies,
+      logins,
     ),
     new RevokeAuthHandler(
       eventBus,
@@ -367,7 +377,6 @@ export async function createApp(): Promise<App> {
   return {
     cqrs,
     tenants,
-    logins,
     around: authenticate(resolver),
     close: async () => {
       await Promise.all(workers.map((worker) => worker.close()));

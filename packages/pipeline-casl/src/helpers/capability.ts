@@ -44,18 +44,13 @@ import type { Capability, CapabilityString } from '../types/casl.types.js';
  * ```
  */
 export function parseCapabilityString(cap: CapabilityString): Capability {
-  let str = cap.trim();
-  let inverted = false;
-
-  if (str.startsWith('!')) {
-    inverted = true;
-    str = str.slice(1);
-  }
-
-  const parts = str.split('|');
+  const trimmed = cap.trim();
+  const inverted = trimmed.startsWith('!');
+  const parts = (inverted ? trimmed.slice(1) : trimmed).split('|');
   if (parts.length > 5) {
     throw new Error(`Invalid capability string: too many segments in "${cap}"`);
   }
+
   const subject = decodeTextSegment(parts[0], cap, 'subject');
   const action = decodeTextSegment(parts[1], cap, 'action');
 
@@ -69,27 +64,10 @@ export function parseCapabilityString(cap: CapabilityString): Capability {
   const rawConditions = parts[2];
   const rawFields = parts[3];
   const rawReason = parts[4];
-
-  let conditions: Record<string, unknown> | undefined;
-  if (rawConditions && rawConditions !== '*') {
-    let parsed: unknown;
-    try {
-      const json = rawConditions.startsWith('~')
-        ? Buffer.from(rawConditions.slice(1), 'base64url').toString('utf8')
-        : rawConditions;
-      parsed = JSON.parse(json);
-    } catch {
-      throw new Error(
-        `Invalid conditions JSON in capability string "${cap}": ${rawConditions}`,
-      );
-    }
-    if (!isPlainObject(parsed)) {
-      throw new TypeError(
-        `Capability conditions must be a JSON object in "${cap}".`,
-      );
-    }
-    conditions = parsed;
-  }
+  const conditions =
+    rawConditions && rawConditions !== '*'
+      ? decodeConditionsSegment(rawConditions, cap)
+      : undefined;
 
   const result: Capability = { subject, action };
   if (inverted) result.inverted = true;
@@ -208,50 +186,58 @@ function copyJsonConditions(
   if (value === null || typeof value === 'string' || typeof value === 'boolean')
     return value;
   if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (
-    typeof value !== 'object' ||
-    value === null ||
-    (!Array.isArray(value) && !isPlainObject(value)) ||
-    ancestors.has(value)
-  ) {
+  const isJsonContainer = Array.isArray(value) || isPlainObject(value);
+  if (!isJsonContainer || ancestors.has(value)) {
     throw new TypeError('Unsupported condition value.');
   }
 
   ancestors.add(value);
   try {
-    const descriptors = Object.getOwnPropertyDescriptors(value);
-    const keys = Reflect.ownKeys(descriptors);
-    if (Array.isArray(value)) {
-      // Arrays must have exactly their length property and contiguous indices.
-      if (keys.length !== value.length + 1)
-        throw new TypeError('Lossy condition array.');
-      const result: unknown[] = [];
-      for (let index = 0; index < value.length; index += 1) {
-        const descriptor = descriptors[String(index)];
-        if (!descriptor?.enumerable || !('value' in descriptor)) {
-          throw new TypeError('Condition arrays must contain only JSON data.');
-        }
-        result.push(copyJsonConditions(descriptor.value, ancestors));
-      }
-      return result;
-    }
+    if (Array.isArray(value)) return copyJsonArray(value, ancestors);
 
-    const result: Record<string, unknown> = Object.create(null);
-    for (const key of keys) {
-      if (typeof key !== 'string')
-        throw new TypeError('Symbol condition keys are unsupported.');
-      const descriptor = descriptors[key];
-      if (!descriptor.enumerable || !('value' in descriptor)) {
-        throw new TypeError(
-          'Conditions must contain only enumerable JSON data.',
-        );
-      }
-      result[key] = copyJsonConditions(descriptor.value, ancestors);
-    }
-    return result;
+    return copyJsonObject(value, ancestors);
   } finally {
     ancestors.delete(value);
   }
+}
+
+function copyJsonObject(
+  value: object,
+  ancestors: WeakSet<object>,
+): Record<string, unknown> {
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const result: Record<string, unknown> = Object.create(null);
+  for (const key of Reflect.ownKeys(descriptors)) {
+    if (typeof key !== 'string')
+      throw new TypeError('Symbol condition keys are unsupported.');
+    const descriptor = descriptors[key];
+    if (!descriptor.enumerable || !('value' in descriptor)) {
+      throw new TypeError('Conditions must contain only enumerable JSON data.');
+    }
+    result[key] = copyJsonConditions(descriptor.value, ancestors);
+  }
+  return result;
+}
+
+function copyJsonArray(
+  value: unknown[],
+  ancestors: WeakSet<object>,
+): unknown[] {
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  // Arrays must have exactly their length property and contiguous indices.
+  if (Reflect.ownKeys(descriptors).length !== value.length + 1)
+    throw new TypeError('Lossy condition array.');
+
+  const result: unknown[] = [];
+  for (let index = 0; index < value.length; index += 1) {
+    const descriptor = descriptors[String(index)];
+    if (!descriptor?.enumerable || !('value' in descriptor)) {
+      throw new TypeError('Condition arrays must contain only JSON data.');
+    }
+    result.push(copyJsonConditions(descriptor.value, ancestors));
+  }
+
+  return result;
 }
 
 function encodeTextSegment(
@@ -305,6 +291,31 @@ function encodeFieldsSegment(fields: string[] | undefined): string | undefined {
   return safe
     ? fields.join(',')
     : `~${Buffer.from(JSON.stringify(fields), 'utf8').toString('base64url')}`;
+}
+
+function decodeConditionsSegment(
+  value: string,
+  capability: string,
+): Record<string, unknown> {
+  let parsed: unknown;
+  try {
+    const json = value.startsWith('~')
+      ? Buffer.from(value.slice(1), 'base64url').toString('utf8')
+      : value;
+    parsed = JSON.parse(json);
+  } catch {
+    throw new Error(
+      `Invalid conditions JSON in capability string "${capability}": ${value}`,
+    );
+  }
+
+  if (!isPlainObject(parsed)) {
+    throw new TypeError(
+      `Capability conditions must be a JSON object in "${capability}".`,
+    );
+  }
+
+  return parsed;
 }
 
 function decodeFieldsSegment(value: string, capability: string): string[] {

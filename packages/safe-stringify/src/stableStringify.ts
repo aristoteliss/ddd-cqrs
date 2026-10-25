@@ -78,6 +78,14 @@ function normalize(
     return value.toISOString();
   }
 
+  return normalizeObject(value, ancestors, sortKeys);
+}
+
+function normalizeObject(
+  value: object,
+  ancestors: WeakSet<object>,
+  sortKeys: boolean,
+): StrictJsonValue {
   if (isUnsupportedObject(value)) {
     throw new TypeError(
       `${value.constructor?.name || 'Object'} is outside the supported JSON domain.`,
@@ -102,29 +110,44 @@ function normalize(
 
   ancestors.add(value);
   try {
-    if (Array.isArray(value)) {
-      const result: StrictJsonValue[] = [];
-      for (let index = 0; index < value.length; index += 1) {
-        if (!(index in value)) {
-          throw new TypeError('Sparse arrays are not JSON-serializable.');
-        }
-        result.push(normalize(value[index], ancestors, sortKeys));
-      }
-      return result;
-    }
-
-    const source = value as Record<string, unknown>;
-    const keys = Object.keys(source);
-    if (sortKeys) keys.sort();
-
-    const result: { [key: string]: StrictJsonValue } = Object.create(null);
-    for (const key of keys) {
-      result[key] = normalize(source[key], ancestors, sortKeys);
-    }
-    return result;
+    return Array.isArray(value)
+      ? normalizeArray(value, ancestors, sortKeys)
+      : normalizeRecord(value, ancestors, sortKeys);
   } finally {
     ancestors.delete(value);
   }
+}
+
+function normalizeArray(
+  value: unknown[],
+  ancestors: WeakSet<object>,
+  sortKeys: boolean,
+): StrictJsonValue[] {
+  const result: StrictJsonValue[] = [];
+  for (let index = 0; index < value.length; index += 1) {
+    if (!(index in value)) {
+      throw new TypeError('Sparse arrays are not JSON-serializable.');
+    }
+    result.push(normalize(value[index], ancestors, sortKeys));
+  }
+  return result;
+}
+
+function normalizeRecord(
+  value: object,
+  ancestors: WeakSet<object>,
+  sortKeys: boolean,
+): { [key: string]: StrictJsonValue } {
+  const source = value as Record<string, unknown>;
+  const keys = Object.keys(source);
+  if (sortKeys) keys.sort();
+
+  const result: { [key: string]: StrictJsonValue } = Object.create(null);
+  for (const key of keys) {
+    result[key] = normalize(source[key], ancestors, sortKeys);
+  }
+
+  return result;
 }
 
 function isUnsupportedObject(value: object): boolean {

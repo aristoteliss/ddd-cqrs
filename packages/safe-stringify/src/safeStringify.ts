@@ -65,42 +65,36 @@ interface SanitizerMatchers {
 function buildMatchers(
   options?: SanitizeOptions | Set<string>,
 ): SanitizerMatchers {
-  const flatExclude = new Set<string>();
-  const pathExclude = new Set<string>();
-  const flatRedact = new Set<string>();
-  const pathRedact = new Set<string>();
-  let redactReplacement = REDACTED;
-  let mode: 'json' | 'clone' = 'json';
-
   if (options instanceof Set) options = { excludeKeys: options };
-  if (options) {
-    if (options.mode) mode = options.mode;
-    if (options.redactReplacement)
-      redactReplacement = options.redactReplacement;
-
-    if (options.excludeKeys) {
-      for (const key of options.excludeKeys) {
-        if (key.includes('.')) pathExclude.add(key);
-        else flatExclude.add(key);
-      }
-    }
-    if (options.redactKeys) {
-      for (const key of options.redactKeys) {
-        const normalized = normalizeRedactKey(key);
-        if (normalized.includes('.')) pathRedact.add(normalized);
-        else flatRedact.add(normalized);
-      }
-    }
-  }
+  const mode = options?.mode || 'json';
+  const redactReplacement = options?.redactReplacement || REDACTED;
+  const exclude = partitionKeys(options?.excludeKeys);
+  const redact = partitionKeys(options?.redactKeys, normalizeRedactKey);
 
   return {
-    flatExclude,
-    pathExclude,
-    flatRedact,
-    pathRedact,
+    flatExclude: exclude.flat,
+    pathExclude: exclude.path,
+    flatRedact: redact.flat,
+    pathRedact: redact.path,
     redactReplacement,
     mode,
   };
+}
+
+/** Splits keys into flat names and dot-paths, after `normalize` maps each one. */
+function partitionKeys(
+  keys: Iterable<string> | undefined,
+  normalize: (key: string) => string = (key) => key,
+): { flat: Set<string>; path: Set<string> } {
+  const flat = new Set<string>();
+  const path = new Set<string>();
+  if (!keys) return { flat, path };
+  for (const key of keys) {
+    const normalized = normalize(key);
+    if (normalized.includes('.')) path.add(normalized);
+    else flat.add(normalized);
+  }
+  return { flat, path };
 }
 
 function normalizeRedactKey(key: string): string {
@@ -126,175 +120,194 @@ function isExcluded(
   return matchers.flatExclude.has(key) || matchers.pathExclude.has(path);
 }
 
-function sanitizeValue(
-  val: unknown,
-  path: string,
-  matchers: SanitizerMatchers,
-  ancestors: WeakSet<object>,
-): unknown {
-  if (val === null) return null;
-  if (val === undefined) return undefined;
+/** One sanitization pass: its matchers and the objects above the current value. */
+class Sanitizer {
+  private readonly ancestors = new WeakSet<object>();
 
-  // Primitives
-  if (typeof val !== 'object' && typeof val !== 'function') {
-    if (matchers.mode === 'clone') return val;
-    const type = typeof val;
-    return SAFE_PRIMITIVES.has(type) ? val : `[${type}]`;
+  constructor(private readonly matchers: SanitizerMatchers) {}
+
+  sanitize(val: unknown, path: string): unknown {
+    if (val === null) return null;
+    if (val === undefined) return undefined;
+
+    // Primitives
+    if (typeof val !== 'object' && typeof val !== 'function') {
+      if (this.matchers.mode === 'clone') return val;
+      const type = typeof val;
+      return SAFE_PRIMITIVES.has(type) ? val : `[${type}]`;
+    }
+
+    if (typeof val === 'function') {
+      return this.matchers.mode === 'clone' ? val : '[Function]';
+    }
+
+    // Circular reference guard
+    if (this.ancestors.has(val as object)) return '[Circular]';
+    this.ancestors.add(val as object);
+
+    try {
+      return this.sanitizeObject(val as object, path);
+    } finally {
+      this.ancestors.delete(val as object);
+    }
   }
 
-  if (typeof val === 'function') {
-    return matchers.mode === 'clone' ? val : '[Function]';
-  }
+  private sanitizeObject(val: object, path: string): unknown {
+    const isClone = this.matchers.mode === 'clone';
 
-  // Circular reference guard
-  if (ancestors.has(val as object)) return '[Circular]';
-  ancestors.add(val as object);
-
-  try {
     // 1. Date
     if (val instanceof Date) {
-      if (matchers.mode === 'clone') return new Date(val);
+      if (isClone) return new Date(val);
       return Number.isNaN(val.getTime()) ? '[Invalid Date]' : val.toISOString();
     }
 
     // 2. RegExp
     if (val instanceof RegExp) {
-      if (matchers.mode === 'clone') {
-        const clone = new RegExp(val.source, val.flags);
-        clone.lastIndex = val.lastIndex;
-        return clone;
-      }
+      if (isClone) return cloneRegExp(val);
       return val.toString();
     }
 
     // 3. Error
     if (val instanceof Error) {
-      if (matchers.mode === 'clone') {
-        const clone = new Error(val.message);
-        clone.name = val.name;
-        clone.stack = val.stack;
-        copyProperties(val, clone, path, matchers, ancestors);
-        return clone;
-      }
+      if (isClone) return this.cloneError(val, path);
       return { name: val.name, message: val.message, stack: val.stack };
     }
 
     // 4. Binary data
-    if (
-      (typeof Buffer !== 'undefined' && Buffer.isBuffer(val)) ||
-      val instanceof ArrayBuffer ||
-      ArrayBuffer.isView(val)
-    ) {
-      if (matchers.mode === 'clone') return structuredClone(val);
+    if (isBinary(val)) {
+      if (isClone) return structuredClone(val);
       return '[Binary Data]';
     }
 
     // 5. Streams
-    if (
-      typeof (val as Record<string, unknown>).pipe === 'function' &&
-      typeof (val as Record<string, unknown>).on === 'function'
-    ) {
-      return '[Stream]';
-    }
+    if (isStream(val)) return '[Stream]';
 
     // 6. Multer File
-    if (
-      'originalname' in val &&
-      'buffer' in val &&
-      Buffer.isBuffer((val as Record<string, unknown>).buffer)
-    ) {
-      return `[File: ${(val as Record<string, unknown>).originalname}]`;
-    }
+    if (isMulterFile(val)) return `[File: ${val.originalname}]`;
+
+    return this.sanitizeCollection(val, path);
+  }
+
+  private sanitizeCollection(val: object, path: string): unknown {
+    const isClone = this.matchers.mode === 'clone';
 
     // 7. Map
     if (val instanceof Map) {
-      if (matchers.mode === 'clone') {
-        const clone = new Map<unknown, unknown>();
-        for (const [k, v] of val) {
-          const keyStr = typeof k === 'string' ? k : '';
-          const currentPath = path && keyStr ? `${path}.${keyStr}` : keyStr;
-          if (keyStr && isExcluded(keyStr, currentPath, matchers)) continue;
-          const isRedact = keyStr
-            ? isRedacted(keyStr, currentPath, matchers)
-            : false;
-          clone.set(
-            sanitizeValue(k, path, matchers, ancestors),
-            isRedact
-              ? matchers.redactReplacement
-              : sanitizeValue(v, currentPath, matchers, ancestors),
-          );
-        }
-        return clone;
-      }
-      return sanitizeValue(Object.fromEntries(val), path, matchers, ancestors);
+      if (isClone) return this.cloneMap(val, path);
+      return this.sanitize(Object.fromEntries(val), path);
     }
 
     // 8. Set
     if (val instanceof Set) {
-      if (matchers.mode === 'clone') {
-        return new Set(
-          Array.from(val, (item) =>
-            sanitizeValue(item, path, matchers, ancestors),
-          ),
-        );
+      if (isClone) {
+        return new Set(Array.from(val, (item) => this.sanitize(item, path)));
       }
-      return sanitizeValue([...val], path, matchers, ancestors);
+      return this.sanitize([...val], path);
     }
 
     // 9. Array
     if (Array.isArray(val)) {
-      return val.map((item) => sanitizeValue(item, path, matchers, ancestors));
+      return val.map((item) => this.sanitize(item, path));
     }
 
     // 10. Generic Object
     const out: Record<string, unknown> =
-      matchers.mode === 'json' ? Object.create(null) : {};
+      this.matchers.mode === 'json' ? Object.create(null) : {};
 
-    copyProperties(val, out, path, matchers, ancestors);
+    this.copyProperties(val, out, path);
 
     return out;
-  } finally {
-    ancestors.delete(val as object);
+  }
+
+  private cloneError(val: Error, path: string): Error {
+    const clone = new Error(val.message);
+    clone.name = val.name;
+    clone.stack = val.stack;
+    this.copyProperties(val, clone, path);
+    return clone;
+  }
+
+  private cloneMap(
+    val: Map<unknown, unknown>,
+    path: string,
+  ): Map<unknown, unknown> {
+    const clone = new Map<unknown, unknown>();
+    for (const [k, v] of val) {
+      const keyStr = typeof k === 'string' ? k : '';
+      const currentPath = path && keyStr ? `${path}.${keyStr}` : keyStr;
+      if (keyStr && isExcluded(keyStr, currentPath, this.matchers)) continue;
+      const isRedact = keyStr
+        ? isRedacted(keyStr, currentPath, this.matchers)
+        : false;
+      clone.set(
+        this.sanitize(k, path),
+        isRedact
+          ? this.matchers.redactReplacement
+          : this.sanitize(v, currentPath),
+      );
+    }
+    return clone;
+  }
+
+  private copyProperties(source: object, target: object, path: string): void {
+    for (const [k, v] of Object.entries(source)) {
+      const currentPath = path ? `${path}.${k}` : k;
+
+      if (isExcluded(k, currentPath, this.matchers)) {
+        continue;
+      }
+
+      const valOut = isRedacted(k, currentPath, this.matchers)
+        ? this.matchers.redactReplacement
+        : this.sanitize(v, currentPath);
+
+      Object.defineProperty(target, k, {
+        value: valOut,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
+    }
+
+    if (this.matchers.mode !== 'clone') return;
+    for (const sym of Object.getOwnPropertySymbols(source)) {
+      const descriptor = Object.getOwnPropertyDescriptor(source, sym);
+      if (!descriptor?.enumerable) continue;
+      Object.defineProperty(target, sym, {
+        value: this.sanitize(Reflect.get(source, sym), path),
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
+    }
   }
 }
 
-function copyProperties(
-  source: object,
-  target: object,
-  path: string,
-  matchers: SanitizerMatchers,
-  ancestors: WeakSet<object>,
-): void {
-  for (const [k, v] of Object.entries(source)) {
-    const currentPath = path ? `${path}.${k}` : k;
+function cloneRegExp(val: RegExp): RegExp {
+  const clone = new RegExp(val.source, val.flags);
+  clone.lastIndex = val.lastIndex;
+  return clone;
+}
 
-    if (isExcluded(k, currentPath, matchers)) {
-      continue;
-    }
+function isBinary(val: object): boolean {
+  const isBuffer = typeof Buffer !== 'undefined' && Buffer.isBuffer(val);
+  return isBuffer || val instanceof ArrayBuffer || ArrayBuffer.isView(val);
+}
 
-    const valOut = isRedacted(k, currentPath, matchers)
-      ? matchers.redactReplacement
-      : sanitizeValue(v, currentPath, matchers, ancestors);
+function isStream(val: object): boolean {
+  const candidate = val as Record<string, unknown>;
+  return (
+    typeof candidate.pipe === 'function' && typeof candidate.on === 'function'
+  );
+}
 
-    Object.defineProperty(target, k, {
-      value: valOut,
-      writable: true,
-      enumerable: true,
-      configurable: true,
-    });
-  }
-
-  if (matchers.mode !== 'clone') return;
-  for (const sym of Object.getOwnPropertySymbols(source)) {
-    const descriptor = Object.getOwnPropertyDescriptor(source, sym);
-    if (!descriptor?.enumerable) continue;
-    Object.defineProperty(target, sym, {
-      value: sanitizeValue(Reflect.get(source, sym), path, matchers, ancestors),
-      writable: true,
-      enumerable: true,
-      configurable: true,
-    });
-  }
+/** A Multer upload: an `originalname` beside a `buffer` that is a Buffer. */
+function isMulterFile(val: object): val is { originalname: unknown } {
+  return (
+    'originalname' in val &&
+    'buffer' in val &&
+    Buffer.isBuffer((val as Record<string, unknown>).buffer)
+  );
 }
 
 /**
@@ -306,7 +319,7 @@ export function safeSanitize(
   options?: SanitizeOptions | Set<string>,
 ): unknown {
   const matchers = buildMatchers(options);
-  return sanitizeValue(value, '', matchers, new WeakSet());
+  return new Sanitizer(matchers).sanitize(value, '');
 }
 
 /**

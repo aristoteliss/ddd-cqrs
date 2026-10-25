@@ -28,11 +28,13 @@ function toEpochMilliseconds(value: unknown): number {
     const numeric = Number(value);
     milliseconds = Number.isNaN(numeric) ? Date.parse(value) : numeric;
   }
+
   if (!Number.isFinite(milliseconds)) {
     throw new TypeError(
       `UnixTimestampType cannot read ${typeof value} value ${JSON.stringify(String(value))} as a timestamp.`,
     );
   }
+
   return milliseconds;
 }
 

@@ -85,6 +85,7 @@ export class PaymentService {
   )
   async charge(input: z.input<typeof Charge>): Promise<Payment> {
     const { paymentId, amount, currency } = input as z.output<typeof Charge>;
+
     const payment: Payment = {
       id: paymentId,
       merchantId: currentMerchant().id,
@@ -95,7 +96,9 @@ export class PaymentService {
       correlationId: getCorrelationId(),
       status: 'captured',
     };
+
     this.#payments.set(paymentId, payment);
+
     return payment;
   }
 
@@ -107,7 +110,9 @@ export class PaymentService {
   )
   async refund(paymentId: string): Promise<Payment | undefined> {
     const payment = this.#payments.get(paymentId);
+
     if (payment) payment.status = 'refunded';
+
     return payment;
   }
 
@@ -118,6 +123,7 @@ export class PaymentService {
   async history(): Promise<Payment[]> {
     const merchantId = currentMerchant().id;
     const tenantId = currentTenantId();
+
     return [...this.#payments.values()].filter(
       (payment) =>
         payment.merchantId === merchantId && payment.tenantId === tenantId,

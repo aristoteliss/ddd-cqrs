@@ -24,7 +24,7 @@ function buildConditions(
  * Query repository resolving a user's materialized permission rules
  * ordered by direct rules first, then inverted rules, each group by position.
  */
-export class GetUserPermissionRulesRepository extends QueryRepository<
+export class GetUserPermissionRulesQueryRepository extends QueryRepository<
   GetUserPermissionRulesQuery,
   Capability[]
 > {

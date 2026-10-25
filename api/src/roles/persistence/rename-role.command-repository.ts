@@ -8,7 +8,7 @@ import { MikroOrmStore } from '../../persistence/mikro-orm.store.js';
 import { UniqueRoleNameException } from '../domain/models/errors/role-name.exception.js';
 import { Role, RoleSnapshot } from '../domain/models/role.entity.js';
 
-export class UpdateRoleCommandRepository extends AggregateRepository<
+export class RenameRoleCommandRepository extends AggregateRepository<
   RoleSnapshot,
   Role,
   RoleSnapshot
@@ -29,6 +29,7 @@ export class UpdateRoleCommandRepository extends AggregateRepository<
   })
   async save(role: Role): Promise<RoleSnapshot> {
     const snapshot = role.toJSON();
+
     await optimisticUpdate(
       this.store.em,
       Role,
@@ -39,6 +40,7 @@ export class UpdateRoleCommandRepository extends AggregateRepository<
       },
       'Role',
     );
+
     return snapshot;
   }
 }

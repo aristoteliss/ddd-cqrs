@@ -6,9 +6,10 @@ import {
 } from '@cqrs-ddd/core/application';
 import { EntityNotFoundException } from '@cqrs-ddd/core/domain';
 import { CommandHandler, EventBus } from '@cqrs-ddd/cqrs';
-import { type IPipelineContext, UsePipeline } from '@cqrs-ddd/pipeline';
+import { UsePipeline } from '@cqrs-ddd/pipeline';
 import { AUDIT_SEVERITY, audit } from '@cqrs-ddd/pipeline-audit';
 import { CaslAuthorizer, requires } from '@cqrs-ddd/pipeline-casl';
+import { targetMetadata } from '../../../../common/audit/audit.options.js';
 import {
   APP_ACTIONS,
   APP_SUBJECTS,
@@ -23,10 +24,7 @@ import { UpdateUserCommand } from './update-user.command.js';
   audit({
     action: AUDIT_ACTIONS.USER_UPDATE,
     severity: AUDIT_SEVERITY.MEDIUM,
-    metadata: (ctx: IPipelineContext) => {
-      const cmd = ctx.request as UpdateUserCommand | undefined;
-      return cmd?.id ? { targetUserId: cmd.id } : {};
-    },
+    metadata: targetMetadata('targetUserId'),
   }),
 )
 export class UpdateUserHandler extends CommandBaseHandler<
@@ -43,6 +41,7 @@ export class UpdateUserHandler extends CommandBaseHandler<
 
   async handle(command: UpdateUserCommand): Promise<User> {
     const { id, username, department } = command;
+
     const user = await this.commandRepository.findById(id);
     if (!user) {
       throw new EntityNotFoundException('User', id);
@@ -53,8 +52,11 @@ export class UpdateUserHandler extends CommandBaseHandler<
       user,
       command.getUpdateFields(UpdateUserCommand.updatableFields),
     );
+
     user.update({ username, department });
+
     await this.commandRepository.save(user);
+
     return user;
   }
 }

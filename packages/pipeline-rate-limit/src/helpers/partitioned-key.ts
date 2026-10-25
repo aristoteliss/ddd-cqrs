@@ -80,7 +80,7 @@ export function createPartitionedRateLimitKeyFactory(
 ): RateLimitKeyFactory {
   const onMissingPartition = options.onMissingPartition ?? 'throw';
 
-  return (context) => {
+  const keyFor: RateLimitKeyFactory = (context) => {
     const tenant = tenantSegments(
       context,
       options,
@@ -105,4 +105,6 @@ export function createPartitionedRateLimitKeyFactory(
 
     return joinKeySegments([...tenant, partition, context.requestName]);
   };
+
+  return keyFor;
 }

@@ -11,11 +11,11 @@ import type { MikroOrmStore } from '../../persistence/mikro-orm.store.js';
 import { createLibsqlOrmOptions } from '../../persistence/orm-options.js';
 import { UniqueRoleNameException } from '../domain/models/errors/role-name.exception.js';
 import { Role, type RoleSnapshot } from '../domain/models/role.entity.js';
-import { UpdateRoleCommandRepository } from './update-role.command-repository.js';
+import { RenameRoleCommandRepository } from './rename-role.command-repository.js';
 
 describe('versioned role updates with real MikroORM persistence', () => {
   let orm: MikroORM;
-  let repository: UpdateRoleCommandRepository;
+  let repository: RenameRoleCommandRepository;
   const cache: ICache<RoleSnapshot> = {
     get: vi.fn(),
     set: vi.fn(),
@@ -33,7 +33,7 @@ describe('versioned role updates with real MikroORM persistence', () => {
     });
     await orm.migrator.up();
     setPersistenceDialect(new MikroOrmDialect(orm));
-    repository = new UpdateRoleCommandRepository(cache, {
+    repository = new RenameRoleCommandRepository(cache, {
       get em() {
         return orm.em.fork();
       },
@@ -84,7 +84,7 @@ describe('versioned role updates with real MikroORM persistence', () => {
     await orm.em.fork().upsert(Role, role);
     role.rename('lifecycle-uncommitted');
     await orm.em.fork().transactional(async (em) => {
-      const transactionalRepository = new UpdateRoleCommandRepository(cache, {
+      const transactionalRepository = new RenameRoleCommandRepository(cache, {
         em,
       } as unknown as MikroOrmStore);
       await expect(transactionalRepository.save(role)).rejects.toThrow(

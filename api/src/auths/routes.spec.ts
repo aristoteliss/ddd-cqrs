@@ -21,18 +21,18 @@ import { expressApp } from '../http/express.js';
 import { fastifyApp } from '../http/fastify.js';
 import { HttpError } from '../http/http-error.js';
 import { route } from '../http/route.js';
-import { CreateAuthCommand } from './application/cqrs/commands/create-auth.command.js';
+import { RefreshAuthCommand } from './application/cqrs/commands/refresh-auth.command.js';
 import { RevokeAuthCommand } from './application/cqrs/commands/revoke-auth.command.js';
+import { StartAuthCommand } from './application/cqrs/commands/start-auth.command.js';
 import type { AuthResult } from './application/results/auth.result.js';
 import { authenticate } from './authenticate.js';
-import { InvalidRefreshTokenError } from './domain/errors/refresh-token.errors.js';
 import { Auth } from './domain/models/auth.entity.js';
+import { InvalidRefreshTokenError } from './domain/models/errors/refresh-token.errors.js';
 import { authRoutes, sessionBody } from './routes.js';
-import type { PrincipalLoginService } from './services/principal-login.service.js';
 import type { RequestPrincipalResolver } from './services/request-principal-resolver.js';
 
 const result: AuthResult = {
-  aggregate: Auth.create('u-1', 'hash', Date.now() + 60_000),
+  aggregate: Auth.start('u-1', 'hash', Date.now() + 60_000),
   userId: 'u-1',
   principalType: 'user',
   tenant: 'tenant_a',
@@ -44,14 +44,12 @@ const result: AuthResult = {
 };
 
 const execute = vi.fn();
-const refresh = vi.fn();
 const resolvePrincipal = vi.fn();
 const commandBus = { execute } as unknown as CommandBus;
-const logins = { refresh } as unknown as PrincipalLoginService;
 const logger = pino({ level: 'silent' });
 const options = {
   routes: [
-    ...authRoutes(commandBus, logins),
+    ...authRoutes(commandBus),
     route({
       method: 'GET',
       path: '/whoami',
@@ -75,7 +73,6 @@ afterAll(() => fastify.close());
 
 beforeEach(() => {
   execute.mockReset();
-  refresh.mockReset();
   resolvePrincipal.mockReset().mockResolvedValue(undefined);
 });
 
@@ -107,7 +104,7 @@ describe.each([
     expect(response.status).toBe(200);
     expect(response.body).toEqual(sessionBody(result));
     expect(execute).toHaveBeenCalledExactlyOnceWith(
-      expect.any(CreateAuthCommand),
+      expect.any(StartAuthCommand),
     );
     expect(execute.mock.calls[0][0]).toMatchObject({
       email: 'ann@example.test',
@@ -124,15 +121,22 @@ describe.each([
     expect(response.body.fieldErrors).toHaveProperty('code');
   });
 
-  it('refreshes with the refresh cookie', async () => {
-    refresh.mockResolvedValue(result);
+  it('refreshes with the refresh cookie and the caller address', async () => {
+    execute.mockResolvedValue(result);
 
     const response = await request(server())
       .post('/auths/refresh')
       .set('cookie', 'refresh_token=presented');
 
     expect(response.status).toBe(200);
-    expect(refresh).toHaveBeenCalledWith('presented', expect.any(String));
+    expect(response.body).toEqual(sessionBody(result));
+    expect(execute).toHaveBeenCalledExactlyOnceWith(
+      expect.any(RefreshAuthCommand),
+    );
+    expect(execute.mock.calls[0][0]).toMatchObject({
+      refreshToken: 'presented',
+      clientIp: expect.any(String),
+    });
   });
 
   it('answers 401 with its code for a refresh without the cookie', async () => {
@@ -144,7 +148,7 @@ describe.each([
       error: 'Unauthorized',
       code: 'refresh_invalid',
     });
-    expect(refresh).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
   });
 
   it('answers 204 to a logout, also for an unknown refresh cookie', async () => {

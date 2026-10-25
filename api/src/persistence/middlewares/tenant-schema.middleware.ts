@@ -40,10 +40,12 @@ export class TenantSchemaMiddleware {
         'Tenant context is required to process this request.',
       );
     }
+
     const schema = parse(header);
     if (!this.tenants.has(schema)) {
       throw new HttpError(403, 'Unknown tenant context.');
     }
+
     this.context.run(schema, () => next());
   }
 }

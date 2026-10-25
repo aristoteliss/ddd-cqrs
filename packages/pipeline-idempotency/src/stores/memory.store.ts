@@ -97,8 +97,10 @@ export class MemoryIdempotencyStore implements IdempotencyStore {
     if (this.live(key)) {
       return false;
     }
+
     this.ensureCapacity();
     this.write(key, record, ttlMs);
+
     return true;
   }
 
@@ -117,6 +119,7 @@ export class MemoryIdempotencyStore implements IdempotencyStore {
     }
 
     this.write(key, record, ttlMs);
+
     return true;
   }
 

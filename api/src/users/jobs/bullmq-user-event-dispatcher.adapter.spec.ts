@@ -2,7 +2,10 @@
 
 import { withJobContext } from '@cqrs-ddd/pipeline-job-context';
 import { describe, expect, it, vi } from 'vitest';
-import { BullMqUserEventDispatcher } from './bullmq-user-event-dispatcher.adapter.js';
+import {
+  BullMqUserBatchDispatcher,
+  BullMqWelcomeEmailDispatcher,
+} from './bullmq-user-event-dispatcher.adapter.js';
 
 vi.mock('@cqrs-ddd/pipeline-job-context', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@cqrs-ddd/pipeline-job-context')>()),
@@ -22,15 +25,14 @@ const jobContext = {
   principal: { id: 'u-1', type: 'user', sessionId: 's-1' },
 };
 
-describe('BullMqUserEventDispatcher', () => {
+describe('BullMQ user-event dispatchers', () => {
   it('stamps the job context on welcome-email job data', async () => {
     const welcomeAdd = vi.fn().mockResolvedValue({ id: 'welcome-1' });
-    const adapter = new BullMqUserEventDispatcher(
-      { add: welcomeAdd } as never,
-      { add: vi.fn() } as never,
-    );
+    const adapter = new BullMqWelcomeEmailDispatcher({
+      add: welcomeAdd,
+    } as never);
 
-    await adapter.enqueueWelcomeEmail({
+    await adapter.enqueue({
       userId: 'user-1',
       username: 'Alice',
       email: 'alice@example.test',
@@ -46,12 +48,9 @@ describe('BullMqUserEventDispatcher', () => {
 
   it('stamps the job context beside the batch items, not into JobsOptions', async () => {
     const batchAdd = vi.fn().mockResolvedValue({ id: 'batch-1' });
-    const adapter = new BullMqUserEventDispatcher(
-      { add: vi.fn() } as never,
-      { add: batchAdd } as never,
-    );
+    const adapter = new BullMqUserBatchDispatcher({ add: batchAdd } as never);
 
-    await adapter.enqueueUserBatch([{ userId: 'user-1', username: 'Alice' }]);
+    await adapter.enqueue([{ userId: 'user-1', username: 'Alice' }]);
 
     expect(batchAdd).toHaveBeenCalledWith('batch-update', {
       items: [{ userId: 'user-1', username: 'Alice' }],
@@ -62,13 +61,10 @@ describe('BullMqUserEventDispatcher', () => {
 
   it('copies the batch items rather than enqueuing the caller array', async () => {
     const batchAdd = vi.fn().mockResolvedValue({ id: 'batch-2' });
-    const adapter = new BullMqUserEventDispatcher(
-      { add: vi.fn() } as never,
-      { add: batchAdd } as never,
-    );
+    const adapter = new BullMqUserBatchDispatcher({ add: batchAdd } as never);
     const item = { userId: 'user-1' };
 
-    await adapter.enqueueUserBatch([item]);
+    await adapter.enqueue([item]);
 
     expect(withJobContext).toHaveBeenCalled();
     expect(batchAdd.mock.calls[0][1].items[0]).not.toBe(item);

@@ -17,8 +17,8 @@ import {
   AUDIT_ACTIONS,
   RATE_LIMIT_COST,
 } from '../../../../common/constants/index.js';
-import { InvalidRefreshTokenError } from '../../../domain/errors/refresh-token.errors.js';
 import type { Auth } from '../../../domain/models/auth.entity.js';
+import { InvalidRefreshTokenError } from '../../../domain/models/errors/refresh-token.errors.js';
 import { PrincipalLoginService } from '../../../services/principal-login.service.js';
 import { type IRefreshTokens } from '../../ports/refresh-tokens.port.js';
 import { type ISessionCookies } from '../../ports/session-cookies.port.js';
@@ -66,12 +66,14 @@ export class RevokeAuthHandler extends CommandBaseHandler<
           }),
         )
       : null;
+
     const revoked = auth
       ? await this.principalLoginService.revoke(auth, Date.now())
       : null;
 
     this.cookies.clear();
     if (!revoked) throw new InvalidRefreshTokenError();
+
     return revoked;
   }
 }

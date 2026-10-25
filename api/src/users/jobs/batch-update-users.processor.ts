@@ -43,10 +43,12 @@ export class BatchUpdateUsersProcessor {
     _token?: string,
   ): Promise<SimulatedBatchUpdateResult> {
     const items = job.data.items;
+
     this.logger.info(
       `[Simulated] Demonstrating batch update for ${items.length} users ` +
         `(tenant: ${this.tenantContext.schema}, correlationId: ${getCorrelationId()}). No database rows updated.`,
     );
+
     return {
       simulated: true,
       rowsUpdated: 0,

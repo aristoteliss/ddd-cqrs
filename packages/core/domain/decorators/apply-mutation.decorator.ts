@@ -136,7 +136,7 @@ export function ApplyMutation<TEntity = unknown>(
     );
   }
 
-  return (
+  const decorate = (
     _target: object,
     _propertyKey: string | symbol,
     descriptor: PropertyDescriptor,
@@ -159,4 +159,6 @@ export function ApplyMutation<TEntity = unknown>(
 
     return descriptor;
   };
+
+  return decorate;
 }

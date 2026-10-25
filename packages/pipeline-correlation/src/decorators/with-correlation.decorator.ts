@@ -201,7 +201,10 @@ export function WithCorrelation(
 
   const { path = 'data.correlationId', extract } = options;
 
-  return methodDecorator((originalMethod, _propertyKey) => {
+  const wrap: Parameters<typeof methodDecorator>[0] = (
+    originalMethod,
+    _propertyKey,
+  ) => {
     return function (this: unknown, ...args: unknown[]) {
       const logger: CorrelationLogger =
         options.logger ??
@@ -221,20 +224,27 @@ export function WithCorrelation(
         : getByPath(args[0], path);
 
       return runWithCorrelationId(correlationId, () => {
-        if (options.logLevel !== 'none') {
-          const level = options.logLevel ?? 'debug';
-          const method = logger[level as keyof CorrelationLogger];
-          if (typeof method === 'function') {
-            (method as (msg: string) => void).call(
-              logger,
-              `🔗 Starting ${untyped(this).constructor?.name}.${String(_propertyKey)} with correlationId: ${getCorrelationId()}`,
-            );
-          }
-        }
+        const log = logAt(logger, options.logLevel);
+        log?.(
+          `🔗 Starting ${untyped(this).constructor?.name}.${String(_propertyKey)} with correlationId: ${getCorrelationId()}`,
+        );
         return originalMethod.apply(this, args);
       });
     };
-  });
+  };
+
+  return methodDecorator(wrap);
+}
+
+/** The logger method of `logLevel` (default `'debug'`), unless it is `'none'` or missing. */
+function logAt(
+  logger: CorrelationLogger,
+  logLevel: CorrelationDecoratorOptions['logLevel'],
+): ((message: string) => void) | undefined {
+  if (logLevel === 'none') return undefined;
+  const method = logger[(logLevel ?? 'debug') as keyof CorrelationLogger];
+  if (typeof method !== 'function') return undefined;
+  return (message) => (method as (msg: string) => void).call(logger, message);
 }
 
 /**

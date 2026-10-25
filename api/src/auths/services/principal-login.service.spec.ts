@@ -2,13 +2,11 @@
 
 import { setTenantResolver } from '@cqrs-ddd/core/application';
 import { ConcurrencyConflictError } from '@cqrs-ddd/core/domain';
-import { RateLimitExceededError } from '@cqrs-ddd/pipeline-rate-limit';
 import { currentTenantId } from '@cqrs-ddd/pipeline-tenant';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { User } from '../../users/domain/models/user.entity.js';
-import { InvalidLoginCredentialsException } from '../domain/errors/authentication.exception.js';
-import { InvalidRefreshTokenError } from '../domain/errors/refresh-token.errors.js';
 import { Auth } from '../domain/models/auth.entity.js';
+import { InvalidLoginCredentialsException } from '../domain/models/errors/authentication.exception.js';
 import { PrincipalLoginService } from './principal-login.service.js';
 
 const TENANT = 'tenant';
@@ -22,13 +20,7 @@ function createService(overrides?: {
   accessTokenIssuer?: unknown;
   embedPermissions?: boolean;
   permissionRules?: unknown;
-  authByTokenHash?: unknown;
-  authByConsumedTokenHash?: unknown;
   authRepository?: unknown;
-  refreshTokens?: unknown;
-  cookies?: unknown;
-  eventBus?: unknown;
-  rateLimiter?: unknown;
 }) {
   return new PrincipalLoginService(
     (overrides?.userRepository ?? { find: vi.fn() }) as never,
@@ -40,19 +32,10 @@ function createService(overrides?: {
       embedPermissions: overrides?.embedPermissions ?? false,
     },
     (overrides?.permissionRules ?? { find: vi.fn() }) as never,
-    (overrides?.authByTokenHash ?? { find: vi.fn() }) as never,
-    (overrides?.authByConsumedTokenHash ?? { find: vi.fn() }) as never,
     (overrides?.authRepository ?? {
       findById: vi.fn(),
       save: vi.fn(),
     }) as never,
-    (overrides?.refreshTokens ?? {
-      hash: (t: string) => `hash:${t}`,
-      generate: () => 'token-next',
-    }) as never,
-    (overrides?.cookies ?? { save: vi.fn(), clear: vi.fn() }) as never,
-    overrides?.eventBus as never,
-    overrides?.rateLimiter as never,
   );
 }
 
@@ -135,60 +118,9 @@ describe('PrincipalLoginService', () => {
     });
   });
 
-  it('rate-limits refreshes per client IP and tenant without exposing the refresh token', async () => {
-    const consume = vi
-      .fn()
-      .mockResolvedValue({ msBeforeNext: 0, remainingPoints: 59 });
-    const authByTokenHash = { find: vi.fn().mockResolvedValue(null) };
-    const authByConsumedTokenHash = { find: vi.fn().mockResolvedValue(null) };
-    const service = createService({
-      rateLimiter: { consume, points: 60 },
-      authByTokenHash,
-      authByConsumedTokenHash,
-    });
-
-    await expect(
-      service.refresh('secret-token-123', '203.0.113.7'),
-    ).rejects.toBeInstanceOf(InvalidRefreshTokenError);
-
-    expect(consume).toHaveBeenCalledWith(
-      expect.stringContaining('203.0.113.7'),
-      1,
-    );
-    const [key] = consume.mock.calls[0] as [string];
-    expect(key).toContain('tenant');
-    expect(key).not.toContain('secret-token-123');
-  });
-
-  it('throws RateLimitExceededError when the rate limiter rejects with RateLimiterRes', async () => {
-    const consume = vi.fn().mockRejectedValue({
-      msBeforeNext: 1500,
-      remainingPoints: 0,
-    });
-    const service = createService({
-      rateLimiter: { consume, points: 60 },
-    });
-
-    await expect(
-      service.refresh('token', '203.0.113.7'),
-    ).rejects.toBeInstanceOf(RateLimitExceededError);
-  });
-
-  it('re-throws unexpected rate limiter errors', async () => {
-    const error = new Error('Redis connection failed');
-    const consume = vi.fn().mockRejectedValue(error);
-    const service = createService({
-      rateLimiter: { consume, points: 60 },
-    });
-
-    await expect(service.refresh('token', '203.0.113.7')).rejects.toThrow(
-      error,
-    );
-  });
-
   describe('revoke', () => {
     it('returns the session without a write when revocation is already persisted', async () => {
-      const auth = Auth.create('user-1', 'hash-1', Date.now() + 10_000);
+      const auth = Auth.start('user-1', 'hash-1', Date.now() + 10_000);
       auth.revoke(Date.now());
       auth.acknowledgePersisted();
       const save = vi.fn();
@@ -201,7 +133,7 @@ describe('PrincipalLoginService', () => {
     });
 
     it('marks the session revoked and saves it', async () => {
-      const auth = Auth.create('user-1', 'hash-1', Date.now() + 10_000);
+      const auth = Auth.start('user-1', 'hash-1', Date.now() + 10_000);
       auth.acknowledgePersisted();
       const save = vi.fn().mockResolvedValue(undefined);
       const service = createService({ authRepository: { save } });
@@ -215,9 +147,9 @@ describe('PrincipalLoginService', () => {
     });
 
     it('retries on concurrency conflict reloading the current aggregate', async () => {
-      const auth = Auth.create('user-1', 'hash-1', Date.now() + 10_000);
+      const auth = Auth.start('user-1', 'hash-1', Date.now() + 10_000);
       auth.acknowledgePersisted();
-      const reloaded = Auth.create('user-1', 'hash-2', Date.now() + 10_000);
+      const reloaded = Auth.start('user-1', 'hash-2', Date.now() + 10_000);
       reloaded.acknowledgePersisted();
       const save = vi
         .fn()
@@ -238,12 +170,12 @@ describe('PrincipalLoginService', () => {
     });
 
     it('propagates error when max retry attempts are exhausted', async () => {
-      const auth = Auth.create('user-1', 'hash-1', Date.now() + 10_000);
+      const auth = Auth.start('user-1', 'hash-1', Date.now() + 10_000);
       auth.acknowledgePersisted();
       const conflict = new ConcurrencyConflictError('Auth', auth.id, 1, 2);
       const save = vi.fn().mockRejectedValue(conflict);
       const findById = vi.fn().mockImplementation(async () => {
-        const reloaded = Auth.create('user-1', 'hash-1', Date.now() + 10_000);
+        const reloaded = Auth.start('user-1', 'hash-1', Date.now() + 10_000);
         reloaded.acknowledgePersisted();
         return reloaded;
       });
@@ -254,7 +186,7 @@ describe('PrincipalLoginService', () => {
     });
 
     it('returns null when concurrently deleted', async () => {
-      const auth = Auth.create('user-1', 'hash-1', Date.now() + 10_000);
+      const auth = Auth.start('user-1', 'hash-1', Date.now() + 10_000);
       auth.acknowledgePersisted();
       const save = vi
         .fn()

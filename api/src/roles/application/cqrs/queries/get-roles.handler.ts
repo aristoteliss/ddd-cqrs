@@ -24,6 +24,7 @@ export class GetRolesHandler
 
   async execute(query: GetRolesQuery): Promise<RoleReadModel[]> {
     const roles = await this.queryRepository.find(query);
+
     return roles
       .filter((role) => this.authorizer.can(APP_ACTIONS.READ, role))
       .map((role) => projectRoleRead(this.authorizer, role));

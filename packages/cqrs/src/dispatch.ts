@@ -36,6 +36,13 @@ export interface PipelineSettings {
   readonly log?: (message: string) => void;
 }
 
+/** A handler class, what gives its instance per request, and the kind it handles. */
+export interface DeclaredHandler {
+  readonly type: Constructor;
+  readonly resolve: () => object;
+  readonly kind: DeclaredKind;
+}
+
 const INVALID = {
   command: InvalidCommandHandlerException,
   query: InvalidQueryHandlerException,
@@ -53,30 +60,23 @@ const INVALID = {
  * @throws Error when the handler both declares and skips one behavior.
  */
 export function toDispatch(
-  handlerType: Constructor,
-  resolve: () => object,
-  kind: DeclaredKind,
+  handler: DeclaredHandler,
   settings: PipelineSettings,
 ): Dispatch {
+  const { type: handlerType, resolve, kind } = handler;
   const name = kind === 'event' ? 'handle' : 'execute';
   const method = Reflect.get(handlerType.prototype, name);
   if (typeof method !== 'function') throw new INVALID[kind]();
   const handlerName = handlerType.name;
-  const declared = pipelineOf(handlerType);
-  const plan = compilePipelinePlan({
-    handlerName,
-    requestKind: kind,
-    handlerBehaviorTypes: declared.types,
-    handlerOptions: declared.options,
-    skippedBehaviorTypes: declared.skipped,
-    globalBehaviors: settings.globalBehaviors,
-  });
+
+  const plan = planOf(handlerType, kind, settings);
   const behaviors = plan.behaviorTypes.map(settings.behavior);
   if (plan.hasPipeline) {
     settings.log?.(
       `Wrapping ${handlerName}.${name}() [${kind}] with pipeline: [${plan.behaviorTypes.map((type) => type.name).join(' → ')}]`,
     );
   }
+
   if (settings.diagnostics) {
     validateBehaviorContracts({
       ...plan,
@@ -87,6 +87,7 @@ export function toDispatch(
       diagnostics: settings.diagnostics,
     });
   }
+
   const run = createPipelineRunner(
     method,
     {
@@ -100,7 +101,25 @@ export function toDispatch(
     plan.hasPipeline,
     settings.sources,
   );
+
   return (request) => run(resolve(), request);
+}
+
+/** The handler's pipeline, compiled from its decorators and the global behaviors. */
+function planOf(
+  handlerType: Constructor,
+  kind: DeclaredKind,
+  settings: PipelineSettings,
+) {
+  const declared = pipelineOf(handlerType);
+  return compilePipelinePlan({
+    handlerName: handlerType.name,
+    requestKind: kind,
+    handlerBehaviorTypes: declared.types,
+    handlerOptions: declared.options,
+    skippedBehaviorTypes: declared.skipped,
+    globalBehaviors: settings.globalBehaviors,
+  });
 }
 
 /**

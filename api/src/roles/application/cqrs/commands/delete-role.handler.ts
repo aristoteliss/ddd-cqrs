@@ -9,10 +9,11 @@ import {
   isTransientOperationError,
 } from '@cqrs-ddd/core/domain';
 import { CommandHandler, EventBus } from '@cqrs-ddd/cqrs';
-import { type IPipelineContext, UsePipeline } from '@cqrs-ddd/pipeline';
+import { UsePipeline } from '@cqrs-ddd/pipeline';
 import { AUDIT_SEVERITY, audit } from '@cqrs-ddd/pipeline-audit';
 import { CaslAuthorizer, requires } from '@cqrs-ddd/pipeline-casl';
 import { resilience } from '@cqrs-ddd/pipeline-resilience';
+import { targetMetadata } from '../../../../common/audit/audit.options.js';
 import {
   APP_ACTIONS,
   APP_SUBJECTS,
@@ -27,10 +28,7 @@ import { DeleteRoleCommand } from './delete-role.command.js';
   audit({
     action: AUDIT_ACTIONS.ROLE_DELETE,
     severity: AUDIT_SEVERITY.HIGH,
-    metadata: (ctx: IPipelineContext) => {
-      const cmd = ctx.request as DeleteRoleCommand | undefined;
-      return cmd?.id ? { targetRoleId: cmd.id } : {};
-    },
+    metadata: targetMetadata('targetRoleId'),
   }),
   resilience({
     handle: isTransientOperationError,
@@ -62,9 +60,13 @@ export class DeleteRoleHandler extends CommandBaseHandler<
     if (!role) {
       throw new EntityNotFoundException('Role', command.id);
     }
+
     this.authorizer.authorize('delete', role);
+
     role.delete();
+
     await this.commandRepository.save(role);
+
     return role;
   }
 }

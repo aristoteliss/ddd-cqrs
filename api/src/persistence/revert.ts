@@ -1,5 +1,6 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
+import type { MikroORM } from '@mikro-orm/core';
 import { forEachTenantOrm } from './tenant-orms.js';
 
 /**
@@ -9,13 +10,15 @@ import { forEachTenantOrm } from './tenant-orms.js';
 export async function revert(steps = 1): Promise<number> {
   let total = 0;
 
-  await forEachTenantOrm(async (orm) => {
+  const revertTenant = async (orm: MikroORM) => {
     for (let i = 0; i < steps; i += 1) {
       const count = (await orm.migrator.down()).length;
       if (count === 0) break;
       total += count;
     }
-  });
+  };
+
+  await forEachTenantOrm(revertTenant);
 
   return total;
 }

@@ -201,8 +201,8 @@ describe('PostgreSQL migration tenant isolation', () => {
     await orm.em.fork().insert(user);
     const sameEmail = User.create('bob', 'alice@example.test');
     const sameName = Role.create('admin'); // Seeded by the migration.
-    await orm.em.fork().insert(Auth.create(user.id, 'hash-1', Date.now()));
-    const sameHash = Auth.create(user.id, 'hash-1', Date.now());
+    await orm.em.fork().insert(Auth.start(user.id, 'hash-1', Date.now()));
+    const sameHash = Auth.start(user.id, 'hash-1', Date.now());
 
     expect(
       dialect.uniqueViolation(

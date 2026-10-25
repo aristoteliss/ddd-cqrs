@@ -1,12 +1,20 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
+/** An integer environment variable; `min` and `max` are inclusive bounds. */
+type IntegerVariable = {
+  name: string;
+  fallback: number;
+  min: number;
+  max?: number;
+};
+
 /** Parses an optional integer variable, throwing at load time when invalid. */
-function integer(
-  name: string,
-  fallback: number,
-  min: number,
+function integer({
+  name,
+  fallback,
+  min,
   max = Number.MAX_SAFE_INTEGER,
-): number {
+}: IntegerVariable): number {
   const raw = process.env[name]?.trim();
   if (raw === undefined || raw === '') return fallback;
   const value = Number(raw);
@@ -15,6 +23,7 @@ function integer(
       `${name} must be an integer between ${min} and ${max}, received "${raw}".`,
     );
   }
+
   return value;
 }
 
@@ -36,27 +45,27 @@ function trustProxy(): boolean | number | string | undefined {
 }
 
 /** Access-token lifetime in seconds (default 300). */
-export const ACCESS_TOKEN_TTL_SECONDS = integer(
-  'ACCESS_TOKEN_TTL_SECONDS',
-  300,
-  60,
-  3600,
-);
+export const ACCESS_TOKEN_TTL_SECONDS = integer({
+  name: 'ACCESS_TOKEN_TTL_SECONDS',
+  fallback: 300,
+  min: 60,
+  max: 3600,
+});
 
 /** Refresh session lifetime in seconds, fixed at login (default 14 days). */
-export const REFRESH_TOKEN_TTL_SECONDS = integer(
-  'REFRESH_TOKEN_TTL_SECONDS',
-  1_209_600,
-  3600,
-);
+export const REFRESH_TOKEN_TTL_SECONDS = integer({
+  name: 'REFRESH_TOKEN_TTL_SECONDS',
+  fallback: 1_209_600,
+  min: 3600,
+});
 
 /** How long the immediately previous refresh token is still honoured (default 30). */
-export const REFRESH_REUSE_GRACE_SECONDS = integer(
-  'REFRESH_REUSE_GRACE_SECONDS',
-  30,
-  0,
-  120,
-);
+export const REFRESH_REUSE_GRACE_SECONDS = integer({
+  name: 'REFRESH_REUSE_GRACE_SECONDS',
+  fallback: 30,
+  min: 0,
+  max: 120,
+});
 
 /** Proxy trust passed to Express `trust proxy` / Fastify `trustProxy`, so `req.ip` is the client. */
 export const TRUST_PROXY = trustProxy();
@@ -73,12 +82,12 @@ export const PERMISSIONS_IN_ACCESS_TOKEN = flag('PERMISSIONS_IN_ACCESS_TOKEN');
  * leaves room for that. `http-platform.spec.ts` checks 1,000 logins at this
  * size, and the cookie-budget e2e test checks a real login.
  */
-export const ACCESS_TOKEN_MAX_BYTES = integer(
-  'ACCESS_TOKEN_MAX_BYTES',
-  2500,
-  1024,
-  16_384,
-);
+export const ACCESS_TOKEN_MAX_BYTES = integer({
+  name: 'ACCESS_TOKEN_MAX_BYTES',
+  fallback: 2500,
+  min: 1024,
+  max: 16_384,
+});
 
 /**
  * JWT signing and verification settings; an empty value counts as unset.

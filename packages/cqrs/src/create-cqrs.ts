@@ -13,6 +13,7 @@ import {
   behaviorResolver,
   Handlers,
   type RegistrationOptions,
+  type Registry,
   registerHandlers,
 } from './registry.js';
 import { UnhandledExceptionBus } from './unhandled-exception.bus.js';
@@ -80,12 +81,15 @@ export function createCqrs(options: CqrsOptions = {}): Cqrs {
     options.globalBehaviors,
     logger,
   );
+
   const handlers = new Handlers();
+  const registry: Registry = { handlers, behavior, options, logger };
   const unhandledExceptionBus = new UnhandledExceptionBus();
   const eventBus = new EventBus(handlers.events, unhandledExceptionBus, {
     rethrowUnhandled: options.rethrowUnhandled,
     logger,
   });
+
   return {
     commandBus: new CommandBus(handlers.commands),
     queryBus: new QueryBus(handlers.queries),
@@ -101,7 +105,7 @@ export function createCqrs(options: CqrsOptions = {}): Cqrs {
         }
         return { type, resolve: () => instance };
       });
-      registerHandlers(handlers, entries, behavior, options, logger);
+      registerHandlers(registry, entries);
     },
     close: () => eventBus.drain(),
   };

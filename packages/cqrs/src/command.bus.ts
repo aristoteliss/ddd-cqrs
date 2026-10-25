@@ -38,6 +38,7 @@ export class CommandBus<C extends ICommand = ICommand> {
     const type = command.constructor;
     const run = nearest(this.handlers, type);
     if (!run) throw new CommandHandlerNotFoundException(type.name);
+
     return (await run(command)) as R;
   }
 }

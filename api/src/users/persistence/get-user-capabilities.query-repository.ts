@@ -50,21 +50,23 @@ export class GetUserCapabilitiesQueryRepository
         : em.find(Capability, { id: { $in: deniedIds } } as never),
     ]);
 
-    const toCapability = (capability: Capability) => ({
-      subject: capability.subject,
-      action: capability.action,
-      conditions: capability.conditions
-        ? JSON.parse(capability.conditions)
-        : undefined,
-      inverted: capability.inverted,
-      reason: capability.reason ?? undefined,
-      fields: capability.fields ? capability.fields.split(',') : undefined,
-    });
-
     return {
       roles: rolesResult.map((role) => role.name),
       additionalCapabilities: additionalResult.map(toCapability),
       deniedCapabilities: deniedResult.map(toCapability),
     };
   }
+}
+
+function toCapability(capability: Capability) {
+  return {
+    subject: capability.subject,
+    action: capability.action,
+    conditions: capability.conditions
+      ? JSON.parse(capability.conditions)
+      : undefined,
+    inverted: capability.inverted,
+    reason: capability.reason ?? undefined,
+    fields: capability.fields ? capability.fields.split(',') : undefined,
+  };
 }

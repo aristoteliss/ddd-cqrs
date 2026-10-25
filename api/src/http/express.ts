@@ -39,6 +39,7 @@ export function expressApp(options: MountOptions): Express {
   app.use(express.json());
   app.use(cookieParser());
   app.use(options.context as express.RequestHandler);
+
   for (const route of options.routes) {
     const method = route.method.toLowerCase() as
       | 'get'
@@ -62,12 +63,14 @@ export function expressApp(options: MountOptions): Express {
       send(res, result);
     });
   }
+
   app.use((req: Request, res: Response) =>
     send(res, notFound(req.method, req.originalUrl)),
   );
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) =>
     send(res, failed(error, options)),
   );
+
   return app;
 }
 
@@ -77,8 +80,10 @@ export function failed(
   options: Pick<MountOptions, 'domain' | 'logger'>,
 ): Answer {
   const result = answer(error, options.domain);
+
   if (result.status >= 500)
     options.logger.error({ err: error }, 'request failed');
+
   return result;
 }
 

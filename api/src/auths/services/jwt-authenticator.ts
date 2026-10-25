@@ -21,6 +21,8 @@ type VerificationKey = {
   symmetric: boolean;
 };
 
+type TokenPayload = Awaited<ReturnType<typeof jwtVerify>>['payload'];
+
 /**
  * Verifies Bearer JSON Web Tokens presented in the `Authorization` request header.
  *
@@ -83,16 +85,8 @@ export class JwtAuthenticator {
   async authenticate(req: {
     headers?: Record<string, string | string[] | undefined>;
   }): Promise<SessionPrincipal | undefined> {
-    const authHeader = firstHeaderValue(req.headers?.authorization);
-    if (!authHeader) return undefined;
-
-    const match = authHeader.match(/^[Bb]earer\s+(.+)$/);
-    if (!match) return undefined;
-
-    const token = match[1].trim();
-    if (token.length === 0) {
-      throw new HttpError(401, 'Bearer token is empty');
-    }
+    const token = readBearerToken(req.headers?.authorization);
+    if (token === undefined) return undefined;
 
     this.keys ??= this.importKeys();
     const candidates = await this.keys;
@@ -103,95 +97,8 @@ export class JwtAuthenticator {
       throw new HttpError(401, 'JWT authentication is not configured');
     }
 
-    const { issuer, audience, algorithms: configuredAlgorithms } = JWT;
-
     try {
-      let payload: Awaited<ReturnType<typeof jwtVerify>>['payload'] | undefined;
-      let lastError: unknown;
-
-      for (const candidate of candidates) {
-        const algorithms = configuredAlgorithms
-          ? configuredAlgorithms.filter((algorithm) =>
-              candidate.symmetric
-                ? algorithm.startsWith('HS')
-                : !algorithm.startsWith('HS'),
-            )
-          : [candidate.defaultAlgorithm];
-        if (algorithms.length === 0) continue;
-
-        try {
-          ({ payload } = await jwtVerify(token, candidate.key, {
-            algorithms,
-            issuer,
-            audience,
-            requiredClaims: ['exp'],
-          }));
-          break;
-        } catch (error) {
-          if (
-            error instanceof errors.JWTClaimValidationFailed &&
-            error.claim === 'exp'
-          ) {
-            throw new HttpError(401, 'Token is missing its expiration claim');
-          }
-          lastError = error;
-        }
-      }
-
-      if (!payload) {
-        throw lastError ?? new Error('No JWT verification algorithm matched');
-      }
-
-      if (typeof payload.sub !== 'string' || payload.sub.trim().length === 0) {
-        throw new HttpError(401, 'Token is missing its subject claim');
-      }
-      if (typeof payload.tenant !== 'string') {
-        throw new HttpError(401, 'Token is missing its tenant claim');
-      }
-      if (typeof payload.sid !== 'string' || payload.sid.trim().length === 0) {
-        throw new HttpError(
-          401,
-          'Token is missing its session identifier claim',
-        );
-      }
-      if (typeof payload.exp !== 'number') {
-        throw new HttpError(401, 'Token is missing its expiration claim');
-      }
-
-      if (
-        payload.principalType !== undefined &&
-        payload.principalType !== 'user'
-      ) {
-        throw new HttpError(
-          401,
-          'Token principal type is not a user principal',
-        );
-      }
-
-      if (payload.tenant !== requireTenant('the credential tenant check')) {
-        throw new HttpError(
-          401,
-          'Credential tenant does not match the selected tenant',
-        );
-      }
-
-      const user: SessionPrincipal = {
-        id: payload.sub,
-        type: 'user',
-        tenant: payload.tenant,
-        sid: payload.sid,
-        ...(PERMISSIONS_IN_ACCESS_TOKEN && payload.perms !== undefined
-          ? {
-              grants: parsePermissions(payload.perms),
-              department:
-                typeof payload.department === 'string'
-                  ? payload.department
-                  : null,
-            }
-          : {}),
-        expiresAt: payload.exp * 1000,
-      };
-
+      const user = toPrincipal(await verify(token, candidates));
       this.logger.debug(`Authenticated user ${user.id} from Bearer token`);
       return user;
     } catch (e: unknown) {
@@ -227,8 +134,110 @@ export class JwtAuthenticator {
         symmetric: true,
       });
     }
+
     return keys;
   }
+}
+
+function readBearerToken(
+  header: string | string[] | undefined,
+): string | undefined {
+  const authHeader = firstHeaderValue(header);
+  if (!authHeader) return undefined;
+
+  const match = authHeader.match(/^[Bb]earer\s+(.+)$/);
+  if (!match) return undefined;
+
+  const token = match[1].trim();
+  if (token.length === 0) {
+    throw new HttpError(401, 'Bearer token is empty');
+  }
+
+  return token;
+}
+
+async function verify(
+  token: string,
+  candidates: readonly VerificationKey[],
+): Promise<TokenPayload> {
+  const { issuer, audience, algorithms: configuredAlgorithms } = JWT;
+  let lastError: unknown;
+
+  for (const candidate of candidates) {
+    const algorithms = configuredAlgorithms
+      ? configuredAlgorithms.filter((algorithm) =>
+          candidate.symmetric
+            ? algorithm.startsWith('HS')
+            : !algorithm.startsWith('HS'),
+        )
+      : [candidate.defaultAlgorithm];
+    if (algorithms.length === 0) continue;
+
+    try {
+      const { payload } = await jwtVerify(token, candidate.key, {
+        algorithms,
+        issuer,
+        audience,
+        requiredClaims: ['exp'],
+      });
+      return payload;
+    } catch (error) {
+      rejectMissingExpiry(error);
+      lastError = error;
+    }
+  }
+
+  throw lastError ?? new Error('No JWT verification algorithm matched');
+}
+
+function rejectMissingExpiry(error: unknown): void {
+  if (
+    error instanceof errors.JWTClaimValidationFailed &&
+    error.claim === 'exp'
+  ) {
+    throw new HttpError(401, 'Token is missing its expiration claim');
+  }
+}
+
+function toPrincipal(payload: TokenPayload): SessionPrincipal {
+  if (typeof payload.sub !== 'string' || payload.sub.trim().length === 0) {
+    throw new HttpError(401, 'Token is missing its subject claim');
+  }
+  if (typeof payload.tenant !== 'string') {
+    throw new HttpError(401, 'Token is missing its tenant claim');
+  }
+  if (typeof payload.sid !== 'string' || payload.sid.trim().length === 0) {
+    throw new HttpError(401, 'Token is missing its session identifier claim');
+  }
+  if (typeof payload.exp !== 'number') {
+    throw new HttpError(401, 'Token is missing its expiration claim');
+  }
+
+  if (payload.principalType !== undefined && payload.principalType !== 'user') {
+    throw new HttpError(401, 'Token principal type is not a user principal');
+  }
+
+  if (payload.tenant !== requireTenant('the credential tenant check')) {
+    throw new HttpError(
+      401,
+      'Credential tenant does not match the selected tenant',
+    );
+  }
+
+  return {
+    id: payload.sub,
+    type: 'user',
+    tenant: payload.tenant,
+    sid: payload.sid,
+    ...(PERMISSIONS_IN_ACCESS_TOKEN && payload.perms !== undefined
+      ? {
+          grants: parsePermissions(payload.perms),
+          department:
+            typeof payload.department === 'string' ? payload.department : null,
+        }
+      : {}),
+    expiresAt: payload.exp * 1000,
+  };
 }
 
 function parsePermissions(perms: unknown): Capability[] {

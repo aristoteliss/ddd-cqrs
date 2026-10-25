@@ -30,7 +30,7 @@ description: Διαδραστικό διάγραμμα αρχιτεκτονικ�
 ### 2. Domain Events & Ασύγχρονες Εργασίες Παρασκηνίου
 - **Buffered Domain Events**: Τα aggregates αποθηκεύουν προσωρινά domain events (`UserCreatedEvent`, `UserUpdatedEvent`, `RoleCreatedEvent`, κ.λπ.) κατά τη διάρκεια μεταβολών κατάστασης.
 - **Αυτόματη Δημοσίευση Events**: Ο `CommandBaseHandler` δημοσιεύει αυτόματα τα αποθηκευμένα events μέσω του `EventBus` μετά την επιτυχή ανθεκτική αποθήκευση.
-- **Queues με διατήρηση Context**: Ο `BullMqUserEventDispatcher` πακετάρει μηνύματα με το `withJobContext()`, διατηρώντας το tenant, το principal και το correlation id του καλούντος σε ουρές Redis.
+- **Queues με διατήρηση Context**: Οι `BullMqWelcomeEmailDispatcher` και `BullMqUserBatchDispatcher` πακετάρουν μηνύματα με το `withJobContext()`, διατηρώντας το tenant, το principal και το correlation id του καλούντος σε ουρές Redis.
 - **Απομονωμένοι Processors**: Οι workers παρασκηνίου (`SendWelcomeEmailProcessor`, `BatchUpdateUsersProcessor`) εκτελούνται με τον decorator `@InJobContext`, επαναφέροντας το πλήρες context εκτέλεσης χωρίς διαρροές μεταξύ εργασιών.
 
 ### 3. Καθαρό Domain & Persistence

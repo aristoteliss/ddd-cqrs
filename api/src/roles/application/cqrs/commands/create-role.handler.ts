@@ -60,8 +60,11 @@ export class CreateRoleHandler extends CommandBaseHandler<
 
   async handle(command: CreateRoleCommand): Promise<Role> {
     const role = Role.create(command.name);
+
     this.authorizer.authorize('create', role, ['name']);
+
     await this.commandRepository.save(role);
+
     return role;
   }
 }

@@ -39,11 +39,13 @@ export function registerJobContext(options: JobContextOptions): () => void {
   if (options.tenants.length === 0) {
     throw new TypeError('registerJobContext needs at least one tenant.');
   }
+
   const registration = {
     principal: options.principal,
     tenants: [...options.tenants],
     sources: options.sources,
   };
   register(registration);
+
   return () => unregister(registration);
 }

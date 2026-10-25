@@ -77,9 +77,11 @@ describe('toDispatch', () => {
       }
     }
     const run = toDispatch(
-      CreateUserHandler,
-      () => new CreateUserHandler(),
-      'command',
+      {
+        type: CreateUserHandler,
+        resolve: () => new CreateUserHandler(),
+        kind: 'command',
+      },
       settings(),
     );
     await expect(run(new CreateUser('ann'))).resolves.toBe('created ann');
@@ -96,9 +98,11 @@ describe('toDispatch', () => {
       }
     }
     const run = toDispatch(
-      GetUserHandler,
-      () => new GetUserHandler(),
-      'query',
+      {
+        type: GetUserHandler,
+        resolve: () => new GetUserHandler(),
+        kind: 'query',
+      },
       settings({
         globalBehaviors: [
           { before: [Logging], after: [Trace] },
@@ -125,9 +129,7 @@ describe('toDispatch', () => {
       }
     }
     const run = toDispatch(
-      Welcome,
-      () => new Welcome(),
-      'event',
+      { type: Welcome, resolve: () => new Welcome(), kind: 'event' },
       settings({ globalBehaviors: { before: [Logging, Trace] } }),
     );
     await run(new UserCreated());
@@ -155,9 +157,7 @@ describe('toDispatch', () => {
       run: <T>(_: unknown, fn: () => T) => fn(),
     };
     await toDispatch(
-      Handler,
-      () => new Handler(),
-      'command',
+      { type: Handler, resolve: () => new Handler(), kind: 'command' },
       settings({ sources: { tenantId } }),
     )(new CreateUser('ann'));
     expect(seen).toBe('t-1');
@@ -171,9 +171,7 @@ describe('toDispatch', () => {
     }
     const diagnostics: PipelineBehaviorDiagnostic[] = [];
     toDispatch(
-      Handler,
-      () => new Handler(),
-      'command',
+      { type: Handler, resolve: () => new Handler(), kind: 'command' },
       settings({ diagnostics }),
     );
     expect(diagnostics).toEqual([
@@ -183,7 +181,10 @@ describe('toDispatch', () => {
       }),
     ]);
     expect(() =>
-      toDispatch(Handler, () => new Handler(), 'command', settings()),
+      toDispatch(
+        { type: Handler, resolve: () => new Handler(), kind: 'command' },
+        settings(),
+      ),
     ).not.toThrow();
   });
 
@@ -195,25 +196,36 @@ describe('toDispatch', () => {
       async execute() {}
     }
     expect(() =>
-      toDispatch(Handler, () => new Handler(), 'command', settings()),
+      toDispatch(
+        { type: Handler, resolve: () => new Handler(), kind: 'command' },
+        settings(),
+      ),
     ).toThrow('Handler Handler has contradictory pipeline configuration');
   });
 
   it('refuses a handler without the method of its kind', () => {
     class Empty {}
     expect(() =>
-      toDispatch(Empty, () => new Empty(), 'command', settings()),
+      toDispatch(
+        { type: Empty, resolve: () => new Empty(), kind: 'command' },
+        settings(),
+      ),
     ).toThrow("@CommandHandler and contains an 'execute' method.");
     expect(() =>
-      toDispatch(Empty, () => new Empty(), 'query', settings()),
+      toDispatch(
+        { type: Empty, resolve: () => new Empty(), kind: 'query' },
+        settings(),
+      ),
     ).toThrow("@QueryHandler and contains an 'execute' method.");
     expect(() =>
       toDispatch(
-        class Commandish {
-          async execute() {}
+        {
+          type: class Commandish {
+            async execute() {}
+          },
+          resolve: () => ({}),
+          kind: 'event',
         },
-        () => ({}),
-        'event',
         settings(),
       ),
     ).toThrow("@EventsHandler and contains a 'handle' method.");

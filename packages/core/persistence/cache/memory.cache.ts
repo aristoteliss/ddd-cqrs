@@ -28,6 +28,14 @@ interface MemoryCacheEntry<T> {
   hasValue: boolean;
 }
 
+/** A value bound for `key`, its fill options and the entry it replaces. */
+interface MemoryCacheWrite<T> {
+  readonly key: string;
+  readonly value: T;
+  readonly options: CacheFillOptions | undefined;
+  readonly existing: MemoryCacheEntry<T> | undefined;
+}
+
 function isExpired(
   entry: MemoryCacheEntry<unknown>,
   now = Date.now(),
@@ -133,6 +141,7 @@ export class MemoryCache<T> implements IVersionedCache<T> {
 
     this.store.set(key, { revision, hasValue: false });
     this.evict();
+
     return revision.toString();
   }
 
@@ -155,7 +164,8 @@ export class MemoryCache<T> implements IVersionedCache<T> {
       return false;
     }
 
-    this.write(key, value, options, existing);
+    this.write({ key, value, options, existing });
+
     return true;
   }
 
@@ -177,15 +187,10 @@ export class MemoryCache<T> implements IVersionedCache<T> {
       }
     }
 
-    this.write(key, value, options, existing);
+    this.write({ key, value, options, existing });
   }
 
-  private write(
-    key: string,
-    value: T,
-    options: CacheFillOptions | undefined,
-    existing: MemoryCacheEntry<T> | undefined,
-  ): void {
+  private write({ key, value, options, existing }: MemoryCacheWrite<T>): void {
     const ttl = options?.ttl ?? this.defaultTtlMs;
     const entry: MemoryCacheEntry<T> = {
       revision: this.nextRevision(),

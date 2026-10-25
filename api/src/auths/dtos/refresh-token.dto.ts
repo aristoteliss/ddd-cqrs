@@ -1,10 +1,13 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
-import { z } from 'zod';
+import type { z } from 'zod';
+import { RefreshAuthCommand } from '../application/cqrs/commands/refresh-auth.command.js';
 
 /**
- * The `refresh_token` cookie of `POST /auths/refresh` and `POST /auths/logout`.
+ * The `refresh_token` cookie of `POST /auths/refresh` and `POST /auths/logout`, with
+ * the field rule of {@link RefreshAuthCommand}.
  */
-export const RefreshTokenDtoSchema = z.string().min(1);
+export const RefreshTokenDtoSchema =
+  RefreshAuthCommand.schema.shape.refreshToken;
 
 export type RefreshTokenDto = z.infer<typeof RefreshTokenDtoSchema>;

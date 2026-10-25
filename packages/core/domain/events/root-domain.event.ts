@@ -83,32 +83,57 @@ export function deepCloneAndFreeze<T>(
   }
 
   if (Array.isArray(value)) {
-    const copy: unknown[] = [];
-    seen.set(value, copy);
-    for (let i = 0; i < value.length; i++) {
-      copy[i] = deepCloneAndFreeze(value[i], seen);
-    }
-    return Object.freeze(copy) as unknown as T;
+    return cloneArray(value, seen) as unknown as T;
   }
 
   if (value instanceof Map) {
-    const copy = new Map();
-    seen.set(value, copy);
-    for (const [k, v] of value.entries()) {
-      copy.set(deepCloneAndFreeze(k, seen), deepCloneAndFreeze(v, seen));
-    }
-    return freezeBuiltIn(copy, MUTATING_MAP_METHODS, 'Map') as unknown as T;
+    return cloneMap(value, seen) as unknown as T;
   }
 
   if (value instanceof Set) {
-    const copy = new Set();
-    seen.set(value, copy);
-    for (const v of value.values()) {
-      copy.add(deepCloneAndFreeze(v, seen));
-    }
-    return freezeBuiltIn(copy, MUTATING_SET_METHODS, 'Set') as unknown as T;
+    return cloneSet(value, seen) as unknown as T;
   }
 
+  return cloneObject(value, seen) as T;
+}
+
+function cloneArray(
+  value: readonly unknown[],
+  seen: WeakMap<object, unknown>,
+): readonly unknown[] {
+  const copy: unknown[] = [];
+  seen.set(value, copy);
+  for (let i = 0; i < value.length; i++) {
+    copy[i] = deepCloneAndFreeze(value[i], seen);
+  }
+  return Object.freeze(copy);
+}
+
+function cloneMap(
+  value: ReadonlyMap<unknown, unknown>,
+  seen: WeakMap<object, unknown>,
+): ReadonlyMap<unknown, unknown> {
+  const copy = new Map();
+  seen.set(value, copy);
+  for (const [k, v] of value.entries()) {
+    copy.set(deepCloneAndFreeze(k, seen), deepCloneAndFreeze(v, seen));
+  }
+  return freezeBuiltIn(copy, MUTATING_MAP_METHODS, 'Map');
+}
+
+function cloneSet(
+  value: ReadonlySet<unknown>,
+  seen: WeakMap<object, unknown>,
+): ReadonlySet<unknown> {
+  const copy = new Set();
+  seen.set(value, copy);
+  for (const v of value.values()) {
+    copy.add(deepCloneAndFreeze(v, seen));
+  }
+  return freezeBuiltIn(copy, MUTATING_SET_METHODS, 'Set');
+}
+
+function cloneObject(value: object, seen: WeakMap<object, unknown>): object {
   const proto = Object.getPrototypeOf(value);
   const copy = Object.create(
     proto === Object.prototype || proto === null ? proto : Object.prototype,
@@ -117,15 +142,15 @@ export function deepCloneAndFreeze<T>(
 
   for (const key of Reflect.ownKeys(value)) {
     const desc = Object.getOwnPropertyDescriptor(value, key);
-    if (desc) {
-      if ('value' in desc) {
-        desc.value = deepCloneAndFreeze(desc.value, seen);
-      }
-      Object.defineProperty(copy, key, desc);
+    if (!desc) continue;
+
+    if ('value' in desc) {
+      desc.value = deepCloneAndFreeze(desc.value, seen);
     }
+    Object.defineProperty(copy, key, desc);
   }
 
-  return Object.freeze(copy) as T;
+  return Object.freeze(copy);
 }
 
 /**

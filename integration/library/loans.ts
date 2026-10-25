@@ -42,9 +42,11 @@ export class BookShelf implements IWriteSideAggregateRepository<Book> {
         stored?.version,
       );
     }
+
     const snapshot = book.toJSON();
     this.#rows.set(book.id, { ...snapshot, version: book.version });
     book.acknowledgePersisted();
+
     return snapshot;
   }
 }
@@ -103,7 +105,9 @@ export class AddBookHandler extends CommandBaseHandler<AddBookCommand, Book> {
 
   async handle(command: AddBookCommand): Promise<Book> {
     const book = Book.add(command.title, command.copies);
+
     await this.books.save(book);
+
     return book;
   }
 }
@@ -127,8 +131,11 @@ export class LendBookHandler extends CommandBaseHandler<LendBookCommand, Book> {
   async handle(command: LendBookCommand): Promise<Book> {
     const book = await this.books.findById(command.bookId);
     if (!book) throw new EntityNotFoundException('Book', command.bookId);
+
     book.lend(command.memberId);
+
     await this.books.save(book);
+
     return book;
   }
 }
@@ -158,8 +165,11 @@ export class ReturnBookHandler extends CommandBaseHandler<
   async handle(command: ReturnBookCommand) {
     const book = await this.books.findById(command.bookId);
     if (!book) throw new EntityNotFoundException('Book', command.bookId);
+
     book.giveBack(command.memberId);
+
     await this.books.save(book);
+
     return { aggregate: book, available: book.available };
   }
 }

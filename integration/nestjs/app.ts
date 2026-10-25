@@ -134,6 +134,7 @@ class TicketsController {
           load: async () => {
             const role = roles.getStore();
             const rules = capabilities.get(role);
+
             return role && rules ? { principal: { id: role }, rules } : null;
           },
         }),
@@ -181,12 +182,15 @@ export async function startDesk(
     });
     return app.init();
   }
+
   const app = await NestFactory.create<NestFastifyApplication>(
     DeskModule,
     new FastifyAdapter(),
     { logger: false, abortOnError: false },
   );
+
   await app.init();
   await app.getHttpAdapter().getInstance().ready();
+
   return app;
 }

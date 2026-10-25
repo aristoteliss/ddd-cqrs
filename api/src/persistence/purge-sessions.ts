@@ -1,5 +1,6 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
+import type { MikroORM } from '@mikro-orm/core';
 import { Auth } from '../auths/domain/models/auth.entity.js';
 import { REFRESH_TOKEN_TTL_SECONDS } from '../common/environment/auth-token.config.js';
 import { forEachTenantOrm } from './tenant-orms.js';
@@ -14,7 +15,7 @@ export async function purgeSessions(): Promise<Map<string, number>> {
   const now = Date.now();
   const revokedBefore = now - REFRESH_TOKEN_TTL_SECONDS * 1000;
 
-  return forEachTenantOrm(async (orm) => {
+  const purgeTenant = async (orm: MikroORM): Promise<number> => {
     let purged = 0;
     for (;;) {
       const em = orm.em.fork();
@@ -37,5 +38,7 @@ export async function purgeSessions(): Promise<Map<string, number>> {
         id: { $in: batch.map((auth) => auth.id) },
       });
     }
-  });
+  };
+
+  return forEachTenantOrm(purgeTenant);
 }

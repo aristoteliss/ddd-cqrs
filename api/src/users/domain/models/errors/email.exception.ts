@@ -8,7 +8,6 @@ export class UniqueEmailException extends DomainException {
 
   constructor(user: User) {
     super(`Email ${user.email} already exists`);
-    this.name = 'UniqueEmailException';
     this.user = user;
   }
 }

@@ -70,5 +70,11 @@ export async function optimisticUpdate<TEntity extends VersionedAggregate>(
     { id: row.id, version: row.expectedVersion } as FilterQuery<TEntity>,
     { ...data, version: entity.version } as EntityData<TEntity>,
   );
-  await expectOneRow(affected, em, entityType, row, entityName, 'updated');
+  await expectOneRow(affected, {
+    em,
+    entityType,
+    row,
+    entityName,
+    verb: 'updated',
+  });
 }

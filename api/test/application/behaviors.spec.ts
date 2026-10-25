@@ -89,8 +89,8 @@ describe('Users API Pipeline Behaviors Specification', () => {
       behaviorOptions.set(MetricsBehavior, { meterName: 'users-api.auth' });
 
       const ctx = createContext({
-        requestName: 'CreateAuthCommand',
-        handlerName: 'CreateAuthHandler',
+        requestName: 'StartAuthCommand',
+        handlerName: 'StartAuthHandler',
         requestKind: 'command',
         behaviorOptions,
       });
@@ -104,8 +104,8 @@ describe('Users API Pipeline Behaviors Specification', () => {
         expect.any(Number),
         expect.objectContaining({
           'pipeline.request.kind': 'command',
-          'pipeline.request.name': 'CreateAuthCommand',
-          'pipeline.handler.name': 'CreateAuthHandler',
+          'pipeline.request.name': 'StartAuthCommand',
+          'pipeline.handler.name': 'StartAuthHandler',
           outcome: 'success',
         }),
       );
@@ -131,8 +131,8 @@ describe('Users API Pipeline Behaviors Specification', () => {
 
       const metricsBehavior = new MetricsBehavior();
       const ctx = createContext({
-        requestName: 'CreateAuthCommand',
-        handlerName: 'CreateAuthHandler',
+        requestName: 'StartAuthCommand',
+        handlerName: 'StartAuthHandler',
         requestKind: 'command',
       });
 
@@ -167,7 +167,7 @@ describe('Users API Pipeline Behaviors Specification', () => {
 
       const ctx = createContext({
         request: { email: 'user@example.com', code: '123456' },
-        requestName: 'CreateAuthCommand',
+        requestName: 'StartAuthCommand',
         behaviorOptions,
       });
 
@@ -274,7 +274,7 @@ describe('Users API Pipeline Behaviors Specification', () => {
 
       const ctx = createContext({
         request: { email: 'bad@example.com' },
-        requestName: 'CreateAuthCommand',
+        requestName: 'StartAuthCommand',
         behaviorOptions,
       });
 

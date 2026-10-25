@@ -334,6 +334,10 @@ context, or the thing it names does too much.
   `…Exception` names a business-rule violation; `…Error` names a technical,
   configuration, concurrency or protocol failure.
 - A name states what the thing is or does, and stays true to its behavior.
+- Library, helper and other reusable code is named for the general concept it serves,
+  not for its first caller (`joinKeySegments`, not `buildUserCacheKey`).
+- A conventional role name is as long as its convention requires, usually two or three
+  words (`RenameRoleCommand`, `GetUserOverviewHandler`, `UserCreatedEvent`).
 - Booleans read as yes/no statements (`isExpired`, `hasPipeline`, `includeStack`), never as
   a bare noun phrase and never negated (`notEnabled`).
 - Functions and methods are verbs (`revoke`, `issue`, `hash`); values and types are nouns;
@@ -375,8 +379,13 @@ conventions as the code uses them are in `.agents/skills/cqrs-ddd-readability/`.
   query-repository port, read model or domain types; it never changes another context's
   aggregate (C11). A route dispatches exactly one command or query (C12).
 - **Measurable size.** `handle`/`execute` bodies at most 30 lines, other bodies at most 40,
-  nesting at most 3, at most 3 positional parameters and 6 constructor dependencies, no
-  nested ternary (G1 to G5).
+  nesting at most 2 (3 only for a stated performance or readability reason), at most 3
+  positional parameters and 6 constructor dependencies, no nested ternary (G1 to G5).
+  Prefer early exits to nested logic, unless the early exit needs a new `let` or reads
+  more complex than the nesting; then keep the nesting (G6, G16). A longer function stays whole when its parts mean nothing on
+  their own; split only where a named step makes the function read better.
+- **Layout.** Statements of one logical step sit together with no blank line between
+  them; one blank line separates steps (G15).
 - **No speculative abstraction.** No interface with one implementation outside a real
   boundary, no generic repository or base handler, no new behavior, domain service, layer
   or context without need and, for the last three, an owner decision (A1 to A6).

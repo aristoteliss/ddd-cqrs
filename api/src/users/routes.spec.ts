@@ -84,10 +84,11 @@ let grants: string[] | undefined;
 
 const { cqrs, audits } = await memoryCqrs('users-spec');
 const authorizer = new CaslAuthorizer();
-const dispatcher = {
-  enqueueWelcomeEmail: async (message: WelcomeEmailDispatch) =>
-    void welcomes.push(message),
-  enqueueUserBatch: async (items: readonly UserBatchDispatchItem[]) =>
+const welcomeEmailDispatcher = {
+  enqueue: async (message: WelcomeEmailDispatch) => void welcomes.push(message),
+};
+const userBatchDispatcher = {
+  enqueue: async (items: readonly UserBatchDispatchItem[]) =>
     void batches.push(items),
 };
 cqrs.register(
@@ -107,8 +108,8 @@ cqrs.register(
   new CreateUserHandler(users, authorizer, cqrs.eventBus),
   new UpdateUserHandler(users, authorizer, cqrs.eventBus),
   new DeleteUserHandler(users, authorizer, cqrs.eventBus),
-  new UserCreatedHandler(dispatcher),
-  new UserUpdatedHandler(dispatcher),
+  new UserCreatedHandler(welcomeEmailDispatcher),
+  new UserUpdatedHandler(userBatchDispatcher),
 );
 
 const options = mountOptions(userRoutes(cqrs), () => grants);

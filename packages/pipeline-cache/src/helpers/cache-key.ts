@@ -115,36 +115,8 @@ export function createPartitionedCacheKeyFactory(
 
   return (context) => {
     const tenant = tenantSegments(context, options, MissingCachePartitionError);
-
-    const resolvedPrincipal = options.principal(context);
-    const principal =
-      typeof resolvedPrincipal === 'string' ? resolvedPrincipal.trim() : '';
-
-    if (requirePrincipal && !principal) {
-      throw new MissingCachePartitionError(
-        context.requestName,
-        'principal',
-        'A cache hit skips the handler and therefore its entity-level ' +
-          'authorization. Return the authenticated principal, or pass ' +
-          'requirePrincipal: false for a genuinely public response.',
-      );
-    }
-
-    const resolvedScope = options.scope?.(context);
-    const scope =
-      typeof resolvedScope === 'string' && resolvedScope.trim()
-        ? resolvedScope.trim()
-        : undefined;
-
-    if (requireScope && !scope) {
-      throw new MissingCachePartitionError(
-        context.requestName,
-        'scope',
-        'A cache hit skips the handler and therefore its entity-level ' +
-          'authorization. Return the authorization scope, or pass ' +
-          'requireScope: false when responses are scope-independent.',
-      );
-    }
+    const principal = principalOf(context, options, requirePrincipal);
+    const scope = scopeOf(context, options, requireScope);
 
     return joinKeySegments([
       'cache',
@@ -156,4 +128,49 @@ export function createPartitionedCacheKeyFactory(
       digestRequest(context.request),
     ]);
   };
+}
+
+/** The trimmed principal; `''` when it is absent and not required. */
+function principalOf(
+  context: IPipelineContext,
+  options: PartitionedCacheKeyOptions,
+  requirePrincipal: boolean,
+): string {
+  const resolved = options.principal(context);
+  const principal = typeof resolved === 'string' ? resolved.trim() : '';
+
+  if (requirePrincipal && !principal) {
+    throw new MissingCachePartitionError(
+      context.requestName,
+      'principal',
+      'A cache hit skips the handler and therefore its entity-level ' +
+        'authorization. Return the authenticated principal, or pass ' +
+        'requirePrincipal: false for a genuinely public response.',
+    );
+  }
+  return principal;
+}
+
+/** The trimmed authorization scope; `undefined` when it is absent and not required. */
+function scopeOf(
+  context: IPipelineContext,
+  options: PartitionedCacheKeyOptions,
+  requireScope: boolean,
+): string | undefined {
+  const resolved = options.scope?.(context);
+  const scope =
+    typeof resolved === 'string' && resolved.trim()
+      ? resolved.trim()
+      : undefined;
+
+  if (requireScope && !scope) {
+    throw new MissingCachePartitionError(
+      context.requestName,
+      'scope',
+      'A cache hit skips the handler and therefore its entity-level ' +
+        'authorization. Return the authorization scope, or pass ' +
+        'requireScope: false when responses are scope-independent.',
+    );
+  }
+  return scope;
 }

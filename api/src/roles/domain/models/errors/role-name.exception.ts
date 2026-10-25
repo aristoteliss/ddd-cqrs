@@ -13,7 +13,6 @@ export class UniqueRoleNameException extends DomainException {
         ? `Role with name "${roleName}" already exists`
         : 'Role name must be unique');
     super(msg);
-    this.name = 'UniqueRoleNameException';
     this.role = role;
   }
 }

@@ -3,7 +3,7 @@
 import { RootDomainEvent } from '@cqrs-ddd/core/domain';
 import { Role } from '../models/role.entity.js';
 
-export class RoleUpdatedEvent extends RootDomainEvent<Role> {
+export class RoleRenamedEvent extends RootDomainEvent<Role> {
   public constructor(entity: Role) {
     super(entity);
   }

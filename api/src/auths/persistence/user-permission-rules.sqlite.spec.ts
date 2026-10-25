@@ -27,7 +27,7 @@ import { GetUserCapabilitiesQuery } from '../../users/application/cqrs/queries/g
 import { GetUserCapabilitiesQueryRepository } from '../../users/persistence/get-user-capabilities.query-repository.js';
 import { GetUserPermissionRulesQuery } from '../application/cqrs/queries/get-user-permission-rules.query.js';
 import { CaslPermissionSource } from './casl-permission.source.js';
-import { GetUserPermissionRulesRepository } from './get-user-permission-rules.query-repository.js';
+import { GetUserPermissionRulesQueryRepository } from './get-user-permission-rules.query-repository.js';
 import { UserPermissionsProjector } from './user-permissions.projector.js';
 
 const id = (suffix: string) => `01990000-0000-7000-8000-000000000${suffix}`;
@@ -123,7 +123,7 @@ async function materializedInput(em: EntityManager, userId: string) {
     () =>
       new CaslPermissionSource(
         { em } as never,
-        new GetUserPermissionRulesRepository({} as never, { em } as never),
+        new GetUserPermissionRulesQueryRepository({} as never, { em } as never),
       ).load(),
   );
   if (!input) throw new Error(`no permission input for ${userId}`);
@@ -235,10 +235,10 @@ describe('Materialized user permission rules', () => {
     });
   });
 
-  describe('GetUserPermissionRulesRepository', () => {
+  describe('GetUserPermissionRulesQueryRepository', () => {
     it('resolves direct rules first followed by inverted rules against real SQLite', async () => {
       const cache = new MemoryCache();
-      const repo = new GetUserPermissionRulesRepository(
+      const repo = new GetUserPermissionRulesQueryRepository(
         cache as never,
         { em: db.em() } as never,
       );
@@ -258,7 +258,7 @@ describe('Materialized user permission rules', () => {
 
     it('returns empty array when user has no permissions', async () => {
       const cache = new MemoryCache();
-      const repo = new GetUserPermissionRulesRepository(
+      const repo = new GetUserPermissionRulesQueryRepository(
         cache as never,
         { em: db.em() } as never,
       );
@@ -273,7 +273,7 @@ describe('Materialized user permission rules', () => {
 
     it('serves cached rules on subsequent reads and refreshes when requested', async () => {
       const cache = new MemoryCache();
-      const repo = new GetUserPermissionRulesRepository(
+      const repo = new GetUserPermissionRulesQueryRepository(
         cache as never,
         { em: db.em() } as never,
       );

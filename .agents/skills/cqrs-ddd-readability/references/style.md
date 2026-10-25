@@ -16,7 +16,7 @@ shape and leave that item out.
 | Aggregate with a guard | `api/src/users/domain/models/user.entity.ts` | a whole-call guard before `applyPatch` |
 | Aggregate with outcomes | `api/src/auths/domain/models/auth.entity.ts` | a decision method over `protected apply<Noun>` methods |
 | Domain event | `api/src/roles/domain/events/role-created.event.ts` | the default snapshot payload |
-| Domain event, narrowed | `api/src/auths/domain/events/auth-created.event.ts` | a payload that leaves secrets out |
+| Domain event, narrowed | `api/src/auths/domain/events/auth-started.event.ts` | a payload that leaves secrets out |
 | Value exception | `api/src/users/domain/models/errors/invalid-username.exception.ts` | one line and one JSDoc line |
 | Business exception | `api/src/users/domain/models/errors/email.exception.ts` | a message built from the aggregate |
 | Create command | `api/src/users/application/cqrs/commands/create-user.command.ts` | limits read from `User.rules` |
@@ -25,7 +25,7 @@ shape and leave that item out.
 | Change handler | `api/src/users/application/cqrs/commands/update-user.handler.ts` | load, not found, authorize, one call, save |
 | Delete handler | `api/src/roles/application/cqrs/commands/delete-role.handler.ts` | the same flow with a retry entry |
 | List query handler | `api/src/users/application/cqrs/queries/get-users.handler.ts` | filter by `can`, map through the projection |
-| Composite query handler | `api/src/users/application/cqrs/queries/get-user-overview.handler.ts` | private helpers below `execute`; its result type belongs in a read-model file |
+| Composite query handler | `api/src/users/application/cqrs/queries/get-user-overview.handler.ts` | private helpers below `execute`, the result type in its read-model file |
 | Event handler | `api/src/users/application/cqrs/events/user-updated.handler.ts` | destructure the payload, call one port |
 | Read model | `api/src/roles/application/role-read-model.ts` | candidate, projected type, projector |
 | Port | `api/src/auths/application/ports/refresh-tokens.port.ts` | a capability noun with short verb methods |
@@ -114,8 +114,7 @@ export class Role extends RootEntity<RoleSnapshot> {
 }
 ```
 
-- `rename` records `RoleRenamedEvent` here, as SKILL.md D6 requires. The code still records
-  `RoleUpdatedEvent`, which is a known deviation.
+- `rename` records `RoleRenamedEvent`, as SKILL.md D6 requires.
 - The snapshot interface sits in the aggregate's file, extends
   `Partial<RootEntitySnapshot>`, and marks every field `readonly`. A nullable field is
   `?: T | null`.
@@ -231,7 +230,7 @@ JSDoc line:
 
 ```ts
 /** A session started. The payload carries no token material. */
-export class AuthCreatedEvent extends RootDomainEvent<
+export class AuthStartedEvent extends RootDomainEvent<
   Auth,
   { userId: string; expiresAt: number }
 > {
@@ -279,6 +278,7 @@ export class CreateUserCommand extends createCommand(
   audit({
     action: AUDIT_ACTIONS.USER_UPDATE,
     severity: AUDIT_SEVERITY.MEDIUM,
+    metadata: targetMetadata('targetUserId'),
   }),
 )
 export class UpdateUserHandler extends CommandBaseHandler<
@@ -295,6 +295,7 @@ export class UpdateUserHandler extends CommandBaseHandler<
 
   async handle(command: UpdateUserCommand): Promise<User> {
     const { id, username, department } = command;
+
     const user = await this.commandRepository.findById(id);
     if (!user) {
       throw new EntityNotFoundException('User', id);
@@ -305,8 +306,11 @@ export class UpdateUserHandler extends CommandBaseHandler<
       user,
       command.getUpdateFields(UpdateUserCommand.updatableFields),
     );
+
     user.update({ username, department });
+
     await this.commandRepository.save(user);
+
     return user;
   }
 }
@@ -318,14 +322,17 @@ fields it sets:
 ```ts
 async handle(command: CreateRoleCommand): Promise<Role> {
   const role = Role.create(command.name);
+
   this.authorizer.authorize('create', role, ['name']);
+
   await this.commandRepository.save(role);
+
   return role;
 }
 ```
 
-- The `audit` entry above leaves out the `metadata` lambda that the real handler repeats,
-  a known deviation (rule C7).
+- An `audit` entry names the aggregate it targets with `targetMetadata` from
+  `api/src/common/audit/audit.options.ts`, the factory rule C7 asks for.
 - `@CommandHandler` comes first, then `@UsePipeline`. Existing handlers list pipeline
   entries in this order: `metrics`, `logging`, `requires`, `featureFlag`, `rateLimit`,
   `idempotent`, `deadLetter`, `audit`, `resilience`. Pipeline order changes behavior; its
@@ -402,7 +409,7 @@ export class UserUpdatedHandler implements IEventHandler<UserUpdatedEvent> {
   async handle(event: UserUpdatedEvent): Promise<void> {
     const { id: userId, username } = event.payload;
 
-    await this.userBatchDispatcher.enqueueUserBatch([{ userId, username }]);
+    await this.userBatchDispatcher.enqueue([{ userId, username }]);
   }
 }
 ```
@@ -411,8 +418,8 @@ export class UserUpdatedHandler implements IEventHandler<UserUpdatedEvent> {
   blank line separates the destructuring from the single awaited port call.
 - `@UsePipeline(deadLetter({ rethrow: false }))` captures a failure in the dead-letter
   queue without failing the command that published the event (`UserCreatedHandler`).
-- The method names of this port repeat their receiver, which is a known deviation. A new
-  port names its methods with a short verb (`dispatcher.enqueue(...)`).
+- A port method is a short verb that does not repeat its receiver
+  (`userBatchDispatcher.enqueue(...)`).
 
 ## Ports
 

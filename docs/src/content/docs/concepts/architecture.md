@@ -30,7 +30,7 @@ Interactive visual architecture and dependency graph of all `@cqrs-ddd` packages
 ### 2. Domain Events & Async Background Jobs
 - **Buffered Domain Events**: Aggregates buffer domain events (`UserCreatedEvent`, `UserUpdatedEvent`, `RoleCreatedEvent`, etc.) during state mutations.
 - **Automatic Event Dispatch**: `CommandBaseHandler` automatically publishes buffered events through `EventBus` after durable persistence succeeds.
-- **Context-Preserving Queues**: `BullMqUserEventDispatcher` packages messages with `withJobContext()`, preserving caller tenant, principal, and correlation IDs across Redis queues.
+- **Context-Preserving Queues**: `BullMqWelcomeEmailDispatcher` and `BullMqUserBatchDispatcher` package messages with `withJobContext()`, preserving caller tenant, principal, and correlation IDs across Redis queues.
 - **Isolated Processors**: Background job workers (`SendWelcomeEmailProcessor`, `BatchUpdateUsersProcessor`) execute decorated with `@InJobContext`, restoring the full execution context without leaking between jobs.
 
 ### 3. Pure Domain & Persistence

@@ -43,7 +43,7 @@ function session({
   expiresAt = Date.now() + HOUR,
   isRevoked = false,
 } = {}) {
-  const auth = Auth.create(userId, 'hash', expiresAt);
+  const auth = Auth.start(userId, 'hash', expiresAt);
   if (isRevoked) auth.revoke(Date.now() - 1);
   return auth;
 }

@@ -5,7 +5,7 @@ process.env.TESTCONTAINERS_RYUK_DISABLED = 'true';
 import type { Job, Queue } from 'bullmq';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { BullMqUserEventDispatcher } from '../../src/users/jobs/bullmq-user-event-dispatcher.adapter.js';
+import { BullMqWelcomeEmailDispatcher } from '../../src/users/jobs/bullmq-user-event-dispatcher.adapter.js';
 import { WELCOME_EMAIL_QUEUE } from '../../src/users/jobs/send-welcome-email.processor.js';
 import { ADAPTERS, bootstrapE2E, type E2EContext } from '../support/e2e-app.js';
 
@@ -84,7 +84,7 @@ describe.each(ADAPTERS)(
 
       // Simulate downstream email failure in UserCreatedHandler
       const spy = vi
-        .spyOn(BullMqUserEventDispatcher.prototype, 'enqueueWelcomeEmail')
+        .spyOn(BullMqWelcomeEmailDispatcher.prototype, 'enqueue')
         .mockRejectedValueOnce(new Error('Downstream email gateway timeout'));
 
       const res = await request(http)

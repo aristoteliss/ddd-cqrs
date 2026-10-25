@@ -123,17 +123,7 @@ export class DeadLetterBehavior implements IPipelineBehavior {
       if (currentRedriveId() !== undefined) throw error;
 
       const options = this.resolveOptions(context);
-      const shouldCapture = this.shouldCapture(context, options, error);
-      let recordId: string | undefined;
-
-      if (shouldCapture) {
-        recordId = await this.capture(context, error, options);
-        setPipelineItem(
-          context,
-          DEAD_LETTER_ITEM_TOKEN,
-          recordId !== undefined,
-        );
-      }
+      const recordId = await this.captureIfConfigured(context, error, options);
 
       // Excluding a request kind or ignoring an error means this behavior is inactive
       // for that failure; it must not silently swallow an error it did not capture.
@@ -153,6 +143,20 @@ export class DeadLetterBehavior implements IPipelineBehavior {
       );
       return undefined;
     }
+  }
+
+  /** Captures the failure when its request kind and error are configured for capture. */
+  private async captureIfConfigured(
+    context: IPipelineContext,
+    error: unknown,
+    options: DeadLetterBehaviorOptions,
+  ): Promise<string | undefined> {
+    if (!this.shouldCapture(context, options, error)) return undefined;
+
+    const recordId = await this.capture(context, error, options);
+    setPipelineItem(context, DEAD_LETTER_ITEM_TOKEN, recordId !== undefined);
+
+    return recordId;
   }
 
   /** Forwards the failed request; returns the record id once the transport has it. */
@@ -193,6 +197,7 @@ export class DeadLetterBehavior implements IPipelineBehavior {
     }
 
     const { ignoreErrors } = options;
+
     return !(
       (typeof ignoreErrors === 'function' || Array.isArray(ignoreErrors)) &&
       matchesIgnoredError(ignoreErrors, error, context)

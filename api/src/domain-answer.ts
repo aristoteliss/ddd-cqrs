@@ -2,13 +2,13 @@
 
 import type { DomainException } from '@cqrs-ddd/core/domain';
 import {
-  AuthConfigurationException,
+  AuthConfigurationError,
   InvalidLoginCredentialsException,
-} from './auths/domain/errors/authentication.exception.js';
+} from './auths/domain/models/errors/authentication.exception.js';
 import {
   InvalidRefreshTokenError,
   RefreshTokenReuseError,
-} from './auths/domain/errors/refresh-token.errors.js';
+} from './auths/domain/models/errors/refresh-token.errors.js';
 import type { Answer } from './http/answer.js';
 import {
   InvalidRoleNameException,
@@ -31,43 +31,52 @@ import {
  * ```
  */
 export function domainAnswer(exception: DomainException): Answer | undefined {
+  const { message } = exception;
   if (
     exception instanceof InvalidRefreshTokenError ||
     exception instanceof RefreshTokenReuseError
   ) {
-    return reply(401, 'Unauthorized', exception.message, {
+    return reply({
+      statusCode: 401,
+      error: 'Unauthorized',
+      message,
       code: exception.code,
     });
   }
   if (exception instanceof InvalidLoginCredentialsException) {
-    return reply(401, 'Unauthorized', exception.message);
+    return reply({ statusCode: 401, error: 'Unauthorized', message });
   }
-  if (exception instanceof AuthConfigurationException) {
-    return reply(500, 'Internal Server Error', exception.message);
+  if (exception instanceof AuthConfigurationError) {
+    return reply({ statusCode: 500, error: 'Internal Server Error', message });
   }
   if (
     exception instanceof UniqueEmailException ||
     exception instanceof UniqueRoleNameException
   ) {
-    return reply(409, 'Conflict', exception.message);
+    return reply({ statusCode: 409, error: 'Conflict', message });
   }
   if (
     exception instanceof InvalidUsernameException ||
     exception instanceof InvalidDepartmentException ||
     exception instanceof InvalidRoleNameException
   ) {
-    return reply(422, 'Unprocessable Entity', exception.message, {
+    return reply({
+      statusCode: 422,
+      error: 'Unprocessable Entity',
+      message,
       ...exception.violation,
     });
   }
   return undefined;
 }
 
-function reply(
-  statusCode: number,
-  error: string,
-  message: string,
-  extra: Record<string, unknown> = {},
-): Answer {
-  return { status: statusCode, body: { statusCode, error, message, ...extra } };
+type AnswerBody = {
+  statusCode: number;
+  error: string;
+  message: string;
+  [field: string]: unknown;
+};
+
+function reply(body: AnswerBody): Answer {
+  return { status: body.statusCode, body };
 }

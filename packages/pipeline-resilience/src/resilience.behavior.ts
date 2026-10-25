@@ -58,11 +58,20 @@ function getResilienceSafetyIssues(
     });
   }
 
-  if (
-    options.retry &&
-    requestKind !== 'query' &&
-    options.retry.replaySafe !== true
-  ) {
+  if (requestKind !== 'query') {
+    issues.push(...replayIssues(options, requestKind));
+  }
+
+  return issues;
+}
+
+/** The retry and timeout issues of a handler whose side effects a replay repeats. */
+function replayIssues(
+  options: ResilienceBehaviorOptions,
+  requestKind: IPipelineContext['requestKind'],
+): ResilienceSafetyIssue[] {
+  const issues: ResilienceSafetyIssue[] = [];
+  if (options.retry && options.retry.replaySafe !== true) {
     issues.push({
       message: `retry on non-query handler (${requestKind}) replays downstream work; commands/events must set retry.replaySafe: true`,
       fix: 'Set retry: { ...retry, replaySafe: true } after verifying handler side effects are idempotent or transactional.',
@@ -71,7 +80,6 @@ function getResilienceSafetyIssues(
 
   if (
     options.timeout &&
-    requestKind !== 'query' &&
     options.timeout.strategy !== 'cooperative' &&
     options.timeout.replaySafe !== true
   ) {
@@ -203,6 +211,7 @@ export class ResilienceBehavior
       : null;
 
     this.policyCache.set(context.handlerType, policy);
+
     return policy;
   }
 

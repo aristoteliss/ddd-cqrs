@@ -36,7 +36,9 @@ export class CreateRoleCommandRepository extends CommandRepository<
   async save(role: Role): Promise<RoleSnapshot> {
     const em = this.store.em;
     assertAutocommit(em, 'createRole');
+
     const persisted = await em.upsert(Role, role);
+
     return persisted.toJSON();
   }
 }

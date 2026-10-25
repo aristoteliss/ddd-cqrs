@@ -37,6 +37,7 @@ const merchants = new AsyncLocalStorage<Merchant>();
 export function currentMerchant(): Merchant {
   const merchant = merchants.getStore();
   if (!merchant) throw new Error('No merchant is calling.');
+
   return merchant;
 }
 

@@ -131,6 +131,7 @@ function flatten(issues: readonly z.core.$ZodIssue[]) {
     fieldErrors[field] ??= [];
     fieldErrors[field].push(message);
   }
+
   return { formErrors, fieldErrors };
 }
 

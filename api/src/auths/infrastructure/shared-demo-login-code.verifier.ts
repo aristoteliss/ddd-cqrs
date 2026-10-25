@@ -6,9 +6,9 @@ import {
   type LoginCredentialVerification,
 } from '../application/ports/login-code-verifier.port.js';
 import {
-  AuthConfigurationException,
+  AuthConfigurationError,
   InvalidLoginCredentialsException,
-} from '../domain/errors/authentication.exception.js';
+} from '../domain/models/errors/authentication.exception.js';
 
 /**
  * Demo credential adapter: one configured login code is accepted for every
@@ -31,19 +31,19 @@ export class SharedDemoLoginCodeVerifier implements ILoginCodeVerifier {
       process.env.NODE_ENV === 'production' &&
       process.env.AUTH_SHARED_LOGIN_CODE?.trim() !== 'true'
     ) {
-      throw new AuthConfigurationException(
+      throw new AuthConfigurationError(
         'A shared login code signs in any account; set AUTH_SHARED_LOGIN_CODE=true to accept it in production',
       );
     }
 
     if (!configuredDigest) {
       if (process.env.NODE_ENV === 'production' && plaintext) {
-        throw new AuthConfigurationException(
+        throw new AuthConfigurationError(
           'Plaintext AUTH_LOGIN_CODE is not allowed in production; configure AUTH_LOGIN_CODE_SHA256',
         );
       }
       if (!plaintext) {
-        throw new AuthConfigurationException(
+        throw new AuthConfigurationError(
           'AUTH_LOGIN_CODE_SHA256 is not configured',
         );
       }
@@ -51,7 +51,7 @@ export class SharedDemoLoginCodeVerifier implements ILoginCodeVerifier {
 
     const expectedDigest = configuredDigest ?? this.sha256Hex(plaintext ?? '');
     if (!/^[0-9a-f]{64}$/.test(expectedDigest)) {
-      throw new AuthConfigurationException(
+      throw new AuthConfigurationError(
         'AUTH_LOGIN_CODE_SHA256 must be a 64-character SHA-256 hex digest',
       );
     }

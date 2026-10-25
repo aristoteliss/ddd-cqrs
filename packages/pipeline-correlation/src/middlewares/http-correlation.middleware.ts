@@ -56,23 +56,7 @@ export function httpCorrelation(options?: CorrelationOptions): HttpMiddleware {
 
   const header =
     typeof h === 'string' ? h.toLowerCase() : DEFAULT_CORRELATION_HEADER;
-  const acceptIncoming = options?.acceptIncoming ?? true;
-  const trimIncoming = options?.trimIncoming ?? false;
-  const maxLength = options?.maxLength ?? DEFAULT_CORRELATION_ID_MAX_LENGTH;
-  const validateIncoming =
-    options?.validateIncoming ??
-    ((id: string) => DEFAULT_CORRELATION_ID_PATTERN.test(id));
-
-  const resolveIncoming = (raw: string | undefined): string | undefined => {
-    if (!acceptIncoming || typeof raw !== 'string') return undefined;
-    const value = trimIncoming ? raw.trim() : raw;
-    if (value.length === 0 || value.length > maxLength) return undefined;
-    try {
-      return validateIncoming(value) ? value : undefined;
-    } catch {
-      return undefined;
-    }
-  };
+  const resolveIncoming = incomingResolver(options);
 
   return (req, res, next) => {
     const raw = req.headers?.[header];
@@ -82,5 +66,28 @@ export function httpCorrelation(options?: CorrelationOptions): HttpMiddleware {
       res.setHeader(header, correlationId);
     }
     runWithCorrelationId(correlationId, next);
+  };
+}
+
+/** Returns an incoming id the options accept, else `undefined`. */
+function incomingResolver(
+  options?: CorrelationOptions,
+): (raw: string | undefined) => string | undefined {
+  const acceptIncoming = options?.acceptIncoming ?? true;
+  const trimIncoming = options?.trimIncoming ?? false;
+  const maxLength = options?.maxLength ?? DEFAULT_CORRELATION_ID_MAX_LENGTH;
+  const validateIncoming =
+    options?.validateIncoming ??
+    ((id: string) => DEFAULT_CORRELATION_ID_PATTERN.test(id));
+
+  return (raw) => {
+    if (!acceptIncoming || typeof raw !== 'string') return undefined;
+    const value = trimIncoming ? raw.trim() : raw;
+    if (value.length === 0 || value.length > maxLength) return undefined;
+    try {
+      return validateIncoming(value) ? value : undefined;
+    } catch {
+      return undefined;
+    }
   };
 }

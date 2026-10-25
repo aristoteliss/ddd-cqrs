@@ -5,7 +5,7 @@ import { CommandRepository, PersistedWrite } from '@cqrs-ddd/core/persistence';
 import { MikroOrmStore } from '../../persistence/mikro-orm.store.js';
 import { Auth, AuthSnapshot } from '../domain/models/auth.entity.js';
 
-export class CreateAuthCommandRepository extends CommandRepository<
+export class StartAuthCommandRepository extends CommandRepository<
   Auth,
   AuthSnapshot
 > {

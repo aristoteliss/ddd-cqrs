@@ -17,13 +17,26 @@ const BATCH_SIZE = 500;
 /** One materialized rule without its absolute position. */
 type RuleRow = Omit<UserPermissionRule, 'userId' | 'position'>;
 
-const byId = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+/** The source rows of one batch of users, and the capabilities they reference by id. */
+type RuleSources = {
+  userRoles: UserRole[];
+  additional: UserAdditionalCapability[];
+  denied: UserDeniedCapability[];
+  capabilitiesOfRole: Map<string, string[]>;
+  capabilities: Map<string, Capability>;
+};
+
+function byId(a: string, b: string): number {
+  if (a < b) return -1;
+  return a > b ? 1 : 0;
+}
 
 function chunks<T>(items: readonly T[]): T[][] {
   const result: T[][] = [];
   for (let start = 0; start < items.length; start += BATCH_SIZE) {
     result.push(items.slice(start, start + BATCH_SIZE));
   }
+
   return result;
 }
 
@@ -84,14 +97,11 @@ export class UserPermissionsProjector {
           disableIdentityMap: true,
         },
       );
-      for (const userId of batch) {
-        const actual = stored.filter((row) => row.userId === userId);
-        const wanted = [...(expected.get(userId) ?? [])].sort(
-          (a, b) => Number(a.inverted) - Number(b.inverted),
-        );
-        if (!sameSequence(actual, wanted)) drifted.push(userId);
-      }
+      drifted.push(
+        ...batch.filter((userId) => hasDrifted(userId, stored, expected)),
+      );
     }
+
     return drifted;
   }
 
@@ -115,94 +125,27 @@ export class UserPermissionsProjector {
     em: EntityManager,
     batch: string[],
   ): Promise<Map<string, RuleRow[]>> {
-    const read = { disableIdentityMap: true };
-    const [userRoles, additional, denied] = await Promise.all([
-      em.find(UserRole, { userId: { $in: batch } }, read),
-      em.find(UserAdditionalCapability, { userId: { $in: batch } }, read),
-      em.find(UserDeniedCapability, { userId: { $in: batch } }, read),
-    ]);
-    const roleIds = [...new Set(userRoles.map((link) => link.roleId))];
-    const roleLinks =
-      roleIds.length === 0
-        ? []
-        : await em.find(RoleCapability, { roleId: { $in: roleIds } }, read);
-    const capabilityIds = [
-      ...new Set([
-        ...roleLinks.map((link) => link.capabilityId),
-        ...additional.map((link) => link.capabilityId),
-        ...denied.map((link) => link.capabilityId),
-      ]),
-    ];
-    const capabilities = new Map(
-      (capabilityIds.length === 0
-        ? []
-        : await em.find(
-            Capability,
-            { id: { $in: capabilityIds } } as never,
-            read,
-          )
-      ).map((capability) => [capability.id, capability]),
-    );
-
-    const capabilitiesOfRole = new Map<string, string[]>();
-    for (const link of roleLinks) {
-      const list = capabilitiesOfRole.get(link.roleId) ?? [];
-      list.push(link.capabilityId);
-      capabilitiesOfRole.set(link.roleId, list);
-    }
-
-    const row = (
-      source: UserPermissionRuleSource,
-      roleId: string | null,
-      capabilityId: string,
-    ): RuleRow[] => {
-      const capability = capabilities.get(capabilityId);
-      if (!capability) return [];
-      return [
-        {
-          source,
-          roleId,
-          capabilityId,
-          subject: capability.subject,
-          action: capability.action,
-          conditions: capability.conditions ?? null,
-          fields: capability.fields ?? null,
-          inverted: source === 'denied' ? true : capability.inverted,
-          reason: capability.reason ?? null,
-        },
-      ];
-    };
-
+    const sources = await readSources(em, batch);
     const result = new Map<string, RuleRow[]>();
     for (const userId of batch) {
-      const rules: RuleRow[] = [];
-      const roles = userRoles
-        .filter((link) => link.userId === userId)
-        .map((link) => link.roleId)
-        .sort(byId);
-      for (const roleId of roles) {
-        for (const capabilityId of [
-          ...(capabilitiesOfRole.get(roleId) ?? []),
-        ].sort(byId)) {
-          rules.push(...row('role', roleId, capabilityId));
-        }
-      }
-      for (const [source, links] of [
-        ['additional', additional],
-        ['denied', denied],
-      ] as const) {
-        const ids = links
-          .filter((link) => link.userId === userId)
-          .map((link) => link.capabilityId)
-          .sort(byId);
-        for (const capabilityId of ids) {
-          rules.push(...row(source, null, capabilityId));
-        }
-      }
-      result.set(userId, rules);
+      result.set(userId, userRules(userId, sources));
     }
+
     return result;
   }
+}
+
+function hasDrifted(
+  userId: string,
+  stored: readonly UserPermissionRule[],
+  expected: ReadonlyMap<string, RuleRow[]>,
+): boolean {
+  const actual = stored.filter((row) => row.userId === userId);
+  const wanted = [...(expected.get(userId) ?? [])].sort(
+    (a, b) => Number(a.inverted) - Number(b.inverted),
+  );
+
+  return !sameSequence(actual, wanted);
 }
 
 function sameSequence(
@@ -224,4 +167,118 @@ function sameSequence(
       (stored.reason ?? null) === rule.reason
     );
   });
+}
+
+async function readSources(
+  em: EntityManager,
+  batch: string[],
+): Promise<RuleSources> {
+  const read = { disableIdentityMap: true };
+  const [userRoles, additional, denied] = await Promise.all([
+    em.find(UserRole, { userId: { $in: batch } }, read),
+    em.find(UserAdditionalCapability, { userId: { $in: batch } }, read),
+    em.find(UserDeniedCapability, { userId: { $in: batch } }, read),
+  ]);
+
+  const roleIds = [...new Set(userRoles.map((link) => link.roleId))];
+  const roleLinks =
+    roleIds.length === 0
+      ? []
+      : await em.find(RoleCapability, { roleId: { $in: roleIds } }, read);
+
+  const capabilityIds = [
+    ...new Set([
+      ...roleLinks.map((link) => link.capabilityId),
+      ...additional.map((link) => link.capabilityId),
+      ...denied.map((link) => link.capabilityId),
+    ]),
+  ];
+  const capabilities = new Map(
+    (capabilityIds.length === 0
+      ? []
+      : await em.find(Capability, { id: { $in: capabilityIds } } as never, read)
+    ).map((capability) => [capability.id, capability]),
+  );
+
+  return {
+    userRoles,
+    additional,
+    denied,
+    capabilitiesOfRole: groupByRole(roleLinks),
+    capabilities,
+  };
+}
+
+function groupByRole(
+  roleLinks: readonly RoleCapability[],
+): Map<string, string[]> {
+  const capabilitiesOfRole = new Map<string, string[]>();
+  for (const link of roleLinks) {
+    const list = capabilitiesOfRole.get(link.roleId) ?? [];
+    list.push(link.capabilityId);
+    capabilitiesOfRole.set(link.roleId, list);
+  }
+
+  return capabilitiesOfRole;
+}
+
+function userRules(
+  userId: string,
+  {
+    userRoles,
+    additional,
+    denied,
+    capabilitiesOfRole,
+    capabilities,
+  }: RuleSources,
+): RuleRow[] {
+  const rules: RuleRow[] = [];
+  const rowsOf = (
+    capabilityIds: readonly string[],
+    source: UserPermissionRuleSource,
+    roleId: string | null,
+  ) =>
+    capabilityIds.flatMap((capabilityId) => {
+      const capability = capabilities.get(capabilityId);
+
+      return capability ? [toRow(capability, source, roleId)] : [];
+    });
+  const roles = userRoles
+    .filter((link) => link.userId === userId)
+    .map((link) => link.roleId)
+    .sort(byId);
+  for (const roleId of roles) {
+    const ids = [...(capabilitiesOfRole.get(roleId) ?? [])].sort(byId);
+    rules.push(...rowsOf(ids, 'role', roleId));
+  }
+  for (const [source, links] of [
+    ['additional', additional],
+    ['denied', denied],
+  ] as const) {
+    const ids = links
+      .filter((link) => link.userId === userId)
+      .map((link) => link.capabilityId)
+      .sort(byId);
+    rules.push(...rowsOf(ids, source, null));
+  }
+
+  return rules;
+}
+
+function toRow(
+  capability: Capability,
+  source: UserPermissionRuleSource,
+  roleId: string | null,
+): RuleRow {
+  return {
+    source,
+    roleId,
+    capabilityId: capability.id,
+    subject: capability.subject,
+    action: capability.action,
+    conditions: capability.conditions ?? null,
+    fields: capability.fields ?? null,
+    inverted: source === 'denied' ? true : capability.inverted,
+    reason: capability.reason ?? null,
+  };
 }

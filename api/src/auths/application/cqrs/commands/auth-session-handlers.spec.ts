@@ -7,17 +7,19 @@ import type { EventBus } from '@cqrs-ddd/cqrs';
 import { currentTenantId } from '@cqrs-ddd/pipeline-tenant';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { User } from '../../../../users/domain/models/user.entity.js';
-import {
-  InvalidRefreshTokenError,
-  RefreshTokenReuseError,
-} from '../../../domain/errors/refresh-token.errors.js';
 import { AuthRefreshedEvent } from '../../../domain/events/auth-refreshed.event.js';
 import { AuthRevokedEvent } from '../../../domain/events/auth-revoked.event.js';
 import { Auth, type AuthSnapshot } from '../../../domain/models/auth.entity.js';
+import {
+  InvalidRefreshTokenError,
+  RefreshTokenReuseError,
+} from '../../../domain/models/errors/refresh-token.errors.js';
 import { NodeRefreshTokens } from '../../../infrastructure/node-refresh-tokens.js';
 import { PrincipalLoginService } from '../../../services/principal-login.service.js';
 import { GetAuthByConsumedTokenHashQuery } from '../queries/get-auth-by-consumed-token-hash.query.js';
 import { GetAuthByTokenHashQuery } from '../queries/get-auth-by-token-hash.query.js';
+import { RefreshAuthCommand } from './refresh-auth.command.js';
+import { RefreshAuthHandler } from './refresh-auth.handler.js';
 import { RevokeAuthCommand } from './revoke-auth.command.js';
 import { RevokeAuthHandler } from './revoke-auth.handler.js';
 
@@ -90,7 +92,7 @@ class SessionStore {
   };
 
   start(token: string, expiresAt = T0 + 3_600_000): Auth {
-    const auth = Auth.create(USER.id, tokens.hash(token), expiresAt);
+    const auth = Auth.start(USER.id, tokens.hash(token), expiresAt);
     this.rows.set(auth.id, auth.toJSON());
     return auth;
   }
@@ -123,16 +125,21 @@ function setup() {
       embedPermissions: false,
     },
     { find: vi.fn() } as never,
+    store.repository as never,
+  );
+  const handler = new RefreshAuthHandler(
+    { publishAll } as unknown as EventBus,
     store.byTokenHash,
     store.byConsumedTokenHash,
-    store.repository as never,
     tokens,
     cookies,
-    { publishAll } as unknown as EventBus,
+    service,
   );
   const sign = vi.spyOn(service, 'sign');
   const refresh = (refreshToken: string) =>
-    service.refresh(refreshToken, '203.0.113.7');
+    handler.execute(
+      new RefreshAuthCommand({ refreshToken, clientIp: '203.0.113.7' }),
+    );
   return { store, service, refresh, publishAll, sign, cookies };
 }
 
@@ -150,12 +157,7 @@ function logoutHandler(store: SessionStore, publishAll = vi.fn()) {
       embedPermissions: false,
     },
     { find: vi.fn() } as never,
-    store.byTokenHash,
-    store.byConsumedTokenHash,
     store.repository as never,
-    tokens,
-    cookies,
-    { publishAll } as unknown as EventBus,
   );
   const handler = new RevokeAuthHandler(
     { publishAll } as unknown as EventBus,
@@ -167,7 +169,7 @@ function logoutHandler(store: SessionStore, publishAll = vi.fn()) {
   return { handler, cookies };
 }
 
-describe('PrincipalLoginService refresh', () => {
+describe('RefreshAuthHandler', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(T0);
@@ -349,9 +351,10 @@ describe('PrincipalLoginService refresh', () => {
     store.start('token-a');
 
     await refresh('token-a');
-    expect(publishAll).toHaveBeenCalledExactlyOnceWith([
-      expect.any(AuthRefreshedEvent),
-    ]);
+    expect(publishAll).toHaveBeenCalledExactlyOnceWith(
+      [expect.any(AuthRefreshedEvent)],
+      expect.any(Auth),
+    );
     publishAll.mockClear();
 
     await refresh('token-a');

@@ -56,6 +56,13 @@ export const RATE_LIMIT_KEY_ITEM = Symbol('RATE_LIMIT_KEY_ITEM');
 export const RATE_LIMIT_KEY_ITEM_TOKEN: PipelineItemToken<string> =
   createPipelineItem<string>('RATE_LIMIT_KEY_ITEM', RATE_LIMIT_KEY_ITEM);
 
+/** One request's rate-limit check: its context, its effective options and its bucket key. */
+interface RateLimitCheck {
+  readonly context: IPipelineContext;
+  readonly options: RateLimitBehaviorOptions;
+  readonly key: string;
+}
+
 /** Whether a rejection value is a `rate-limiter-flexible` result (a limit hit). */
 function isRateLimiterRes(value: unknown): value is RateLimiterResLike {
   return (
@@ -184,7 +191,6 @@ export class RateLimitBehavior
 
     const limiter = options.limiter ?? this.limiter;
     const key = buildRateLimitKey(context, options);
-
     setPipelineItem(context, RATE_LIMIT_KEY_ITEM_TOKEN, key);
 
     let result: RateLimiterResLike;
@@ -202,21 +208,21 @@ export class RateLimitBehavior
           points,
         });
       }
-      return this.handleStoreError(context, options, key, error, next);
+      return this.handleStoreError(error, { context, options, key }, next);
     }
 
     setPipelineItem(context, RATE_LIMIT_ITEM_TOKEN, result);
+
     return next();
   }
 
   /** Fail-open (default) or fail-closed when the backing store itself errors. */
   private handleStoreError(
-    context: IPipelineContext,
-    options: RateLimitBehaviorOptions,
-    key: string,
     error: unknown,
+    check: RateLimitCheck,
     next: NextDelegate,
   ): Promise<unknown> {
+    const { context, options, key } = check;
     const message = error instanceof Error ? error.message : String(error);
 
     if (options.failOpen ?? true) {

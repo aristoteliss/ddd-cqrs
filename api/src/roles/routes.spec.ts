@@ -8,7 +8,7 @@ import { expressApp } from '../http/express.js';
 import { fastifyApp } from '../http/fastify.js';
 import { CreateRoleHandler } from './application/cqrs/commands/create-role.handler.js';
 import { DeleteRoleHandler } from './application/cqrs/commands/delete-role.handler.js';
-import { UpdateRoleHandler } from './application/cqrs/commands/update-role.handler.js';
+import { RenameRoleHandler } from './application/cqrs/commands/rename-role.handler.js';
 import { GetRoleHandler } from './application/cqrs/queries/get-role.handler.js';
 import type { GetRoleQuery } from './application/cqrs/queries/get-role.query.js';
 import { GetRolesHandler } from './application/cqrs/queries/get-roles.handler.js';
@@ -63,7 +63,7 @@ cqrs.register(
   new GetRoleHandler(roles, authorizer),
   new GetRolesHandler({ find: () => roles.list() }, authorizer),
   new CreateRoleHandler(roles, authorizer, cqrs.eventBus),
-  new UpdateRoleHandler(roles, authorizer, cqrs.eventBus),
+  new RenameRoleHandler(roles, authorizer, cqrs.eventBus),
   new DeleteRoleHandler(roles, authorizer, cqrs.eventBus),
 );
 

@@ -12,26 +12,24 @@ export function behaviorEntryType(
 ): Constructor<IPipelineBehavior> {
   const tuple = Array.isArray(entry);
   const candidate = tuple && allowTuple ? entry[0] : entry;
-  if (
-    typeof candidate !== 'function' ||
-    !candidate.prototype ||
-    (tuple && entry.length !== 2)
-  ) {
+  const isClass =
+    typeof candidate === 'function' && Boolean(candidate.prototype);
+
+  if (!isClass || (tuple && entry.length !== 2)) {
     throw new TypeError(
       `${location}: expected a behavior class${allowTuple ? ' or a [BehaviorClass, options] tuple' : ''}. Check for undefined references caused by circular imports.`,
     );
   }
-  if (
-    tuple &&
-    (entry[1] === null ||
-      typeof entry[1] !== 'object' ||
-      Array.isArray(entry[1]))
-  ) {
+  if (tuple && !isOptionsObject(entry[1])) {
     throw new TypeError(
       `${location}: options for ${candidate.name} must be an object.`,
     );
   }
   return candidate as Constructor<IPipelineBehavior>;
+}
+
+function isOptionsObject(value: unknown): boolean {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 /**
@@ -72,6 +70,7 @@ export function normalizeBehaviorEntries(
   const options =
     accumulators?.options ?? new Map<BehaviorId, Record<string, unknown>>();
   const seen = accumulators?.seen ?? new Set<BehaviorId>();
+
   entries.forEach((entry, index) => {
     const type = behaviorEntryType(
       entry,
@@ -86,5 +85,6 @@ export function normalizeBehaviorEntries(
       types.push(type);
     }
   });
+
   return { types, options };
 }

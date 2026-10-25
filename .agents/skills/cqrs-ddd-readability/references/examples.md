@@ -7,9 +7,10 @@ license header are left out for brevity.
 
 ## 1. A fat handler made thin
 
-Pattern from: the inline rate limit and manual event publication in
-`api/src/auths/services/principal-login.service.ts`, and the limits restated outside
-`Role.rules`. Rules: C3, C5, C6, C10, D4.
+Pattern from: an inline rate limit, events published by hand, and limits restated
+outside `Role.rules`; `RefreshAuthHandler` in
+`api/src/auths/application/cqrs/commands/refresh-auth.handler.ts` shows the same rate
+limit as a pipeline entry. Rules: C3, C5, C6, C10, D4.
 
 Before:
 
@@ -88,8 +89,8 @@ What changed:
   `role.rename()` enforces them.
 - `CommandBaseHandler.execute()` publishes the buffered events after `handle()` returns,
   so publishing them by hand is removed.
-- `rename` records `RoleRenamedEvent` (D6). The existing `UpdateRoleCommand`, which records
-  `RoleUpdatedEvent`, is a known deviation.
+- `rename` records `RoleRenamedEvent` (D6), so the command, the method and the event share
+  one verb.
 
 ## 2. An anemic aggregate given behavior
 
@@ -323,8 +324,8 @@ The same reasoning rejects an `IRoleNamePolicy` interface with one implementatio
 
 ## 5. Duplicated validation derived from the command
 
-Pattern from: `NewUser` in `api/src/users/routes.ts`, which restates the limits that
-`CreateUserCommand` already reads from `User.rules`. Rule: C10.
+Pattern from: a route schema that restates the limits `CreateUserCommand` already reads
+from `User.rules`. Rule: C10.
 
 Before:
 
@@ -345,62 +346,12 @@ const NewUser = z.object({
 });
 ```
 
-After, as `UserChanges` in the same file already does for updates:
+After, as `NewUser` in `api/src/users/routes.ts` has it:
 
 ```ts
-const { username, email, department } = CreateUserCommand.schema.shape;
-
-const NewUser = z.object({ email, name: username, department });
+const NewUser = z.object({
+  email: CreateUserCommand.schema.shape.email,
+  name: CreateUserCommand.schema.shape.username,
+  department: CreateUserCommand.schema.shape.department,
+});
 ```
-
-## 6. A conditional built inside a call, extracted and named
-
-Pattern from: `api/src/users/application/cqrs/queries/get-user.handler.ts`. Rules: G5, G6.
-
-Before:
-
-```ts
-async execute(query: GetUserQuery): Promise<UserReadModel | null> {
-  const user = await this.queryRepository.find(
-    this.authorizer.dependsOnEntity(APP_ACTIONS.READ, APP_SUBJECTS.USER) &&
-      !query.refresh
-      ? new GetUserQuery(
-          {
-            userId: query.userId,
-            email: query.email,
-            department: query.department,
-          },
-          { hydrate: query.hydrate, refresh: true },
-          query.sessionPrincipal,
-        )
-      : query,
-  );
-  return user ? projectUserRead(this.authorizer, user) : null;
-}
-```
-
-After:
-
-```ts
-async execute(query: GetUserQuery): Promise<UserReadModel | null> {
-  const user = await this.queryRepository.find(this.toRefreshed(query));
-  return user ? projectUserRead(this.authorizer, user) : null;
-}
-
-private toRefreshed(query: GetUserQuery): GetUserQuery {
-  const needsRefresh =
-    this.authorizer.dependsOnEntity(APP_ACTIONS.READ, APP_SUBJECTS.USER) &&
-    !query.refresh;
-  if (!needsRefresh) return query;
-
-  const { userId, email, department, hydrate, sessionPrincipal } = query;
-  return new GetUserQuery(
-    { userId, email, department },
-    { hydrate, refresh: true },
-    sessionPrincipal,
-  );
-}
-```
-
-The condition gets a name that states why the query changes, the guard clause returns
-early, and `execute` reads in two lines.

@@ -106,6 +106,12 @@ interface MeterInstruments {
   active?: UpDownCounter;
 }
 
+/** A measured handler call: its context and the options it is measured with. */
+interface MeteredCall {
+  context: IPipelineContext;
+  options: MetricsBehaviorOptions | undefined;
+}
+
 /**
  * Pipeline behavior that records OpenTelemetry **metrics** for every handler it
  * wraps, complementing {@link TraceBehavior}'s spans:
@@ -161,37 +167,22 @@ export class MetricsBehavior implements IPipelineBehavior {
       context.getBehaviorOptions<MetricsBehaviorOptions>(MetricsBehavior);
     if (options?.enabled === false) return next();
 
-    let instruments: MeterInstruments;
-    try {
-      instruments = this.getInstruments(options?.meterName ?? METER_NAME);
-    } catch (error) {
-      // OpenTelemetry setup must never prevent the handler from running.
-      safely(() =>
-        this.logger?.warn?.(
-          `Failed to create OpenTelemetry pipeline metrics; failing open: ${error instanceof Error ? error.message : error}`,
-          MetricsBehavior.name,
-        ),
-      );
-      return next();
-    }
+    const instruments = this.resolveInstruments(options);
+    if (!instruments) return next();
 
+    const call: MeteredCall = { context, options };
     const activeAttributes = buildMetricAttributes(context);
     this.safeAdd(instruments.active, 1, activeAttributes);
     const startedAt = performance.now();
 
     try {
       const result = await next();
-      const attributes = await this.resolveFinalAttributes(
-        context,
-        options,
-        'success',
-      );
+      const attributes = await this.resolveFinalAttributes(call, 'success');
       this.record(instruments, performance.now() - startedAt, attributes);
       return result;
     } catch (error) {
       const attributes = await this.resolveFinalAttributes(
-        context,
-        options,
+        call,
         'failure',
         error,
       );
@@ -202,10 +193,27 @@ export class MetricsBehavior implements IPipelineBehavior {
     }
   }
 
+  /** The instruments of the configured meter, or `undefined` when creating them fails. */
+  private resolveInstruments(
+    options: MetricsBehaviorOptions | undefined,
+  ): MeterInstruments | undefined {
+    try {
+      return this.getInstruments(options?.meterName ?? METER_NAME);
+    } catch (error) {
+      // OpenTelemetry setup must never prevent the handler from running.
+      safely(() =>
+        this.logger?.warn?.(
+          `Failed to create OpenTelemetry pipeline metrics; failing open: ${error instanceof Error ? error.message : error}`,
+          MetricsBehavior.name,
+        ),
+      );
+      return undefined;
+    }
+  }
+
   /** Builds the final metric label set after handler execution. */
   private async resolveFinalAttributes(
-    context: IPipelineContext,
-    options: MetricsBehaviorOptions | undefined,
+    { context, options }: MeteredCall,
     outcome: 'success' | 'failure',
     error?: unknown,
   ): Promise<Attributes> {
@@ -286,6 +294,7 @@ export class MetricsBehavior implements IPipelineBehavior {
     };
 
     this.instruments.set(meterName, created);
+
     return created;
   }
 }

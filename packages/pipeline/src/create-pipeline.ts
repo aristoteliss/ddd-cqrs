@@ -162,8 +162,58 @@ export function createPipeline(options: PipelineOptions = {}): Pipeline {
     diagnostics = 'strict',
     logger = console,
   } = options;
+  const setup: PipelineSetup = {
+    globalBehaviors,
+    sources,
+    diagnostics,
+    logger,
+    instances: indexBehaviors(options.behaviors ?? []),
+  };
+  for (const config of toGlobalConfigs(globalBehaviors)) {
+    for (const entry of [...(config.before ?? []), ...(config.after ?? [])]) {
+      instanceOf(
+        setup,
+        behaviorEntryType(entry, 'createPipeline globalBehaviors'),
+      );
+    }
+  }
+
+  function wrap(...input: Array<WrapOptions | PipelineBehaviorEntry>): Wrap {
+    return wrapperOf(toDeclaration(setup, input));
+  }
+
+  return { wrap } as Pipeline;
+}
+
+/** What {@link createPipeline} fixes for every operation it wraps. */
+interface PipelineSetup {
+  globalBehaviors: PipelineOptions['globalBehaviors'];
+  sources: ContextSources;
+  diagnostics: NonNullable<PipelineOptions['diagnostics']>;
+  logger: PipelineLogger;
+  /** One instance per behavior identity, shared by every wrapped operation. */
+  instances: Map<BehaviorId, IPipelineBehavior>;
+}
+
+/** One {@link Pipeline.wrap} call: its pipeline, its options and its entries. */
+interface WrapDeclaration {
+  setup: PipelineSetup;
+  options: WrapOptions;
+  declared: ReturnType<typeof normalizeBehaviorEntries>;
+}
+
+/** A function or method bound by a {@link Pipeline.wrap} call. */
+interface Operation extends WrapDeclaration {
+  fn: AnyFunction;
+  label: string;
+  handlerType: Constructor;
+}
+
+function indexBehaviors(
+  behaviors: readonly IPipelineBehavior[],
+): Map<BehaviorId, IPipelineBehavior> {
   const instances = new Map<BehaviorId, IPipelineBehavior>();
-  for (const behavior of options.behaviors ?? []) {
+  for (const behavior of behaviors) {
     const type = behavior.constructor as Constructor<IPipelineBehavior>;
     const id = getBehaviorId(type);
     if (instances.has(id)) {
@@ -173,158 +223,177 @@ export function createPipeline(options: PipelineOptions = {}): Pipeline {
     }
     instances.set(id, behavior);
   }
-  const instanceOf = (type: Constructor<IPipelineBehavior>) => {
-    const id = getBehaviorId(type);
-    let instance = instances.get(id);
-    if (!instance) {
-      instance = id === LOGGING_ID ? new LoggingBehavior(logger) : new type();
-      instances.set(id, instance);
-    }
-    return instance;
-  };
-  for (const config of toGlobalConfigs(globalBehaviors)) {
-    for (const entry of [...(config.before ?? []), ...(config.after ?? [])]) {
-      instanceOf(behaviorEntryType(entry, 'createPipeline globalBehaviors'));
-    }
+  return instances;
+}
+
+function instanceOf(
+  setup: PipelineSetup,
+  type: Constructor<IPipelineBehavior>,
+): IPipelineBehavior {
+  const id = getBehaviorId(type);
+  let instance = setup.instances.get(id);
+  if (!instance) {
+    instance =
+      id === LOGGING_ID ? new LoggingBehavior(setup.logger) : new type();
+    setup.instances.set(id, instance);
+  }
+  return instance;
+}
+
+function toDeclaration(
+  setup: PipelineSetup,
+  input: Array<WrapOptions | PipelineBehaviorEntry>,
+): WrapDeclaration {
+  const [first] = input;
+  const hasOptions =
+    typeof first === 'object' && first !== null && !Array.isArray(first);
+  const options = (hasOptions ? first : {}) as WrapOptions;
+  const entries = (hasOptions ? input.slice(1) : input) as unknown[];
+
+  if (options.kind !== undefined && !KINDS.includes(options.kind)) {
+    throw new TypeError(
+      `pipeline.wrap: kind must be 'command', 'query' or 'event', received ${String(options.kind)}.`,
+    );
   }
 
-  function compile(
-    handlerName: string,
-    requestKind: DeclaredKind,
-    declared: ReturnType<typeof normalizeBehaviorEntries>,
-    skip: WrapOptions['skip'],
-  ) {
-    const plan = compilePipelinePlan({
+  return {
+    setup,
+    options,
+    declared: normalizeBehaviorEntries(entries, 'pipeline.wrap'),
+  };
+}
+
+function wrapperOf(declaration: WrapDeclaration): Wrap {
+  function apply(target: unknown, key?: unknown, descriptor?: unknown) {
+    if (key === undefined && typeof target === 'function') {
+      return bind(declaration, target as AnyFunction);
+    }
+    if (isDecoratorContext(key)) {
+      if (key.kind !== 'method') {
+        throw new TypeError(
+          `pipeline.wrap decorates methods, not a ${key.kind}.`,
+        );
+      }
+      return bind(declaration, target as AnyFunction, String(key.name));
+    }
+    const property = descriptor as PropertyDescriptor | undefined;
+    if (typeof property?.value === 'function') {
+      property.value = bind(declaration, property.value, String(key));
+      return property;
+    }
+    throw new TypeError(
+      'pipeline.wrap(...) applies to a function or a method.',
+    );
+  }
+
+  return apply as Wrap;
+}
+
+function bind(
+  declaration: WrapDeclaration,
+  fn: AnyFunction,
+  methodKey?: string,
+): AnyFunction {
+  const { options } = declaration;
+  const label = options.name ?? methodKey;
+  if (label === undefined) {
+    throw new TypeError(
+      'pipeline.wrap: a plain function needs a `name`, which keys and logs use to tell operations apart.',
+    );
+  }
+
+  const handlerType = { [label]: class {} }[label] as Constructor;
+  const operation: Operation = { ...declaration, fn, label, handlerType };
+
+  const runners = new Map<DeclaredKind, PipelineRunner>();
+  const runnerFor = (kind: DeclaredKind) => {
+    let runner = runners.get(kind);
+    if (!runner) {
+      runner = createRunner(operation, kind);
+      runners.set(kind, runner);
+    }
+    return runner;
+  };
+  if (options.kind) runnerFor(options.kind);
+
+  return async function (this: unknown, ...args: unknown[]) {
+    const request = args.length === 1 ? args[0] : args;
+    const kind = options.kind ?? brandOf(request);
+    if (!kind) {
+      throw new TypeError(
+        `${label}: declare its kind with pipeline.wrap({ kind }), or pass a request that carries REQUEST_KIND.`,
+      );
+    }
+
+    return runnerFor(kind)(this, request, args);
+  };
+}
+
+function createRunner(
+  operation: Operation,
+  kind: DeclaredKind,
+): PipelineRunner {
+  const { setup, options, fn, label, handlerType } = operation;
+  const { plan, behaviors } = compile(operation, kind);
+  const behaviorOptions =
+    plan.mergedOptions.size > 0 ? plan.mergedOptions : undefined;
+
+  return createPipelineRunner(
+    fn,
+    (request, self) => {
+      const handlerName = options.name ?? `${ownerName(self)}.${label}`;
+      return {
+        handlerType,
+        handlerName,
+        requestKind: kind,
+        behaviorOptions,
+        requestName:
+          options.name ?? (brandOf(request) ? undefined : handlerName),
+      };
+    },
+    behaviors,
+    plan.hasPipeline,
+    setup.sources,
+  );
+}
+
+function compile(operation: Operation, requestKind: DeclaredKind) {
+  const { setup, options, declared, label: handlerName } = operation;
+  const { skip } = options;
+
+  const plan = compilePipelinePlan({
+    handlerName,
+    requestKind,
+    handlerBehaviorTypes: declared.types,
+    handlerOptions: declared.options,
+    skippedBehaviorTypes: skip
+      ? normalizeBehaviorEntries(skip, 'pipeline.wrap skip', false).types
+      : undefined,
+    globalBehaviors: setup.globalBehaviors,
+  });
+  const behaviors = plan.behaviorTypes.map((type) => instanceOf(setup, type));
+
+  if (setup.diagnostics !== 'off') {
+    const found: PipelineBehaviorDiagnostic[] = [];
+    validateBehaviorContracts({
+      ...plan,
+      handlerType: Object,
       handlerName,
       requestKind,
-      handlerBehaviorTypes: declared.types,
-      handlerOptions: declared.options,
-      skippedBehaviorTypes: skip
-        ? normalizeBehaviorEntries(skip, 'pipeline.wrap skip', false).types
-        : undefined,
-      globalBehaviors,
+      resolvedBehaviors: new Map(behaviors.map((b, i) => [i, b])),
+      diagnostics: found,
     });
-    const behaviors = plan.behaviorTypes.map(instanceOf);
-    if (diagnostics !== 'off') {
-      const found: PipelineBehaviorDiagnostic[] = [];
-      validateBehaviorContracts({
-        ...plan,
-        handlerType: Object,
-        handlerName,
-        requestKind,
-        resolvedBehaviors: new Map(behaviors.map((b, i) => [i, b])),
-        diagnostics: found,
-      });
-      if (found.length > 0 && diagnostics === 'strict') {
-        throw new PipelineConfigurationError(found);
-      }
-      for (const d of found) {
-        logger.warn(
-          `[Pipeline Diagnostic] '${d.handlerName}' with behavior '${d.behaviorName}': ${d.message}. Fix: ${d.fix}`,
-        );
-      }
+    if (found.length > 0 && setup.diagnostics === 'strict') {
+      throw new PipelineConfigurationError(found);
     }
-    return { plan, behaviors };
-  }
-
-  function wrap(...input: Array<WrapOptions | PipelineBehaviorEntry>): Wrap {
-    const [first] = input;
-    const hasOptions =
-      typeof first === 'object' && first !== null && !Array.isArray(first);
-    const wrapOptions = (hasOptions ? first : {}) as WrapOptions;
-    const entries = (hasOptions ? input.slice(1) : input) as unknown[];
-    if (wrapOptions.kind !== undefined && !KINDS.includes(wrapOptions.kind)) {
-      throw new TypeError(
-        `pipeline.wrap: kind must be 'command', 'query' or 'event', received ${String(wrapOptions.kind)}.`,
+    for (const d of found) {
+      setup.logger.warn(
+        `[Pipeline Diagnostic] '${d.handlerName}' with behavior '${d.behaviorName}': ${d.message}. Fix: ${d.fix}`,
       );
     }
-    const declared = normalizeBehaviorEntries(entries, 'pipeline.wrap');
-
-    function bind(fn: AnyFunction, methodKey?: string): AnyFunction {
-      const label = wrapOptions.name ?? methodKey;
-      if (label === undefined) {
-        throw new TypeError(
-          'pipeline.wrap: a plain function needs a `name`, which keys and logs use to tell operations apart.',
-        );
-      }
-      const handlerType = { [label]: class {} }[label] as Constructor;
-      const runners = new Map<DeclaredKind, PipelineRunner>();
-      const runnerFor = (kind: DeclaredKind) => {
-        let runner = runners.get(kind);
-        if (!runner) {
-          const { plan, behaviors } = compile(
-            label,
-            kind,
-            declared,
-            wrapOptions.skip,
-          );
-          const behaviorOptions =
-            plan.mergedOptions.size > 0 ? plan.mergedOptions : undefined;
-          runner = createPipelineRunner(
-            fn,
-            (request, self) => {
-              const handlerName =
-                wrapOptions.name ?? `${ownerName(self)}.${label}`;
-              return {
-                handlerType,
-                handlerName,
-                requestKind: kind,
-                behaviorOptions,
-                requestName:
-                  wrapOptions.name ??
-                  (brandOf(request) ? undefined : handlerName),
-              };
-            },
-            behaviors,
-            plan.hasPipeline,
-            sources,
-          );
-          runners.set(kind, runner);
-        }
-        return runner;
-      };
-      if (wrapOptions.kind) runnerFor(wrapOptions.kind);
-
-      return async function (this: unknown, ...args: unknown[]) {
-        const request = args.length === 1 ? args[0] : args;
-        const kind = wrapOptions.kind ?? brandOf(request);
-        if (!kind) {
-          throw new TypeError(
-            `${label}: declare its kind with pipeline.wrap({ kind }), or pass a request that carries REQUEST_KIND.`,
-          );
-        }
-        return runnerFor(kind)(this, request, args);
-      };
-    }
-
-    return function apply(
-      target: unknown,
-      key?: unknown,
-      descriptor?: unknown,
-    ) {
-      if (key === undefined && typeof target === 'function') {
-        return bind(target as AnyFunction);
-      }
-      if (isDecoratorContext(key)) {
-        if (key.kind !== 'method') {
-          throw new TypeError(
-            `pipeline.wrap decorates methods, not a ${key.kind}.`,
-          );
-        }
-        return bind(target as AnyFunction, String(key.name));
-      }
-      const property = descriptor as PropertyDescriptor | undefined;
-      if (typeof property?.value === 'function') {
-        property.value = bind(property.value, String(key));
-        return property;
-      }
-      throw new TypeError(
-        'pipeline.wrap(...) applies to a function or a method.',
-      );
-    } as Wrap;
   }
 
-  return { wrap } as Pipeline;
+  return { plan, behaviors };
 }
 
 const LOGGING_ID = getBehaviorId(LoggingBehavior);

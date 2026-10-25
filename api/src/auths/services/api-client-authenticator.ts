@@ -66,12 +66,12 @@ export class ApiClientAuthenticator {
     const client = API_CLIENTS.get(apiId);
     const tenant = requireTenant('API client authentication');
 
-    if (
+    const hasInvalidCredentials =
       !client ||
       !apiKey ||
       !this.timingSafeEqualString(apiKey, client.key) ||
-      !client.tenants.has(tenant)
-    ) {
+      !client.tenants.has(tenant);
+    if (hasInvalidCredentials) {
       this.logger.warn(
         `Rejected API client "${apiId}": missing, invalid, or tenant-mismatched credentials`,
       );
@@ -93,6 +93,7 @@ export class ApiClientAuthenticator {
   private timingSafeEqualString(a: string, b: string): boolean {
     const aHash = createHash('sha256').update(a).digest();
     const bHash = createHash('sha256').update(b).digest();
+
     return timingSafeEqual(aHash, bHash);
   }
 }

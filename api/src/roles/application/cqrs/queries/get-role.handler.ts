@@ -26,16 +26,23 @@ export class GetRoleHandler
   ) {}
 
   async execute(query: GetRoleQuery): Promise<RoleReadModel | null> {
-    const role = await this.queryRepository.find(
-      this.authorizer.dependsOnEntity(APP_ACTIONS.READ, APP_SUBJECTS.ROLE) &&
-        !query.refresh
-        ? new GetRoleQuery(
-            { roleId: query.roleId },
-            { hydrate: query.hydrate, refresh: true },
-            query.sessionPrincipal,
-          )
-        : query,
-    );
+    const role = await this.queryRepository.find(this.toRefreshed(query));
+
     return role ? projectRoleRead(this.authorizer, role) : null;
+  }
+
+  private toRefreshed(query: GetRoleQuery): GetRoleQuery {
+    const needsRefresh =
+      this.authorizer.dependsOnEntity(APP_ACTIONS.READ, APP_SUBJECTS.ROLE) &&
+      !query.refresh;
+    if (!needsRefresh) return query;
+
+    const { roleId, hydrate, sessionPrincipal } = query;
+
+    return new GetRoleQuery(
+      { roleId },
+      { hydrate, refresh: true },
+      sessionPrincipal,
+    );
   }
 }

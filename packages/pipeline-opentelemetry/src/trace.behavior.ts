@@ -12,6 +12,7 @@ import {
   type Span,
   SpanKind,
   SpanStatusCode,
+  type Tracer,
   trace,
 } from '@opentelemetry/api';
 import { safely } from './helpers/safely.js';
@@ -120,6 +121,20 @@ export interface TraceBehaviorOptions {
 
 const TRACER_NAME = '@cqrs-ddd/pipeline-opentelemetry';
 
+/** The tracer, span name and initial attributes a traced call starts with. */
+interface SpanSetup {
+  tracer: Tracer;
+  spanName: string;
+  attributes: Attributes;
+}
+
+/** A traced handler call: its context, its options and its single business run. */
+interface TracedCall {
+  context: IPipelineContext;
+  options: TraceBehaviorOptions | undefined;
+  run: () => Promise<unknown>;
+}
+
 /**
  * Pipeline behavior that wraps a handler in an OpenTelemetry span.
  *
@@ -171,52 +186,67 @@ export class TraceBehavior implements IPipelineBehavior {
       return business;
     };
 
-    let tracer: ReturnType<typeof trace.getTracer>;
-    let spanName: string;
-    let initialAttributes: Attributes;
-    try {
-      tracer = trace.getTracer(options?.tracerName ?? TRACER_NAME);
-      spanName = this.resolveSpanName(context, options?.spanName);
-      initialAttributes = await this.resolveAttributes(context, options);
-    } catch {
-      // Tracing could not even be set up. Run the request untraced rather than
-      // failing it.
-      return runOnce();
-    }
+    const setup = await this.setUpSpan(context, options);
+    if (!setup) return runOnce();
 
+    return this.startSpan(setup, { context, options, run: runOnce });
+  }
+
+  /** Resolves the tracer, span name and initial attributes; `undefined` when that fails. */
+  private async setUpSpan(
+    context: IPipelineContext,
+    options: TraceBehaviorOptions | undefined,
+  ): Promise<SpanSetup | undefined> {
+    try {
+      return {
+        tracer: trace.getTracer(options?.tracerName ?? TRACER_NAME),
+        spanName: this.resolveSpanName(context, options?.spanName),
+        attributes: await this.resolveAttributes(context, options),
+      };
+    } catch {
+      // Tracing could not even be set up. The request runs untraced rather
+      // than failing.
+      return undefined;
+    }
+  }
+
+  /** Runs the call inside an active span, or untraced when the tracer fails. */
+  private async startSpan(
+    setup: SpanSetup,
+    call: TracedCall,
+  ): Promise<unknown> {
     let traced: Promise<unknown> | undefined;
     try {
-      return await tracer.startActiveSpan(
-        spanName,
-        { kind: SpanKind.INTERNAL, attributes: initialAttributes },
+      return await setup.tracer.startActiveSpan(
+        setup.spanName,
+        { kind: SpanKind.INTERNAL, attributes: setup.attributes },
         (span) => {
-          traced = (async () => {
-            try {
-              const result = await runOnce();
-              this.annotateSuccess(span, context, options);
-              return result;
-            } catch (error) {
-              this.annotateFailure(span, context, options, error);
-              throw error;
-            } finally {
-              safely(() => span.end());
-            }
-          })();
+          traced = this.runInSpan(span, call);
           return traced;
         },
       );
     } catch {
       // A tracer may invoke the callback and then throw without observing its promise.
-      return traced ?? runOnce();
+      return traced ?? call.run();
+    }
+  }
+
+  /** Runs the business once inside `span`, then annotates and ends the span. */
+  private async runInSpan(span: Span, call: TracedCall): Promise<unknown> {
+    try {
+      const result = await call.run();
+      this.annotateSuccess(span, call);
+      return result;
+    } catch (error) {
+      this.annotateFailure(span, call, error);
+      throw error;
+    } finally {
+      safely(() => span.end());
     }
   }
 
   /** Applies success annotations; every span call is individually guarded. */
-  private annotateSuccess(
-    span: Span,
-    context: IPipelineContext,
-    options?: TraceBehaviorOptions,
-  ): void {
+  private annotateSuccess(span: Span, { context, options }: TracedCall): void {
     if (options?.includeContextAttributes !== false) {
       safely(() =>
         span.setAttributes?.(getPipelineTelemetryAttributes(context)),
@@ -231,8 +261,7 @@ export class TraceBehavior implements IPipelineBehavior {
   /** Applies failure annotations; every span call is individually guarded. */
   private annotateFailure(
     span: Span,
-    context: IPipelineContext,
-    options: TraceBehaviorOptions | undefined,
+    { context, options }: TracedCall,
     error: unknown,
   ): void {
     if (options?.includeContextAttributes !== false) {

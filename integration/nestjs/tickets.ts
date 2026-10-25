@@ -77,7 +77,9 @@ export class OpenTicketHandler extends CommandBaseHandler<
 
   async handle(command: OpenTicketCommand): Promise<Ticket> {
     const ticket = Ticket.open(randomUUID(), command.title);
+
     this.tickets.set(ticket.id, ticket);
+
     return ticket;
   }
 }
@@ -99,6 +101,7 @@ export class CloseTicketHandler extends CommandBaseHandler<
   async handle(command: CloseTicketCommand): Promise<Ticket> {
     const ticket = this.tickets.get(command.ticketId);
     if (!ticket) throw new EntityNotFoundException('Ticket', command.ticketId);
+
     return ticket.close();
   }
 }
@@ -110,6 +113,7 @@ export class GetTicketHandler {
   async execute(query: GetTicketQuery): Promise<TicketView> {
     const ticket = this.tickets.get(query.ticketId);
     if (!ticket) throw new EntityNotFoundException('Ticket', query.ticketId);
+
     return view(ticket);
   }
 }

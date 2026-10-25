@@ -5,7 +5,7 @@ import { createCommand } from '@cqrs-ddd/pipeline-zod';
 import { z } from 'zod';
 import { EmailSchema } from '../../../../common/validation/email.schema.js';
 
-export class CreateAuthCommand extends createCommand(
+export class StartAuthCommand extends createCommand(
   z.object({
     email: EmailSchema,
     code: z.string().min(4).max(6),

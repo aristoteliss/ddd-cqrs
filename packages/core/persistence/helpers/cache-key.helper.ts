@@ -161,7 +161,7 @@ export function cacheKeyTemplate<T = Record<string, unknown>>(
   template: string,
   tenantOrContext?: CacheKeyTenantSource,
 ): (source: T | CacheKeyRequestContext) => string {
-  return (source: T | CacheKeyRequestContext) => {
+  const keyFor = (source: T | CacheKeyRequestContext) => {
     const ctx =
       source && typeof source === 'object' && 'request' in source
         ? (source as CacheKeyRequestContext)
@@ -190,4 +190,6 @@ export function cacheKeyTemplate<T = Record<string, unknown>>(
 
     return `${schema}:${resolved}`;
   };
+
+  return keyFor;
 }

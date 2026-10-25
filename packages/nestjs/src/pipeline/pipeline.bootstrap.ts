@@ -35,17 +35,28 @@ export const PIPELINE_OPTIONS = Symbol('PIPELINE_OPTIONS');
 
 type Provider = ReturnType<DiscoveryService['getProviders']>[number];
 
+type PipelinePlan = ReturnType<typeof compilePipelinePlan>;
+
+/** A `@nestjs/cqrs` handler provider, its class and the kind its decorator declares. */
+interface DiscoveredHandler {
+  readonly provider: Provider;
+  readonly type: Constructor;
+  readonly kind: DeclaredKind;
+}
+
 // @nestjs/cqrs keeps its handler metadata keys private, so each public handler
 // decorator is applied to a throwaway class to read the one key it records.
 function metadataKey(decorate: (target: Constructor) => void): unknown {
   const target = class {};
   decorate(target);
   const keys: unknown[] = Reflect.getOwnMetadataKeys(target);
+
   if (keys.length !== 1) {
     throw new Error(
       'A @nestjs/cqrs handler decorator recorded no single metadata key; the installed @nestjs/cqrs is not supported.',
     );
   }
+
   return keys[0];
 }
 
@@ -115,12 +126,12 @@ export class PipelineBootstrap
     for (const provider of providers) {
       const type = handlerType(provider);
       if (!type) continue;
-      for (const [key, kind] of HANDLER_KINDS) {
-        if (!Reflect.getMetadata(key, type)) continue;
+      const declared = HANDLER_KINDS.filter(([key]) =>
+        Reflect.getMetadata(key, type),
+      );
+      for (const [, kind] of declared) {
         this.wrap(
-          provider,
-          type,
-          kind,
+          { provider, type, kind },
           behavior,
           mode === 'off' ? undefined : found,
         );
@@ -138,15 +149,14 @@ export class PipelineBootstrap
   }
 
   private wrap(
-    provider: Provider,
-    type: Constructor,
-    kind: DeclaredKind,
+    handler: DiscoveredHandler,
     behavior: (
       type: Constructor<IPipelineBehavior>,
       handler: string,
     ) => IPipelineBehavior,
     diagnostics: PipelineBehaviorDiagnostic[] | undefined,
   ): void {
+    const { provider, type, kind } = handler;
     const handlerName = type.name;
     const declared = pipelineOf(type);
     const plan = compilePipelinePlan({
@@ -157,6 +167,7 @@ export class PipelineBootstrap
       skippedBehaviorTypes: declared.skipped,
       globalBehaviors: this.options.globalBehaviors,
     });
+
     if (!plan.hasPipeline) return;
     if (!provider.isDependencyTreeStatic()) {
       throw new Error(
@@ -165,13 +176,6 @@ export class PipelineBootstrap
           'request data from async context.',
       );
     }
-
-    const method = kind === 'event' ? 'handle' : 'execute';
-    const instance = provider.instance as Record<string, unknown>;
-    const original = instance[method] as (
-      this: unknown,
-      ...args: unknown[]
-    ) => unknown;
 
     const resolved = plan.behaviorTypes.map((t) => behavior(t, handlerName));
     if (diagnostics) {
@@ -184,20 +188,36 @@ export class PipelineBootstrap
         diagnostics,
       });
     }
+    this.install(handler, plan, resolved);
+  }
+
+  /** Replaces the handler instance's method with its pipeline, restored on close. */
+  private install(
+    handler: DiscoveredHandler,
+    plan: PipelinePlan,
+    behaviors: IPipelineBehavior[],
+  ): void {
+    const { provider, type, kind } = handler;
+    const method = kind === 'event' ? 'handle' : 'execute';
+    const instance = provider.instance as Record<string, unknown>;
+    const original = instance[method] as (
+      this: unknown,
+      ...args: unknown[]
+    ) => unknown;
     this.logger.debug(
-      `Wrapping ${handlerName}.${method}() [${kind}] with pipeline: [${plan.behaviorTypes.map((t) => t.name).join(' → ')}]`,
+      `Wrapping ${type.name}.${method}() [${kind}] with pipeline: [${plan.behaviorTypes.map((t) => t.name).join(' → ')}]`,
     );
 
     const run = createPipelineRunner(
       original,
       {
         handlerType: type,
-        handlerName,
+        handlerName: type.name,
         requestKind: kind,
         behaviorOptions:
           plan.mergedOptions.size > 0 ? plan.mergedOptions : undefined,
       },
-      resolved,
+      behaviors,
       true,
       this.options.sources,
     );

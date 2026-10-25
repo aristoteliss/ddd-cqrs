@@ -38,6 +38,7 @@ function constraintsOf(
       columns: fields.map((field) => `${meta.tableName}.${field}`).join(', '),
     };
   };
+
   const constraints = Object.values(meta.properties)
     .filter((property) => property.unique)
     .map((property) =>
@@ -47,6 +48,7 @@ function constraintsOf(
         typeof property.unique === 'string' ? property.unique : undefined,
       ),
     );
+
   for (const unique of meta.uniques) {
     const properties = [unique.properties ?? []].flat() as string[];
     const key = properties.length === 1 ? properties[0] : unique.name;
@@ -61,6 +63,7 @@ function constraintsOf(
         : { key, name: key },
     );
   }
+
   return constraints;
 }
 
@@ -128,11 +131,13 @@ export class MikroOrmDialect implements IPersistenceDialect {
     const meta = this.metadata.find(entity.constructor);
     const constraints = meta ? this.constraints.get(meta) : undefined;
     if (!constraints) return undefined;
+
     const { constraint } = error as { constraint?: unknown };
     if (typeof constraint === 'string') {
       return constraints.find(({ name }) => name === constraint)?.key;
     }
     const columns = SQLITE_COLUMNS.exec(error.message)?.[1].trim();
+
     return constraints.find((unique) => unique.columns === columns)?.key;
   }
 }

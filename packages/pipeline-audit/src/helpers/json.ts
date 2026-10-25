@@ -41,68 +41,78 @@ function normalizeAuditValue(
 
   ancestors.add(value);
   try {
-    if (value instanceof Error) {
-      const symbolProperties = normalizeSymbolProperties(value, ancestors);
-      return {
-        $type: 'Error',
-        name: value.name,
-        message: value.message,
-        stack: value.stack,
-        properties: normalizeAuditValue(
-          Object.fromEntries(Object.entries(value)),
-          ancestors,
-        ),
-        ...(symbolProperties.length > 0 ? { symbolProperties } : {}),
-      };
-    }
-    if (value instanceof Map) {
-      return {
-        $type: 'Map',
-        entries: Array.from(value, ([key, item]) => [
-          normalizeAuditValue(key, ancestors),
-          normalizeAuditValue(item, ancestors),
-        ]),
-      };
-    }
-    if (value instanceof Set) {
-      return {
-        $type: 'Set',
-        values: Array.from(value, (item) =>
-          normalizeAuditValue(item, ancestors),
-        ),
-      };
-    }
-    if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) {
-      const bytes =
-        value instanceof ArrayBuffer
-          ? new Uint8Array(value)
-          : new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
-      return {
-        $type: value.constructor.name,
-        bytes: Array.from(bytes),
-      };
-    }
-    if (Array.isArray(value)) {
-      return Array.from({ length: value.length }, (_, index) =>
-        index in value
-          ? normalizeAuditValue(value[index], ancestors)
-          : { $type: 'ArrayHole' },
-      );
-    }
-
-    const properties = Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [
-        key,
-        normalizeAuditValue(item, ancestors),
-      ]),
-    );
-    const symbolProperties = normalizeSymbolProperties(value, ancestors);
-    return symbolProperties.length > 0
-      ? { $type: 'Object', properties, symbolProperties }
-      : properties;
+    return normalizeObject(value, ancestors);
   } finally {
     ancestors.delete(value);
   }
+}
+
+/** The JSON form of an object on the current path; `ancestors` already holds it. */
+function normalizeObject(value: object, ancestors: WeakSet<object>): unknown {
+  if (value instanceof Error) return normalizeError(value, ancestors);
+  if (value instanceof Map) {
+    return {
+      $type: 'Map',
+      entries: Array.from(value, ([key, item]) => [
+        normalizeAuditValue(key, ancestors),
+        normalizeAuditValue(item, ancestors),
+      ]),
+    };
+  }
+  if (value instanceof Set) {
+    return {
+      $type: 'Set',
+      values: Array.from(value, (item) => normalizeAuditValue(item, ancestors)),
+    };
+  }
+  if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) {
+    return normalizeBytes(value);
+  }
+  if (Array.isArray(value)) {
+    return Array.from({ length: value.length }, (_, index) =>
+      index in value
+        ? normalizeAuditValue(value[index], ancestors)
+        : { $type: 'ArrayHole' },
+    );
+  }
+
+  const properties = Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [
+      key,
+      normalizeAuditValue(item, ancestors),
+    ]),
+  );
+  const symbolProperties = normalizeSymbolProperties(value, ancestors);
+
+  return symbolProperties.length > 0
+    ? { $type: 'Object', properties, symbolProperties }
+    : properties;
+}
+
+function normalizeError(value: Error, ancestors: WeakSet<object>): unknown {
+  const symbolProperties = normalizeSymbolProperties(value, ancestors);
+  return {
+    $type: 'Error',
+    name: value.name,
+    message: value.message,
+    stack: value.stack,
+    properties: normalizeAuditValue(
+      Object.fromEntries(Object.entries(value)),
+      ancestors,
+    ),
+    ...(symbolProperties.length > 0 ? { symbolProperties } : {}),
+  };
+}
+
+function normalizeBytes(value: ArrayBuffer | ArrayBufferView): unknown {
+  const bytes =
+    value instanceof ArrayBuffer
+      ? new Uint8Array(value)
+      : new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+  return {
+    $type: value.constructor.name,
+    bytes: Array.from(bytes),
+  };
 }
 
 function normalizeSymbolProperties(

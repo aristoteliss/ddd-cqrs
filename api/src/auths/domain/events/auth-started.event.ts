@@ -4,7 +4,7 @@ import { RootDomainEvent } from '@cqrs-ddd/core/domain';
 import type { Auth } from '../models/auth.entity.js';
 
 /** A session started. The payload carries no token material. */
-export class AuthCreatedEvent extends RootDomainEvent<
+export class AuthStartedEvent extends RootDomainEvent<
   Auth,
   { userId: string; expiresAt: number }
 > {

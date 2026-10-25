@@ -1,6 +1,6 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
-import type { ZodType, z } from 'zod';
+import type { ZodSafeParseResult, ZodType, z } from 'zod';
 import { ZodValidationError } from './errors/zod-validation.error.js';
 import {
   assertPlainRequestOutput,
@@ -132,6 +132,9 @@ export function createZodRequest<
   TBase extends AbstractConstructor = AbstractConstructor,
 >(schema: TSchema, Base?: TBase): ZodRequestClass<TSchema, TBase> {
   const Parent = (Base ?? class {}) as new (...args: unknown[]) => object;
+  type Self = new (
+    ...args: unknown[]
+  ) => InstanceType<TBase> & z.output<TSchema>;
 
   class Request extends Parent {
     static readonly [ZOD_SCHEMA_KEY] = schema;
@@ -139,27 +142,18 @@ export function createZodRequest<
 
     static parse(input: z.input<TSchema>, ...baseArgs: unknown[]) {
       // biome-ignore lint/complexity/noThisInStatic: dynamic subclass instantiation for polymorphic parse()
-      const Target = this as unknown as new (
-        ...args: unknown[]
-      ) => InstanceType<TBase> & z.output<TSchema>;
+      const Target = this as unknown as Self;
       return new Target(input, ...baseArgs);
     }
 
     static async parseAsync(input: z.input<TSchema>, ...baseArgs: unknown[]) {
-      const result = await schema.safeParseAsync(input);
-      if (!result.success) {
-        throw new ZodValidationError(result.error);
-      }
-      assertPlainRequestOutput(result.data, 'parseAsync');
+      const data = outputOf(await schema.safeParseAsync(input), 'parseAsync');
+      const handOff: PreValidated = { [PRE_VALIDATED]: data, rawInput: input };
 
       // biome-ignore lint/complexity/noThisInStatic: dynamic subclass instantiation for polymorphic parseAsync()
-      const Target = this as unknown as new (
-        ...args: unknown[]
-      ) => InstanceType<TBase> & z.output<TSchema>;
-      return new Target(
-        { [PRE_VALIDATED]: result.data, rawInput: input },
-        ...baseArgs,
-      );
+      const Target = this as unknown as Self;
+
+      return new Target(handOff, ...baseArgs);
     }
 
     static safeParse(input: unknown) {
@@ -171,32 +165,47 @@ export function createZodRequest<
       ...baseArgs: unknown[]
     ) {
       super(...baseArgs);
-
-      let data: Record<string, unknown>;
-      let rawInput: unknown;
-
-      if (isPreValidated(input)) {
-        // Handed over by parseAsync(), which has already validated and asserted
-        // the output shape. Re-running safeParse here would defeat the point:
-        // an async schema cannot be parsed synchronously at all.
-        data = input[PRE_VALIDATED];
-        rawInput = input.rawInput;
-      } else {
-        const result = schema.safeParse(input);
-        if (!result.success) {
-          throw new ZodValidationError(result.error);
-        }
-        assertPlainRequestOutput(result.data, 'constructor');
-        data = result.data as Record<string, unknown>;
-        rawInput = input;
-      }
-
-      setRawInput(this, rawInput);
-      defineEnumerableDataProperties(this, data);
-      setValidatedData(this, schema, data);
+      assignInput(this, schema, input);
     }
   }
 
+  forwardStandardSchema(Request, schema);
+
+  return Request as unknown as ZodRequestClass<TSchema, TBase>;
+}
+
+function outputOf(
+  result: ZodSafeParseResult<unknown>,
+  source: 'constructor' | 'parseAsync',
+): Record<string, unknown> {
+  if (!result.success) {
+    throw new ZodValidationError(result.error);
+  }
+  assertPlainRequestOutput(result.data, source);
+  return result.data;
+}
+
+function assignInput(request: object, schema: ZodType, input: unknown): void {
+  let data: Record<string, unknown>;
+  let rawInput: unknown;
+
+  if (isPreValidated(input)) {
+    // Handed over by parseAsync(), which has already validated and asserted
+    // the output shape. Re-running safeParse here would defeat the point:
+    // an async schema cannot be parsed synchronously at all.
+    data = input[PRE_VALIDATED];
+    rawInput = input.rawInput;
+  } else {
+    data = outputOf(schema.safeParse(input), 'constructor');
+    rawInput = input;
+  }
+
+  setRawInput(request, rawInput);
+  defineEnumerableDataProperties(request, data);
+  setValidatedData(request, schema, data);
+}
+
+function forwardStandardSchema(Request: object, schema: object): void {
   const standard = (schema as Record<string, unknown>)['~standard'];
   if (standard !== undefined) {
     Object.defineProperty(Request, '~standard', {
@@ -206,8 +215,6 @@ export function createZodRequest<
       configurable: true,
     });
   }
-
-  return Request as unknown as ZodRequestClass<TSchema, TBase>;
 }
 
 export type ZodCommandClass<

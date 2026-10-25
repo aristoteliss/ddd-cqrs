@@ -1,6 +1,7 @@
 ---
 name: cqrs-ddd-readability
 description: Write and review readable TypeScript in this repository, following the conventions the code already uses. Covers the domain, command, query, handler, event and route code of the bounded contexts (api/src/<context>/ and the integration/ applications), and the measurable general and library limits (function length, nesting, parameters, conditions, numbers, errors, abstractions) for packages/* and every other workspace. Use when adding a command or query, changing a handler, an aggregate, a domain event or a route, writing or refactoring library code, or reviewing a diff or a file for readability, complexity or over-engineering. For persistence lifecycle, caching, idempotency keys, tenant handling or pipeline internals, use cqrs-ddd-architecture instead.
+model: sonnet
 ---
 
 # cqrs-ddd Readability Skill
@@ -107,7 +108,9 @@ precedence over textbook DDD or CQRS advice.
   repository, and authorizes after loading (`authorize`, `can`, `project`).
 - **C5. Thin handlers.** `handle()` (commands) or `execute()` (queries) reads top to bottom
   as: load → not found (`EntityNotFoundException`) → authorize against the real aggregate
-  → one domain method call → save → return. A branch that decides a business outcome
+  → one domain method call → save → return. Each step is its own block, separated by one
+  blank line: the destructured command, load with its not-found guard, authorize, the
+  domain call, save, and `return`. A branch that decides a business outcome
   belongs in the aggregate.
 - **C6. Cross-cutting concerns in the pipeline.** Type-level authorization, rate limits,
   idempotency, audit, retries, caching, feature flags, dead letters and metrics are
@@ -141,28 +144,44 @@ precedence over textbook DDD or CQRS advice.
 
 - **G1. Length.** A `handle()` or `execute()` body is at most 30 lines; any other function
   or method body is at most 40 lines. Decorators and the signature do not count. Split a
-  longer body by step: refuse, load, decide, act.
-- **G2. Nesting.** At most 3 levels of nested blocks inside a function body. Each `if`,
-  loop, `try`, `switch` and inline callback whose body holds statements adds one level; an
-  `else if` stays at the level of its `if`; a named function, declared or assigned to a
-  `const`, starts its own count at 0. Return early, extract the inner loop's body, or name
-  the callback.
+  longer body by step (refuse, load, decide, act) only where each extracted part has a
+  meaning of its own and a name that says it, so the caller still reads top to bottom. A
+  function whose steps only make sense together (a protocol, a parser, an ordered cache or
+  concurrency sequence) may stay longer, as one function with its steps separated by
+  blank lines (G15); the review states why. Never split only to meet the number: a reader
+  who jumps between helpers to follow one idea reads worse.
+- **G2. Nesting.** Prefer an early exit to nested logic. One level of nesting is normal
+  where it helps readability; at most 2 levels of nested blocks inside a function body.
+  A third level is an exception, stated in the review: a core library path where it buys
+  a real performance gain (a measurable performance gain always wins), or a rare case
+  that reads better at 3 than split. Each `if`, loop, `try`, `switch` and inline callback
+  whose body holds statements adds one level; an `else if` stays at the level of its
+  `if`; a named function, declared or assigned to a `const`, starts its own count at 0.
+  Return early, extract the inner loop's body, or name the callback.
 - **G3. Parameters.** At most 3 positional parameters; beyond that, pass one object with
   named fields. No call passes `undefined` or `{}` only to reach a later argument. The
   object's type is named for what it describes (`AccessTokenIssueRequest`, or
   `<Owner>Options` for configuration), never for the function (`IssueParams`), and the
   function destructures the fields it uses once, in its signature or on its first line.
+  A published signature keeps its parameters; the limit applies to new code and to
+  signatures that can change without breaking a caller.
 - **G4. Dependencies.** At most 6 constructor dependencies. More means the class does
   more than one job: split it.
 - **G5. Ternaries.** No nested ternary. A conditional expression that spans more than
   three lines, or that builds an object inside a call argument, becomes a named `const`.
 - **G6. Guard clauses.** Reject the not-found, not-allowed and invalid cases first and
-  return or throw early, so that the main path stays unindented.
+  return or throw early, so that the main path stays unindented. Prefer an early exit to
+  an `if` that wraps the rest of the body.
 - **G7. Comments.** Follow `AGENTS.md`, Documentation and comment policy: commands,
   queries, handlers and ordinary entities carry no inline comments. When a step needs
   one, rename or extract instead. A comment elsewhere explains why, never what.
-- **G8. Names.** Follow `AGENTS.md`, Naming. A method does not repeat its receiver:
-  `dispatcher.enqueue(...)`, not `welcomeEmailDispatcher.enqueueWelcomeEmail(...)`.
+- **G8. Names.** Follow `AGENTS.md`, Naming. Names are short, clear and simple. A method
+  does not repeat its receiver: `dispatcher.enqueue(...)`, not
+  `welcomeEmailDispatcher.enqueueWelcomeEmail(...)`. Library, helper and other reusable
+  code names the general concept, not its first caller (`joinKeySegments`, `textRule`,
+  not `buildUserCacheKey`). A conventional role name carries two or three words because
+  the convention asks for them (`RenameRoleCommand`, `GetUserOverviewHandler`,
+  `UserCreatedEvent`); that length is expected.
 - **G9. Conditions.** At most 3 operands joined by `&&` and `||` in one `if`, `while` or
   ternary condition. A longer condition becomes a named boolean `const` that says why
   (`needsRefresh` in `references/examples.md`, example 6).
@@ -189,6 +208,15 @@ precedence over textbook DDD or CQRS advice.
   file, below the code that uses it (`capabilityLabel`, `buildConditions`). It moves to
   the folder's `helpers/` when a second file uses it (`firstHeaderValue`) or when it is
   tested on its own. Pipeline options follow C7.
+- **G15. Layout.** The statements of one logical step sit together, one under the other,
+  with no blank line between them. One blank line separates two steps (load and guard,
+  decide, act, return). A `return` that ends a multi-step body stands apart; a short
+  body that does one thing (create, configure, return) keeps its `return` with it. Do not put a
+  blank line after every statement of one step, and do not run several steps together
+  without one.
+- **G16. Early exit without contortions.** An early exit must make the code simpler. When
+  reaching it would need a new `let` temporary, or would read more complex than the
+  nested form, keep the nested form.
 
 ## Library rules
 
@@ -239,10 +267,14 @@ scope. Every exported symbol there is public API that consumers read in their ed
 
 ## Workflow
 
+0. **Work inline.** Delegate only when the change spans more than one workspace, to at
+   most two `cqrs-ddd-refactor` agents (`.claude/agents/cqrs-ddd-refactor.md`) with
+   disjoint files.
 1. **Identify** the bounded context and the kind of change: command, query, domain change,
-   event, route, refactor or review. Open the file that the "Copy from" table of
-   [references/style.md](references/style.md) names for that kind (for a change handler,
-   `api/src/users/application/cqrs/commands/update-user.handler.ts`) and copy its shape.
+   event, route, refactor or review. Open only the section of
+   [references/style.md](references/style.md) for that kind and the one file its "Copy
+   from" table names (for a change handler,
+   `api/src/users/application/cqrs/commands/update-user.handler.ts`), and copy its shape.
    Never copy an item listed under "Existing deviations" in `references/conventions.md`.
 2. **State the design in 3 to 6 bullets**: the names (command, method, event), the files
    to add, the pipeline entries, what the aggregate enforces and what the schema checks.
@@ -253,13 +285,13 @@ scope. Every exported symbol there is public API that consumers read in their ed
    Register a new handler in `api/src/app.ts` (`cqrs.register(new ...Handler(...))`) and a
    new route in `<context>/routes.ts`.
 4. **Run the real checks.** `pnpm --filter <workspace> test` (the api's runs `pnpm build`
-   first), `pnpm --filter <workspace> lint` (`tsc --noEmit`), `pnpm check` (Biome) and
-   `pnpm lint:plugins` (the Grit architecture checks). Run `pnpm test:e2e` when a route
-   or persistence changes and Docker is available. Packages keep 100% per-file coverage.
-5. **Self-review the diff** against the checklist below. Report every "no" with its
-   reason, and report check results exactly as they ran.
-6. **Report** the commands you ran and their results, and any refactoring candidates in
-   the format below.
+   first), `pnpm --filter <workspace> lint` (`tsc --noEmit`), `pnpm exec biome check` on
+   the changed files and `pnpm lint:plugins` (the Grit architecture checks). Run
+   `pnpm test:e2e` when a route or persistence changes and Docker is available. Packages
+   keep 100% per-file coverage.
+5. **Self-review and report.** Check the diff against the checklist below and report
+   every "no" with its reason, the commands you ran with their real results, and any
+   refactoring candidates in the format below.
 
 ## Reviewing a diff or a file
 
@@ -270,8 +302,8 @@ scope. Every exported symbol there is public API that consumers read in their ed
 
 ```text
 Refactoring candidates (not changed):
-- api/src/auths/services/jwt-authenticator.ts authenticate: G1, 124 lines (limit 40). Split by step: read the credential, verify it, resolve the principal.
-- api/src/auths/services/principal-login.service.ts: G4, 12 constructor dependencies (limit 6). Move refresh behind a command handler.
+- packages/mikro-orm/src/concurrency/optimistic-update.ts optimisticUpdate: G3, 5 positional parameters (limit 3). Published API: an options form needs an owner decision.
+- packages/pipeline/src/services/pipeline-runner.ts createPipelineRunner: G3, 5 positional parameters (limit 3). Published API: an options form needs an owner decision.
 ```
 
 ## Self-review checklist
@@ -304,9 +336,13 @@ code; the others apply everywhere the rules do.
     time extracted to `api/src/common/<behavior>/`?
 12. Does each route dispatch exactly one command or query, with no domain rule, repository
     call or state-changing service call?
-13. Are `handle`/`execute` bodies at most 30 lines, other bodies at most 40, nesting at
-    most 3, positional parameters at most 3 and constructor dependencies at most 6, with
-    no nested ternary?
+13. Are `handle`/`execute` bodies at most 30 lines and other bodies at most 40, or is a
+    longer one kept whole for a reason the review states? Is nesting at most 2 (3 only
+    for a stated performance or readability reason), with no early exit that needs a new
+    `let` or reads worse than the nesting it replaces,
+    positional parameters at most 3 outside published signatures, constructor
+    dependencies at most 6, with no nested ternary, and is every step separated from the
+    next by one blank line, with none inside a step?
 14. Does every condition have at most 3 operands, with no `else` after an exit, and does
     every number other than 0 and 1 state its meaning or come from a named constant?
 15. Does every check of the arguments and the state run before the first write, event or

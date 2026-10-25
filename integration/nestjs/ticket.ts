@@ -48,6 +48,7 @@ export class Ticket extends AggregateRoot {
   static open(id: string, title: string): Ticket {
     const ticket = new Ticket(id);
     ticket.apply(new TicketOpenedEvent(id, title));
+
     return ticket;
   }
 
@@ -62,7 +63,9 @@ export class Ticket extends AggregateRoot {
   /** @throws TicketAlreadyClosedError when the ticket is closed. */
   close(): this {
     if (this.#status === 'closed') throw new TicketAlreadyClosedError(this.id);
+
     this.apply(new TicketClosedEvent(this.id));
+
     return this;
   }
 

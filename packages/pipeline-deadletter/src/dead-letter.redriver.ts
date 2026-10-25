@@ -87,6 +87,40 @@ export class DeadLetterRedriver {
   async redrive(id: string): Promise<DeadLetterRedriveResult> {
     const record = await this.store.get(id);
     if (!record) throw new DeadLetterRedriveError(id, 'no such dead letter');
+    const { requestType, dispatch } = this.targetOf(id, record);
+
+    const request = this.options.rebuild
+      ? this.options.rebuild(record, requestType)
+      : Object.assign(
+          Object.create(requestType.prototype),
+          record.payload as object,
+        );
+
+    let response: unknown;
+    try {
+      response = await runAsRedrive(id, () => dispatch(request, record));
+    } catch (error) {
+      await this.store.recordAttempt(id, {
+        name: error instanceof Error ? error.name : 'unknown',
+        message: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+
+    await this.store.markResolved(id);
+
+    return { id, response };
+  }
+
+  /**
+   * The request class and the dispatch that redrive `record`.
+   *
+   * @throws DeadLetterRedriveError when the record cannot be redriven.
+   */
+  private targetOf(
+    id: string,
+    record: DeadLetterRecord,
+  ): { requestType: Constructor; dispatch: DeadLetterDispatch } {
     if (record.status === 'resolved') {
       throw new DeadLetterRedriveError(id, 'it is already resolved');
     }
@@ -110,27 +144,7 @@ export class DeadLetterRedriver {
         'its payload was redacted; configure rebuild to restore the redacted values',
       );
     }
-
-    const request = this.options.rebuild
-      ? this.options.rebuild(record, requestType)
-      : Object.assign(
-          Object.create(requestType.prototype),
-          record.payload as object,
-        );
-
-    let response: unknown;
-    try {
-      response = await runAsRedrive(id, () => dispatch(request, record));
-    } catch (error) {
-      await this.store.recordAttempt(id, {
-        name: error instanceof Error ? error.name : 'unknown',
-        message: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
-    }
-
-    await this.store.markResolved(id);
-    return { id, response };
+    return { requestType, dispatch };
   }
 
   /** Closes the dead letter `id` without replaying it. */

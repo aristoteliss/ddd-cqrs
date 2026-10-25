@@ -15,8 +15,8 @@ import { AUDIT_DEFAULTS } from '../../../../common/audit/audit.options.js';
 import { AUDIT_ACTIONS } from '../../../../common/constants/index.js';
 import { NodeRefreshTokens } from '../../../infrastructure/node-refresh-tokens.js';
 import type { PrincipalLoginService } from '../../../services/principal-login.service.js';
-import { CreateAuthCommand } from './create-auth.command.js';
-import { CreateAuthHandler } from './create-auth.handler.js';
+import { StartAuthCommand } from './start-auth.command.js';
+import { StartAuthHandler } from './start-auth.handler.js';
 
 describe('Login audit actor', () => {
   const recorded: AuditRecord[] = [];
@@ -48,7 +48,7 @@ describe('Login audit actor', () => {
       ],
     });
     cqrs.register(
-      new CreateAuthHandler(
+      new StartAuthHandler(
         cqrs.eventBus,
         { authenticate, sign: vi.fn() } as unknown as PrincipalLoginService,
         { save: vi.fn().mockResolvedValue(null) },
@@ -71,7 +71,7 @@ describe('Login audit actor', () => {
     await expect(
       runWithTenant('tenant_a', () =>
         commandBus.execute(
-          new CreateAuthCommand({
+          new StartAuthCommand({
             email,
             code: '424242',
             clientIp: '203.0.113.7',

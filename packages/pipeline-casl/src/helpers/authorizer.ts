@@ -73,9 +73,13 @@ export class CaslAuthorizer {
     );
     for (const field of fields ?? []) {
       if (!ability.can(action, typedSubject, field)) {
-        throw denied(action, subjectType, entityId, ` field "${field}"`, [
-          field,
-        ]);
+        throw denied({
+          action,
+          subjectType,
+          entityId,
+          detail: ` field "${field}"`,
+          fields: [field],
+        });
       }
     }
   }
@@ -95,12 +99,12 @@ export class CaslAuthorizer {
       );
     }
     const { ability, typedSubject } = this.permitted(action, subject);
-    return projectPermittedFields(
+    return projectPermittedFields({
       ability,
       action,
       typedSubject,
-      toSnapshot(candidate) as Record<string, unknown> | unknown[],
-    ) as Projected<TCandidate>;
+      record: toSnapshot(candidate) as Record<string, unknown> | unknown[],
+    }) as Projected<TCandidate>;
   }
 
   /**
@@ -128,17 +132,20 @@ export class CaslAuthorizer {
   private permitted(action: string, subject: object | string) {
     const ability = this.ability ?? getCaslAbility();
     const resolved = resolveSubject(subject);
+    const { subjectType, entityId } = resolved;
+
     if (!ability) {
-      throw denied(
+      throw denied({
         action,
-        resolved.subjectType,
-        resolved.entityId,
-        ' (no authorization ability present in context)',
-      );
+        subjectType,
+        entityId,
+        detail: ' (no authorization ability present in context)',
+      });
     }
     if (!ability.can(action, resolved.typedSubject)) {
-      throw denied(action, resolved.subjectType, resolved.entityId, '');
+      throw denied({ action, subjectType, entityId, detail: '' });
     }
+
     return { ability, ...resolved };
   }
 }
@@ -190,13 +197,22 @@ function toSnapshot(value: unknown): unknown {
     : value;
 }
 
-function denied(
-  action: string,
-  subjectType: string,
-  entityId: string | number | undefined,
-  detail: string,
-  fields?: string[],
-): UnauthorizedActionException {
+/** A refused action: what was refused and the text that ends its reason. */
+interface Denial {
+  action: string;
+  subjectType: string;
+  entityId: string | number | undefined;
+  detail: string;
+  fields?: string[];
+}
+
+function denied({
+  action,
+  subjectType,
+  entityId,
+  detail,
+  fields,
+}: Denial): UnauthorizedActionException {
   return new UnauthorizedActionException({
     action,
     subject: subjectType,
@@ -215,17 +231,7 @@ function resolveSubject(subject: object | string): {
     return { subjectType: subject, typedSubject: subject };
   }
 
-  // A value tagged by CASL's `subject()` is a plain object whose constructor
-  // is `Object`; its tag is the only reliable subject type.
-  const tagged = (subject as { __caslSubjectType__?: unknown })
-    .__caslSubjectType__;
-  const subjectType =
-    typeof tagged === 'string' && tagged.length > 0
-      ? tagged
-      : subject.constructor?.name && subject.constructor.name !== 'Object'
-        ? subject.constructor.name
-        : 'Object';
-
+  const subjectType = subjectTypeOf(subject);
   const record = toSnapshot(subject) as Record<string, unknown>;
   const entityId =
     (subject as { id?: string | number }).id ??
@@ -235,4 +241,15 @@ function resolveSubject(subject: object | string): {
   }) as unknown as string;
 
   return { subjectType, entityId, typedSubject };
+}
+
+function subjectTypeOf(subject: object): string {
+  // A value tagged by CASL's `subject()` is a plain object whose constructor
+  // is `Object`; its tag is the only reliable subject type.
+  const tagged = (subject as { __caslSubjectType__?: unknown })
+    .__caslSubjectType__;
+  if (typeof tagged === 'string' && tagged.length > 0) return tagged;
+  return subject.constructor?.name && subject.constructor.name !== 'Object'
+    ? subject.constructor.name
+    : 'Object';
 }

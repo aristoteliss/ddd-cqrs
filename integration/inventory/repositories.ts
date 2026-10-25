@@ -63,8 +63,10 @@ export class RegisterProductRepository extends CommandRepository<
   async save(product: Product): Promise<ProductSnapshot> {
     const em = this.store.em;
     assertAutocommit(em, 'registerProduct');
+
     em.persist(em.create(Product, product));
     await em.flush();
+
     return product.toJSON();
   }
 }
@@ -95,6 +97,7 @@ export class StockRepository extends AggregateRepository<
   })
   async save(product: Product): Promise<ProductSnapshot> {
     const snapshot = product.toJSON();
+
     await optimisticUpdate(
       this.store.em,
       Product,
@@ -106,6 +109,7 @@ export class StockRepository extends AggregateRepository<
       },
       'Product',
     );
+
     return snapshot;
   }
 }

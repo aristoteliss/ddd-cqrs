@@ -5,11 +5,11 @@ import type { EventBus } from '@cqrs-ddd/cqrs';
 import { currentTenantId } from '@cqrs-ddd/pipeline-tenant';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { User } from '../../../../users/domain/models/user.entity.js';
-import { AuthCreatedEvent } from '../../../domain/events/auth-created.event.js';
+import { AuthStartedEvent } from '../../../domain/events/auth-started.event.js';
 import { Auth } from '../../../domain/models/auth.entity.js';
 import { NodeRefreshTokens } from '../../../infrastructure/node-refresh-tokens.js';
-import { CreateAuthCommand } from './create-auth.command.js';
-import { CreateAuthHandler } from './create-auth.handler.js';
+import { StartAuthCommand } from './start-auth.command.js';
+import { StartAuthHandler } from './start-auth.handler.js';
 
 const TENANT = 'tenant_alpha';
 
@@ -18,7 +18,7 @@ afterEach(() => setTenantResolver(currentTenantId));
 
 const NOW = Date.UTC(2026, 8, 22);
 
-describe('CreateAuthHandler', () => {
+describe('StartAuthHandler', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
@@ -41,7 +41,7 @@ describe('CreateAuthHandler', () => {
     const save = vi.fn(async (auth: Auth) => auth.toJSON());
     const tokens = new NodeRefreshTokens();
     const cookies = { save: vi.fn(), clear: vi.fn() };
-    const handler = new CreateAuthHandler(
+    const handler = new StartAuthHandler(
       { publishAll } as unknown as EventBus,
       principalLoginService as never,
       { save },
@@ -76,7 +76,7 @@ describe('CreateAuthHandler', () => {
     } = setup();
 
     const result = await handler.execute(
-      new CreateAuthCommand({
+      new StartAuthCommand({
         email: 'alice@example.test',
         code: '123456',
         clientIp: '203.0.113.7',
@@ -104,7 +104,7 @@ describe('CreateAuthHandler', () => {
     });
     expect(cookies.save).toHaveBeenCalledExactlyOnceWith(result);
     expect(publishAll).toHaveBeenCalledExactlyOnceWith(
-      [expect.any(AuthCreatedEvent)],
+      [expect.any(AuthStartedEvent)],
       auth,
     );
   });
@@ -112,7 +112,7 @@ describe('CreateAuthHandler', () => {
   it('issues a different refresh token for every login', async () => {
     const { handler } = setup();
     const command = () =>
-      new CreateAuthCommand({
+      new StartAuthCommand({
         email: 'alice@example.test',
         code: '123456',
         clientIp: '203.0.113.7',

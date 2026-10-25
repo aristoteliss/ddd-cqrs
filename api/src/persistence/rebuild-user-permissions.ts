@@ -15,10 +15,12 @@ export async function rebuildUserPermissions(): Promise<Map<string, number>> {
       .fork()
       .find(User, {}, { fields: ['id'], orderBy: { id: 'asc' } } as never);
     const ids = users.map((user) => user.id);
+
     for (let start = 0; start < ids.length; start += BATCH_SIZE) {
       const batch = ids.slice(start, start + BATCH_SIZE);
       await orm.em.fork().transactional((em) => projector.rebuild(em, batch));
     }
+
     return ids.length;
   });
 }

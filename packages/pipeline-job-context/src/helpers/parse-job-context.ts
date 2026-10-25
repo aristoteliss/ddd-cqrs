@@ -56,6 +56,7 @@ export function parseJobContext(
     throw new InvalidJobContextError('jobContext is not an object');
   }
   assertFields(value, CONTEXT_FIELDS, 'jobContext');
+
   const { tenantId, correlationId, principal } = value;
   if (typeof tenantId !== 'string' || !tenants.includes(tenantId)) {
     throw new InvalidJobContextError('tenantId is not a configured tenant');
@@ -66,21 +67,23 @@ export function parseJobContext(
   ) {
     throw new InvalidJobContextError('correlationId is malformed');
   }
+
   if (!isRecord(principal)) {
     throw new InvalidJobContextError('principal is not an object');
   }
   assertFields(principal, PRINCIPAL_FIELDS, 'principal');
   const { id, type, sessionId } = principal;
-  if (
-    !isText(id) ||
-    !isText(type) ||
-    (sessionId !== undefined && !isText(sessionId))
-  ) {
+  if (!isText(id) || !isText(type) || !isOptionalText(sessionId)) {
     throw new InvalidJobContextError('principal is malformed');
   }
+
   return {
     tenantId,
     correlationId,
     principal: toReference({ id, type, sessionId }),
   };
+}
+
+function isOptionalText(value: unknown): value is string | undefined {
+  return value === undefined || isText(value);
 }

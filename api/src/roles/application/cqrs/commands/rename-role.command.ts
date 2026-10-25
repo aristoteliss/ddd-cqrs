@@ -5,7 +5,7 @@ import { createCommand, updatable } from '@cqrs-ddd/pipeline-zod';
 import { z } from 'zod';
 import { Role } from '../../../domain/models/role.entity.js';
 
-export class UpdateRoleCommand extends createCommand(
+export class RenameRoleCommand extends createCommand(
   z.object({
     id: z.uuid(),
     name: z

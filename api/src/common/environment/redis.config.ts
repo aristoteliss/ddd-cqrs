@@ -30,11 +30,13 @@ export function redisConfig(): RedisConfig {
   const rawPort = process.env.REDIS_PORT?.trim();
   const host = configuredHost || 'localhost';
   const port = rawPort ? Number(rawPort) : 6379;
+
   if (!Number.isInteger(port) || port < 1 || port > 65_535) {
     throw new Error(
       `REDIS_PORT must be an integer between 1 and 65535, received "${rawPort}".`,
     );
   }
+
   return {
     host,
     port,

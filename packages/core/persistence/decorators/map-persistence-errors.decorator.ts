@@ -97,7 +97,7 @@ export function MapPersistenceErrors<
    */
   otherwise?: (this: TThis, error: unknown, entity: TEntity) => unknown;
 }) {
-  return <TResult>(
+  const decorate = <TResult>(
     _target: object,
     _key: string | symbol,
     descriptor: TypedPropertyDescriptor<(...args: TArgs) => Promise<TResult>>,
@@ -125,6 +125,7 @@ export function MapPersistenceErrors<
           key === undefined
             ? undefined
             : (unique as Record<string, (entity: TEntity) => Error>)[key];
+
         if (toError) throw toError(entity);
         if (options.otherwise)
           throw options.otherwise.call(this as TThis, error, entity);
@@ -132,4 +133,5 @@ export function MapPersistenceErrors<
       }
     };
   };
+  return decorate;
 }

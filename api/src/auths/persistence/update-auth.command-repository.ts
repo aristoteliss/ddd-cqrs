@@ -33,6 +33,7 @@ export class UpdateAuthCommandRepository extends AggregateRepository<
         { onConflictFields: ['tokenHash'], onConflictAction: 'ignore' },
       );
     }
+
     await optimisticUpdate(
       this.store.em,
       Auth,
@@ -46,6 +47,7 @@ export class UpdateAuthCommandRepository extends AggregateRepository<
       },
       'Auth',
     );
+
     return snapshot;
   }
 }

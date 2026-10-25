@@ -49,6 +49,14 @@ export interface HandlerEntry {
   readonly resolve: () => object;
 }
 
+/** The dispatch tables handlers join, and what their pipelines are built with. */
+export interface Registry {
+  readonly handlers: Handlers;
+  readonly behavior: PipelineSettings['behavior'];
+  readonly options: RegistrationOptions;
+  readonly logger: PipelineLogger;
+}
+
 const LOGGING_ID = getBehaviorId(LoggingBehavior);
 
 /**
@@ -74,6 +82,7 @@ export function behaviorResolver(
     }
     instances.set(id, instance);
   }
+
   const behavior = (type: Constructor<IPipelineBehavior>) => {
     const id = getBehaviorId(type);
     let instance = instances.get(id);
@@ -83,11 +92,13 @@ export function behaviorResolver(
     }
     return instance;
   };
+
   for (const config of toGlobalConfigs(globalBehaviors)) {
     for (const entry of [...(config.before ?? []), ...(config.after ?? [])]) {
       behavior(behaviorEntryType(entry, 'globalBehaviors'));
     }
   }
+
   return behavior;
 }
 
@@ -99,12 +110,11 @@ export function behaviorResolver(
  * @throws TypeError on a second command or query handler.
  */
 export function registerHandlers(
-  handlers: Handlers,
+  registry: Registry,
   entries: readonly HandlerEntry[],
-  behavior: PipelineSettings['behavior'],
-  options: RegistrationOptions,
-  logger: PipelineLogger,
 ): void {
+  const { handlers, behavior, options, logger } = registry;
+
   const mode = options.diagnostics ?? 'strict';
   const level = options.bootstrapLogLevel ?? 'debug';
   const found: PipelineBehaviorDiagnostic[] = [];
@@ -115,21 +125,51 @@ export function registerHandlers(
     diagnostics: mode === 'off' ? undefined : found,
     log: level === 'none' ? undefined : (message) => logger[level]?.(message),
   };
+
   for (const { type, resolve } of entries) {
     const command = commandOf(type);
     const query = queryOf(type);
     const events = eventsOf(type);
-    if (command)
-      bind(handlers.commands, 'command', command, type, resolve, settings);
-    if (query) bind(handlers.queries, 'query', query, type, resolve, settings);
+
+    if (command) {
+      bind(
+        handlers.commands,
+        { kind: 'command', request: command, type, resolve },
+        settings,
+      );
+    }
+    if (query) {
+      bind(
+        handlers.queries,
+        { kind: 'query', request: query, type, resolve },
+        settings,
+      );
+    }
     if (events) {
-      const run = toDispatch(type, resolve, 'event', settings);
-      for (const event of events) {
-        const subscribers = handlers.events.get(event) ?? [];
-        handlers.events.set(event, [...subscribers, { name: type.name, run }]);
-      }
+      const run = toDispatch({ type, resolve, kind: 'event' }, settings);
+      subscribe(handlers.events, events, { name: type.name, run });
     }
   }
+  report(found, mode, logger);
+}
+
+function subscribe(
+  table: Map<RequestType, EventSubscriber[]>,
+  events: Iterable<RequestType>,
+  subscriber: EventSubscriber,
+): void {
+  for (const event of events) {
+    const subscribers = table.get(event) ?? [];
+    table.set(event, [...subscribers, subscriber]);
+  }
+}
+
+/** Throws the contract violations in `'strict'` mode, else logs each one. */
+function report(
+  found: PipelineBehaviorDiagnostic[],
+  mode: NonNullable<RegistrationOptions['diagnostics']>,
+  logger: PipelineLogger,
+): void {
   if (found.length > 0 && mode === 'strict') {
     throw new PipelineConfigurationError(found);
   }
@@ -140,18 +180,22 @@ export function registerHandlers(
   }
 }
 
+/** A command or query handler, with the request class it handles. */
+interface HandlerBinding extends HandlerEntry {
+  readonly kind: 'command' | 'query';
+  readonly request: RequestType;
+}
+
 function bind(
   table: Map<RequestType, Dispatch>,
-  kind: 'command' | 'query',
-  request: RequestType,
-  type: Constructor,
-  resolve: () => object,
+  binding: HandlerBinding,
   settings: PipelineSettings,
 ): void {
+  const { kind, request, type } = binding;
   if (table.has(request)) {
     throw new TypeError(
       `${request.name} has a second ${kind} handler, ${type.name}; a ${kind} has exactly one.`,
     );
   }
-  table.set(request, toDispatch(type, resolve, kind, settings));
+  table.set(request, toDispatch(binding, settings));
 }

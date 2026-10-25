@@ -1,7 +1,7 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
 import { describe, expect, it } from 'vitest';
-import { CreateAuthCommand } from '../application/cqrs/commands/create-auth.command.js';
+import { StartAuthCommand } from '../application/cqrs/commands/start-auth.command.js';
 import { LoginDtoSchema } from './login.dto.js';
 
 describe('LoginDtoSchema', () => {
@@ -11,7 +11,7 @@ describe('LoginDtoSchema', () => {
 
     for (const code of ['', '123', '1234', '123456', '1234567']) {
       expect(LoginDtoSchema.safeParse({ email, code }).success).toBe(
-        CreateAuthCommand.safeParse({ email, code, clientIp }).success,
+        StartAuthCommand.safeParse({ email, code, clientIp }).success,
       );
     }
     expect(LoginDtoSchema.safeParse({ email, code: '123' }).success).toBe(

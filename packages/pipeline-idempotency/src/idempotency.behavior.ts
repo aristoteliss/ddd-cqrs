@@ -19,7 +19,10 @@ import {
 import { untyped } from '@cqrs-ddd/untyped';
 import { DEFAULT_IDEMPOTENCY_TTL_MS } from './constants/tokens.js';
 import { IdempotencyCompletionError } from './errors/idempotency-completion.error.js';
-import { IdempotencyConflictError } from './errors/idempotency-conflict.error.js';
+import {
+  IdempotencyConflictError,
+  type IdempotencyConflictReason,
+} from './errors/idempotency-conflict.error.js';
 import { fingerprintValue } from './helpers/fingerprint.js';
 import { toJsonSnapshot } from './helpers/json-snapshot.js';
 import type { IdempotencyBehaviorOptions } from './interfaces/idempotency-options.interface.js';
@@ -102,6 +105,21 @@ function inScope(
   return (options?.scope ?? DEFAULT_SCOPE).includes(
     requestKind as IdempotencyRequestKind,
   );
+}
+
+/**
+ * One execution's claim on its key, with what the replay checks and the
+ * completion of that claim need.
+ */
+interface ClaimAttempt {
+  key: string;
+  claimId: string;
+  ttl: number;
+  fingerprint: string | undefined;
+  replayScope: string | undefined;
+  scopeRequired: boolean;
+  claim: IdempotencyRecord;
+  options: IdempotencyBehaviorOptions;
 }
 
 /**
@@ -258,12 +276,34 @@ export class IdempotencyBehavior
 
     setPipelineItem(context, IDEMPOTENCY_KEY_ITEM_TOKEN, key);
 
+    const attempt = this.prepareClaim(context, options, key);
+    const claimed = await this.store.setIfAbsent(
+      key,
+      attempt.claim,
+      attempt.ttl,
+    );
+    if (!claimed) {
+      return this.replayOrReclaim(context, attempt, next);
+    }
+    return this.run(context, attempt, next);
+  }
+
+  /**
+   * Builds this execution's in-progress claim. Every refusal of the options
+   * and the request happens here, before the key is claimed.
+   */
+  private prepareClaim(
+    context: IPipelineContext,
+    options: IdempotencyBehaviorOptions,
+    key: string,
+  ): ClaimAttempt {
     const ttl = options.ttl ?? DEFAULT_IDEMPOTENCY_TTL_MS;
     if (!Number.isSafeInteger(ttl) || ttl <= 0) {
       throw new TypeError(
         'Idempotency ttl must be a positive safe integer in milliseconds.',
       );
     }
+
     const fingerprint =
       (options.fingerprint ?? true)
         ? fingerprintValue(context.request)
@@ -284,45 +324,77 @@ export class IdempotencyBehavior
       createdAt: new Date().toISOString(),
     };
 
-    let claimed = await this.store.setIfAbsent(key, claim, ttl);
-    if (!claimed) {
-      const existing = await this.store.get(key);
+    return {
+      key,
+      claimId,
+      ttl,
+      fingerprint,
+      replayScope,
+      scopeRequired,
+      claim,
+      options,
+    };
+  }
 
-      if (existing) {
-        return this.replayOrConflict(
-          context,
-          key,
-          fingerprint,
-          { replayScope, scopeRequired },
-          existing,
-        );
-      }
-
-      // The record disappeared or expired after the failed claim. Give this
-      // request one bounded opportunity to claim the now-available key instead
-      // of reporting a false in-progress conflict.
-      claimed = await this.store.setIfAbsent(key, claim, ttl);
-      if (!claimed) {
-        return this.replayOrConflict(context, key, fingerprint, {
-          replayScope,
-          scopeRequired,
-        });
-      }
+  /**
+   * The first claim failed. Replay or refuse against the record found; when
+   * that record disappeared or expired meanwhile, claim the key once more.
+   */
+  private async replayOrReclaim(
+    context: IPipelineContext,
+    attempt: ClaimAttempt,
+    next: NextDelegate,
+  ): Promise<unknown> {
+    const existing = await this.store.get(attempt.key);
+    if (existing) {
+      return this.replayOrConflict(context, attempt, existing);
     }
 
+    // The record disappeared or expired after the failed claim. Give this
+    // request one bounded opportunity to claim the now-available key instead
+    // of reporting a false in-progress conflict.
+    const claimed = await this.store.setIfAbsent(
+      attempt.key,
+      attempt.claim,
+      attempt.ttl,
+    );
+    if (!claimed) {
+      return this.replayOrConflict(context, attempt);
+    }
+    return this.run(context, attempt, next);
+  }
+
+  /** Runs the handler under this execution's claim, then completes the claim. */
+  private async run(
+    context: IPipelineContext,
+    attempt: ClaimAttempt,
+    next: NextDelegate,
+  ): Promise<unknown> {
     let response: unknown;
     try {
       response = await next();
     } catch (error) {
-      if (options.releaseOnError ?? true) {
-        await this.release(key, claimId);
+      if (attempt.options.releaseOnError ?? true) {
+        await this.release(attempt.key, attempt.claimId);
       }
       throw error;
     }
 
-    let responseSnapshot: JsonValue | undefined;
+    const responseSnapshot = this.snapshot(context, attempt, response);
+    await this.complete(context, attempt, responseSnapshot);
+
+    return response;
+  }
+
+  /** The replayable JSON snapshot of a successful handler's response. */
+  private snapshot(
+    context: IPipelineContext,
+    attempt: ClaimAttempt,
+    response: unknown,
+  ): JsonValue | undefined {
+    const { key, claimId } = attempt;
     try {
-      responseSnapshot = toJsonSnapshot(response);
+      return toJsonSnapshot(response);
     } catch (cause) {
       // The handler already succeeded, so retain the claim until expiry rather
       // than allowing an immediate retry to repeat completed side effects.
@@ -335,7 +407,18 @@ export class IdempotencyBehavior
       );
       throw new IdempotencyCompletionError(key, claimId, cause, 'snapshot');
     }
+  }
 
+  /**
+   * Stores the completed record while this execution still owns the claim, and
+   * flags the context when a newer claim replaced it.
+   */
+  private async complete(
+    context: IPipelineContext,
+    attempt: ClaimAttempt,
+    responseSnapshot: JsonValue | undefined,
+  ): Promise<void> {
+    const { key, claimId } = attempt;
     // The handler has already succeeded. Completion must be conditional on
     // still owning the claim; a stale execution must never overwrite a newer
     // execution that reclaimed the key after this claim's TTL elapsed.
@@ -345,12 +428,12 @@ export class IdempotencyBehavior
         key,
         claimId,
         {
-          ...claim,
+          ...attempt.claim,
           status: 'completed',
           response: responseSnapshot,
           completedAt: new Date().toISOString(),
         },
-        ttl,
+        attempt.ttl,
       );
     } catch (cause) {
       this.logger.error?.(
@@ -372,8 +455,6 @@ export class IdempotencyBehavior
         IdempotencyBehavior.name,
       );
     }
-
-    return response;
   }
 
   /**
@@ -383,22 +464,34 @@ export class IdempotencyBehavior
    */
   private async replayOrConflict(
     context: IPipelineContext,
-    key: string,
-    fingerprint: string | undefined,
-    scope: { replayScope?: string; scopeRequired: boolean },
+    attempt: ClaimAttempt,
     knownExisting?: IdempotencyRecord,
   ): Promise<unknown> {
-    const existing = knownExisting ?? (await this.store.get(key));
+    const existing = knownExisting ?? (await this.store.get(attempt.key));
+    this.refuseReplay(context, attempt, existing);
+
+    setPipelineItem(context, IDEMPOTENCY_REPLAYED_ITEM_TOKEN, true);
+    this.logger.debug?.(
+      `Replaying idempotent response for ${context.requestName} (key: ${attempt.key})`,
+      IdempotencyBehavior.name,
+    );
+
+    return existing.response;
+  }
+
+  /** Throws the conflict that forbids replaying `existing` to this caller. */
+  private refuseReplay(
+    context: IPipelineContext,
+    attempt: ClaimAttempt,
+    existing: IdempotencyRecord | undefined,
+  ): asserts existing is IdempotencyRecord {
+    const { key, fingerprint } = attempt;
 
     // A second failed claim followed by another disappearing record indicates
     // repeated contention. The retry is deliberately bounded to avoid a hot
     // loop if a backend is unstable or claims are being rapidly replaced.
     if (!existing) {
-      throw new IdempotencyConflictError({
-        key,
-        requestName: context.requestName,
-        reason: 'in_progress',
-      });
+      throw conflict(context, key, 'in_progress');
     }
 
     // A fingerprinted request never replays a record that cannot prove payload identity.
@@ -406,19 +499,11 @@ export class IdempotencyBehavior
       existing.requestName !== context.requestName ||
       (fingerprint && existing.fingerprint !== fingerprint)
     ) {
-      throw new IdempotencyConflictError({
-        key,
-        requestName: context.requestName,
-        reason: 'key_reuse',
-      });
+      throw conflict(context, key, 'key_reuse');
     }
 
     if (existing.status === 'in_progress') {
-      throw new IdempotencyConflictError({
-        key,
-        requestName: context.requestName,
-        reason: 'in_progress',
-      });
+      throw conflict(context, key, 'in_progress');
     }
 
     // A completed record may only be replayed to a caller whose authorization
@@ -426,28 +511,17 @@ export class IdempotencyBehavior
     // scope cannot prove that, so it fails closed rather than replaying. The
     // record is retained: re-executing a completed operation would duplicate it.
     if (
-      scope.scopeRequired &&
+      attempt.scopeRequired &&
       (existing.replayScope === undefined ||
-        existing.replayScope !== scope.replayScope)
+        existing.replayScope !== attempt.replayScope)
     ) {
       this.logger.warn?.(
         `Refusing to replay ${context.requestName} (key: ${key}): the stored ` +
           'response was authorized under a different scope than this caller.',
         IdempotencyBehavior.name,
       );
-      throw new IdempotencyConflictError({
-        key,
-        requestName: context.requestName,
-        reason: 'replay_scope',
-      });
+      throw conflict(context, key, 'replay_scope');
     }
-
-    setPipelineItem(context, IDEMPOTENCY_REPLAYED_ITEM_TOKEN, true);
-    this.logger.debug?.(
-      `Replaying idempotent response for ${context.requestName} (key: ${key})`,
-      IdempotencyBehavior.name,
-    );
-    return existing.response;
   }
 
   /**
@@ -473,4 +547,16 @@ export class IdempotencyBehavior
     if (!options) return this.defaults;
     return { ...this.defaults, ...options };
   }
+}
+
+function conflict(
+  context: IPipelineContext,
+  key: string,
+  reason: IdempotencyConflictReason,
+): IdempotencyConflictError {
+  return new IdempotencyConflictError({
+    key,
+    requestName: context.requestName,
+    reason,
+  });
 }

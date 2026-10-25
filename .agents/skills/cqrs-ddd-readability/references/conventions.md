@@ -139,24 +139,5 @@ dispatched on the bus.
 
 These spots break the conventions above. Leave them unless the task is to change them.
 
-- `api/src/auths/services/principal-login.service.ts`: `refresh()` changes state outside the
-  command bus, applies a rate limit inline, publishes events by hand, runs 100 lines and the
-  class takes 12 dependencies.
-- `api/src/auths/services/jwt-authenticator.ts`: `authenticate()` runs 124 lines.
-- `api/src/auths/domain/errors/`: errors sit outside `domain/models/errors/`, and
-  `AuthConfigurationException` names a configuration failure with the business suffix.
-- `UpdateRoleCommand` calls `role.rename()`, which records `RoleUpdatedEvent`: three verbs
-  for one action. `CreateAuthCommand` names the record, not the intent (a login).
-- `api/src/users/application/cqrs/queries/get-user-overview.handler.ts` declares
-  `UserOverviewDto`, which `api/src/users/routes.ts` imports from the handler file.
-- `api/src/users/routes.ts`: `NewUser` restates the limits of `CreateUserCommand`; the HTTP
-  field `name` carries the domain `username`.
-- `api/src/users/application/cqrs/queries/get-user.handler.ts` and
-  `api/src/roles/application/cqrs/queries/get-role.handler.ts`: build a conditional query
-  inside the `find(...)` argument.
-- `UniqueEmailException`, `EmptyUserUpdateException` and `UniqueRoleNameException` assign
-  `this.name`, which `DomainException` already sets.
-- `api/src/users/application/ports/user-event-dispatcher.port.ts` exports
-  `IWelcomeEmailDispatcher` and `IUserBatchDispatcher`, whose methods repeat their receiver.
-- The audit `metadata` lambda (`targetUserId`, `targetRoleId`) is repeated in four handlers.
-- `GetUserPermissionRulesRepository` omits `Query` from its class name.
+- `api/src/users/routes.ts`: the HTTP field `name` carries the domain `username`. Renaming
+  it changes the HTTP contract.

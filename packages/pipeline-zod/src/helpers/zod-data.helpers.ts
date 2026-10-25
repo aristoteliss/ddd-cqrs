@@ -111,20 +111,7 @@ function cloneValue<T>(data: T, seen: WeakMap<object, unknown>): T {
     return binary as T;
   }
 
-  let copy: object;
-  if (data instanceof Date) copy = new Date(data.getTime());
-  else if (data instanceof RegExp) {
-    const expression = new RegExp(data.source, data.flags);
-    expression.lastIndex = data.lastIndex;
-    copy = expression;
-  } else if (data instanceof Map) copy = new Map();
-  else if (data instanceof Set) copy = new Set();
-  else if (Array.isArray(data)) copy = new Array(data.length);
-  else
-    copy = Object.create(
-      Object.getPrototypeOf(data) === null ? null : Object.prototype,
-    );
-
+  const copy = emptyCopy(data);
   seen.set(data, copy);
   if (data instanceof Map) {
     for (const [key, value] of data)
@@ -144,7 +131,23 @@ function cloneValue<T>(data: T, seen: WeakMap<object, unknown>): T {
       writable: true,
     });
   }
+
   return copy as T;
+}
+
+function emptyCopy(data: object): object {
+  if (data instanceof Date) return new Date(data.getTime());
+  if (data instanceof RegExp) {
+    const expression = new RegExp(data.source, data.flags);
+    expression.lastIndex = data.lastIndex;
+    return expression;
+  }
+  if (data instanceof Map) return new Map();
+  if (data instanceof Set) return new Set();
+  if (Array.isArray(data)) return new Array(data.length);
+  return Object.create(
+    Object.getPrototypeOf(data) === null ? null : Object.prototype,
+  );
 }
 
 /** Structural data equality with one-to-one collection matching and cycle detection. */
@@ -158,36 +161,17 @@ function equalData(
   pairs: Map<object, object>,
 ): boolean {
   if (Object.is(a, b)) return true;
-  if (
-    typeof a !== 'object' ||
-    a === null ||
-    typeof b !== 'object' ||
-    b === null
-  )
-    return false;
+  if (!isObject(a) || !isObject(b)) return false;
   if (Object.prototype.toString.call(a) !== Object.prototype.toString.call(b))
     return false;
-  if (isBinary(a) && isBinary(b)) {
-    const left = binaryBytes(a);
-    const right = binaryBytes(b);
-    return (
-      left.length === right.length &&
-      left.every((byte, index) => byte === right[index])
-    );
-  }
+  if (isBinary(a) && isBinary(b)) return equalBytes(a, b);
   if (
     a instanceof Date &&
     b instanceof Date &&
     !Object.is(a.getTime(), b.getTime())
   )
     return false;
-  if (
-    a instanceof RegExp &&
-    b instanceof RegExp &&
-    (a.source !== b.source ||
-      a.flags !== b.flags ||
-      a.lastIndex !== b.lastIndex)
-  )
+  if (a instanceof RegExp && b instanceof RegExp && !equalPatterns(a, b))
     return false;
   if (Array.isArray(a) && Array.isArray(b) && a.length !== b.length)
     return false;
@@ -199,20 +183,8 @@ function equalData(
   pairs.set(a, b);
   pairs.set(b, a);
   try {
-    if (
-      (a instanceof Map && b instanceof Map) ||
-      (a instanceof Set && b instanceof Set)
-    ) {
-      if (a.size !== b.size) return false;
-      const remaining: unknown[] = [...b];
-      for (const item of a) {
-        const index = remaining.findIndex((other) =>
-          equalData(item, other, pairs),
-        );
-        if (index < 0) return false;
-        remaining.splice(index, 1);
-      }
-    }
+    if (!equalEntries(a, b, pairs)) return false;
+
     const keysA = enumerableKeys(a);
     const keysB = enumerableKeys(b);
     if (keysA.length !== keysB.length) return false;
@@ -227,6 +199,47 @@ function equalData(
     pairs.delete(a);
     pairs.delete(b);
   }
+}
+
+function isObject(value: unknown): value is object {
+  return typeof value === 'object' && value !== null;
+}
+
+function equalBytes(
+  a: ArrayBuffer | ArrayBufferView,
+  b: ArrayBuffer | ArrayBufferView,
+): boolean {
+  const left = binaryBytes(a);
+  const right = binaryBytes(b);
+  return (
+    left.length === right.length &&
+    left.every((byte, index) => byte === right[index])
+  );
+}
+
+function equalPatterns(a: RegExp, b: RegExp): boolean {
+  return (
+    a.source === b.source && a.flags === b.flags && a.lastIndex === b.lastIndex
+  );
+}
+
+function equalEntries(
+  a: object,
+  b: object,
+  pairs: Map<object, object>,
+): boolean {
+  const isMapPair = a instanceof Map && b instanceof Map;
+  if (!isMapPair && !(a instanceof Set && b instanceof Set)) return true;
+  if (a.size !== b.size) return false;
+
+  const remaining: unknown[] = [...b];
+  for (const item of a) {
+    const index = remaining.findIndex((other) => equalData(item, other, pairs));
+    if (index < 0) return false;
+    remaining.splice(index, 1);
+  }
+
+  return true;
 }
 
 /**

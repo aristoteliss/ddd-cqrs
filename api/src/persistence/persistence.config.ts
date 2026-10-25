@@ -50,6 +50,7 @@ export function tenantSchema(value: string): string {
   if (!isSqlIdentifier(name)) {
     throw new InvalidTenantSchemaError(name);
   }
+
   return name;
 }
 

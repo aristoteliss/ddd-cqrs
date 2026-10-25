@@ -54,11 +54,13 @@ export class GetAuthByConsumedTokenHashQueryRepository extends QueryRepository<
       { disableIdentityMap: true },
     );
     if (!consumed) return null;
+
     const session = await em.findOne(
       Auth,
       { id: consumed.authId },
       { refresh: true },
     );
+
     return session ? Auth.fromJSON(session.toJSON()) : null;
   }
 }

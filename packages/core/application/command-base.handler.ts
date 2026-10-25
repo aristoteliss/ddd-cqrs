@@ -129,14 +129,7 @@ export abstract class CommandBaseHandler<
   async execute(command: TCommand): Promise<TResult> {
     const commandResult = await this.handle(command);
 
-    const aggregate = isAggregate(commandResult)
-      ? commandResult
-      : commandResult &&
-          typeof commandResult === 'object' &&
-          'aggregate' in commandResult &&
-          isAggregate(commandResult.aggregate)
-        ? commandResult.aggregate
-        : undefined;
+    const aggregate = aggregateOf(commandResult);
 
     if (aggregate) {
       const events = [...aggregate.getUncommittedEvents()];
@@ -149,4 +142,14 @@ export abstract class CommandBaseHandler<
 
     return commandResult;
   }
+}
+
+/** The aggregate a handler returned, itself or as its result's `aggregate`. */
+function aggregateOf(result: unknown): IAggregateRoot | undefined {
+  if (isAggregate(result)) return result;
+  const carried =
+    result && typeof result === 'object' && 'aggregate' in result
+      ? result.aggregate
+      : undefined;
+  return isAggregate(carried) ? carried : undefined;
 }

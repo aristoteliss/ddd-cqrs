@@ -47,6 +47,7 @@ export class MikroOrmStore implements IEntityManagerSource {
       isolation === 'schema'
         ? await MikroORM.init(createPostgresOrmOptions())
         : undefined;
+
     for (const tenant of config.tenants) {
       const orm =
         shared ??
@@ -66,6 +67,7 @@ export class MikroOrmStore implements IEntityManagerSource {
       orm: (tenant) => {
         const orm = this.orms.get(tenant);
         if (!orm) throw new UnknownTenantSchemaError(tenant);
+
         return orm;
       },
       isolation,

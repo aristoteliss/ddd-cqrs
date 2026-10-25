@@ -38,15 +38,8 @@ export class CacheManagerAdapter {
   private captureError(kind: 'get' | 'set' | undefined, event: unknown): void {
     const operation = this.operation.getStore();
     if (!operation || (kind && operation.kind !== kind)) return;
-    if (
-      event &&
-      typeof event === 'object' &&
-      'key' in event &&
-      event.key === operation.key &&
-      'error' in event
-    ) {
-      operation.error = event.error;
-    }
+    if (!isKeyedEvent(event) || event.key !== operation.key) return;
+    if ('error' in event) operation.error = event.error;
   }
 
   async get(key: string): Promise<unknown> {
@@ -66,4 +59,9 @@ export class CacheManagerAdapter {
       return result;
     });
   }
+}
+
+/** Whether a cache-manager event names the key it concerns. */
+function isKeyedEvent(event: unknown): event is { key: unknown } {
+  return typeof event === 'object' && event !== null && 'key' in event;
 }

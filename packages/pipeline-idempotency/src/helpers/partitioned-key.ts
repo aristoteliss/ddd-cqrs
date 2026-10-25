@@ -121,7 +121,7 @@ export function createPartitionedIdempotencyKeyFactory(
 ): IdempotencyKeyFactory {
   const onMissingOperation = options.onMissingOperation ?? 'throw';
 
-  return (context) => {
+  const keyFor: IdempotencyKeyFactory = (context) => {
     const tenant = tenantSegments(
       context,
       options,
@@ -156,6 +156,8 @@ export function createPartitionedIdempotencyKeyFactory(
       operation,
     ]);
   };
+
+  return keyFor;
 }
 
 /** Normalizes a principal to non-empty trimmed segments, or `undefined`. */

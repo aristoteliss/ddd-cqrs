@@ -50,7 +50,7 @@ export class SessionService implements ISessionCookies {
    *
    * @example
    * ```ts
-   * // CreateAuthHandler, through the SESSION_COOKIES port
+   * // StartAuthHandler, through the SESSION_COOKIES port
    * this.cookies.save(result);
    * return result;
    * ```

@@ -30,6 +30,7 @@ export class Capability extends RootEntity<CapabilitySnapshot> {
       this.fields = null;
       return;
     }
+
     this.action = snapshot.action;
     this.subject = snapshot.subject;
     this.conditions = snapshot.conditions;

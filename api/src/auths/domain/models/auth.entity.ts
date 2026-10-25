@@ -7,14 +7,14 @@ import {
   RootEntity,
   type RootEntitySnapshot,
 } from '@cqrs-ddd/core/domain';
+import { AuthRefreshedEvent } from '../events/auth-refreshed.event.js';
+import { AuthRevokedEvent } from '../events/auth-revoked.event.js';
+import { AuthStartedEvent } from '../events/auth-started.event.js';
+import { ConsumedRefreshToken } from './consumed-refresh-token.entity.js';
 import {
   InvalidRefreshTokenError,
   RefreshTokenReuseError,
-} from '../errors/refresh-token.errors.js';
-import { AuthCreatedEvent } from '../events/auth-created.event.js';
-import { AuthRefreshedEvent } from '../events/auth-refreshed.event.js';
-import { AuthRevokedEvent } from '../events/auth-revoked.event.js';
-import { ConsumedRefreshToken } from './consumed-refresh-token.entity.js';
+} from './errors/index.js';
 
 export interface AuthSnapshot extends Partial<RootEntitySnapshot> {
   readonly userId: string;
@@ -82,6 +82,7 @@ export class Auth extends RootEntity<AuthSnapshot> {
       this._revokedAt = null;
       return;
     }
+
     this.userId = snapshot.userId;
     this.expiresAt = Auth.rules.expiresAt.parse(snapshot.expiresAt);
     this._refreshTokenHash = snapshot.refreshTokenHash;
@@ -90,13 +91,14 @@ export class Auth extends RootEntity<AuthSnapshot> {
     this._revokedAt = Auth.rules.revokedAt.parse(snapshot.revokedAt);
   }
 
-  static create(
+  static start(
     userId: string,
     refreshTokenHash: string,
     expiresAt: number,
   ): Auth {
     const auth = new Auth({ userId, refreshTokenHash, expiresAt });
-    auth.apply(new AuthCreatedEvent(auth));
+    auth.apply(new AuthStartedEvent(auth));
+
     return auth;
   }
 
@@ -185,6 +187,7 @@ export class Auth extends RootEntity<AuthSnapshot> {
   override uncommit(): this {
     super.uncommit();
     this._consumed = null;
+
     return this;
   }
 

@@ -52,6 +52,14 @@ export const AUDIT_RECORD_ITEM_TOKEN: PipelineItemToken<AuditRecord> =
 export const AUDIT_START_RECORD_ITEM_TOKEN: PipelineItemToken<AuditStartRecord> =
   createPipelineItem<AuditStartRecord>('AUDIT_START_RECORD_ITEM');
 
+/** The request being audited: what its start record and its final record share. */
+interface AuditedRequest {
+  context: IPipelineContext;
+  options: AuditBehaviorOptions;
+  id: string;
+  startedAt: string;
+}
+
 /**
  * Pipeline behavior that writes an {@link AuditRecord} for every audited
  * request — **on both success and failure** — to a pluggable {@link AuditSink}.
@@ -161,56 +169,20 @@ export class AuditBehavior
     const failOpen = options.failOpen ?? true;
     this.validateFactories(options, failOpen);
 
-    const startedAt = new Date();
-    const id = uuidv7();
+    const startedAt = new Date().toISOString();
+    const audited: AuditedRequest = {
+      context,
+      options,
+      id: uuidv7(),
+      startedAt,
+    };
     const begin =
       options.recordStart === false
         ? undefined
         : this.sink.begin?.bind(this.sink);
-    if (begin) {
-      await this.begin(begin, {
-        context,
-        options,
-        id,
-        startedAt: startedAt.toISOString(),
-      });
-    }
+    if (begin) await this.begin(begin, audited);
 
-    const start = performance.now();
-
-    let response: unknown;
-    try {
-      response = await next();
-    } catch (error) {
-      try {
-        await this.record({
-          context,
-          options,
-          id,
-          error,
-          failed: true,
-          durationMs: performance.now() - start,
-          startedAt: startedAt.toISOString(),
-        });
-      } catch (recordError) {
-        this.diagnose(
-          'error',
-          `Audit recording also failed after request error: ${recordError instanceof Error ? recordError.message : recordError}`,
-        );
-      }
-      throw error;
-    }
-
-    await this.record({
-      context,
-      options,
-      id,
-      response,
-      failed: false,
-      durationMs: performance.now() - start,
-      startedAt: startedAt.toISOString(),
-    });
-    return response;
+    return this.run(next, audited);
   }
 
   /**
@@ -219,12 +191,7 @@ export class AuditBehavior
    */
   private async begin(
     begin: (record: AuditStartRecord) => Promise<void> | void,
-    input: {
-      context: IPipelineContext;
-      options: AuditBehaviorOptions;
-      id: string;
-      startedAt: string;
-    },
+    input: AuditedRequest,
   ): Promise<void> {
     const failOpen = input.options.failOpen ?? true;
     let record: AuditStartRecord;
@@ -249,6 +216,46 @@ export class AuditBehavior
         `${sinkError instanceof Error ? sinkError.message : sinkError}`;
       this.reportFailure(message, failOpen, sinkError);
     }
+  }
+
+  /**
+   * Times the handler and records its outcome. When the handler fails, the
+   * caller receives its own error, whatever happens to the audit record.
+   */
+  private async run(
+    next: NextDelegate,
+    audited: AuditedRequest,
+  ): Promise<unknown> {
+    const start = performance.now();
+
+    let response: unknown;
+    try {
+      response = await next();
+    } catch (error) {
+      try {
+        await this.record({
+          ...audited,
+          error,
+          failed: true,
+          durationMs: performance.now() - start,
+        });
+      } catch (recordError) {
+        this.diagnose(
+          'error',
+          `Audit recording also failed after request error: ${recordError instanceof Error ? recordError.message : recordError}`,
+        );
+      }
+      throw error;
+    }
+
+    await this.record({
+      ...audited,
+      response,
+      failed: false,
+      durationMs: performance.now() - start,
+    });
+
+    return response;
   }
 
   /** Build the record, forward it to the sink, and stash it on the context. */

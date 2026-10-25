@@ -38,6 +38,7 @@ export class QueryBus<Q extends IQuery = IQuery> {
     const type = query.constructor;
     const run = nearest(this.handlers, type);
     if (!run) throw new QueryHandlerNotFoundException(type.name);
+
     return (await run(query)) as R;
   }
 }

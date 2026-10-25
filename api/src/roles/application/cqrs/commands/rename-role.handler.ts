@@ -6,13 +6,10 @@ import {
 } from '@cqrs-ddd/core/application';
 import { EntityNotFoundException } from '@cqrs-ddd/core/domain';
 import { CommandHandler, EventBus } from '@cqrs-ddd/cqrs';
-import {
-  type IPipelineContext,
-  logging,
-  UsePipeline,
-} from '@cqrs-ddd/pipeline';
+import { logging, UsePipeline } from '@cqrs-ddd/pipeline';
 import { AUDIT_SEVERITY, audit } from '@cqrs-ddd/pipeline-audit';
 import { CaslAuthorizer, requires } from '@cqrs-ddd/pipeline-casl';
+import { targetMetadata } from '../../../../common/audit/audit.options.js';
 import {
   APP_ACTIONS,
   APP_SUBJECTS,
@@ -20,9 +17,9 @@ import {
 } from '../../../../common/constants/index.js';
 import { UniqueRoleNameException } from '../../../domain/models/errors/role-name.exception.js';
 import type { Role } from '../../../domain/models/role.entity.js';
-import { UpdateRoleCommand } from './update-role.command.js';
+import { RenameRoleCommand } from './rename-role.command.js';
 
-@CommandHandler(UpdateRoleCommand)
+@CommandHandler(RenameRoleCommand)
 @UsePipeline(
   logging({
     mapLogLevel: new Map([[UniqueRoleNameException, 'warn']]),
@@ -31,14 +28,11 @@ import { UpdateRoleCommand } from './update-role.command.js';
   audit({
     action: AUDIT_ACTIONS.ROLE_UPDATE,
     severity: AUDIT_SEVERITY.MEDIUM,
-    metadata: (ctx: IPipelineContext) => {
-      const cmd = ctx.request as UpdateRoleCommand | undefined;
-      return cmd?.id ? { targetRoleId: cmd.id } : {};
-    },
+    metadata: targetMetadata('targetRoleId'),
   }),
 )
-export class UpdateRoleHandler extends CommandBaseHandler<
-  UpdateRoleCommand,
+export class RenameRoleHandler extends CommandBaseHandler<
+  RenameRoleCommand,
   Role
 > {
   constructor(
@@ -49,18 +43,22 @@ export class UpdateRoleHandler extends CommandBaseHandler<
     super(eventBus);
   }
 
-  async handle(command: UpdateRoleCommand): Promise<Role> {
+  async handle(command: RenameRoleCommand): Promise<Role> {
     const role = await this.commandRepository.findById(command.id);
     if (!role) {
       throw new EntityNotFoundException('Role', command.id);
     }
+
     this.authorizer.authorize(
       'update',
       role,
-      command.getUpdateFields(UpdateRoleCommand.updatableFields),
+      command.getUpdateFields(RenameRoleCommand.updatableFields),
     );
+
     role.rename(command.name);
+
     await this.commandRepository.save(role);
+
     return role;
   }
 }

@@ -6,18 +6,8 @@ import {
   requireTenant,
 } from '@cqrs-ddd/core/application';
 import { ConcurrencyConflictError } from '@cqrs-ddd/core/domain';
-import { EventBus } from '@cqrs-ddd/cqrs';
-import {
-  RateLimitExceededError,
-  type RateLimiterLike,
-  type RateLimiterResLike,
-} from '@cqrs-ddd/pipeline-rate-limit';
-import { joinKeySegments } from '@cqrs-ddd/safe-stringify';
-import { RATE_LIMIT_COST } from '../../common/constants/rate-limit.constants.js';
 import { GetUserQuery } from '../../users/application/cqrs/queries/get-user.query.js';
 import { User } from '../../users/domain/models/user.entity.js';
-import { GetAuthByConsumedTokenHashQuery } from '../application/cqrs/queries/get-auth-by-consumed-token-hash.query.js';
-import { GetAuthByTokenHashQuery } from '../application/cqrs/queries/get-auth-by-token-hash.query.js';
 import { GetUserPermissionRulesQuery } from '../application/cqrs/queries/get-user-permission-rules.query.js';
 import {
   type AccessTokenIssueResult,
@@ -25,24 +15,20 @@ import {
 } from '../application/ports/access-token-issuer.port.js';
 import { type AuthTokenPolicy } from '../application/ports/auth-token-policy.port.js';
 import { type ILoginCodeVerifier } from '../application/ports/login-code-verifier.port.js';
-import { type IRefreshTokens } from '../application/ports/refresh-tokens.port.js';
-import { type ISessionCookies } from '../application/ports/session-cookies.port.js';
 import type { AuthResult } from '../application/results/auth.result.js';
-import { InvalidLoginCredentialsException } from '../domain/errors/authentication.exception.js';
+import type { Auth } from '../domain/models/auth.entity.js';
+import { InvalidLoginCredentialsException } from '../domain/models/errors/authentication.exception.js';
 import {
   InvalidRefreshTokenError,
   RefreshTokenReuseError,
-} from '../domain/errors/refresh-token.errors.js';
-import type { Auth } from '../domain/models/auth.entity.js';
-import { GetUserPermissionRulesRepository } from '../persistence/get-user-permission-rules.query-repository.js';
+} from '../domain/models/errors/refresh-token.errors.js';
+import { GetUserPermissionRulesQueryRepository } from '../persistence/get-user-permission-rules.query-repository.js';
 
-function isRateLimiterRes(value: unknown): value is RateLimiterResLike {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    typeof (value as RateLimiterResLike).msBeforeNext === 'number' &&
-    typeof (value as RateLimiterResLike).remainingPoints === 'number'
-  );
+/** The refresh token a caller presented, as its digest, and the token that replaces it. */
+export interface RefreshTokenRotation {
+  readonly presentedHash: string;
+  readonly nextToken: string;
+  readonly nextHash: string;
 }
 
 export class PrincipalLoginService {
@@ -54,20 +40,8 @@ export class PrincipalLoginService {
     private readonly loginCodeVerifier: ILoginCodeVerifier,
     private readonly accessTokenIssuer: IAccessTokenIssuer,
     private readonly policy: AuthTokenPolicy,
-    private readonly permissionRules: GetUserPermissionRulesRepository,
-    private readonly authByTokenHash: IQueryRepository<
-      GetAuthByTokenHashQuery,
-      Auth | null
-    >,
-    private readonly authByConsumedTokenHash: IQueryRepository<
-      GetAuthByConsumedTokenHashQuery,
-      Auth | null
-    >,
+    private readonly permissionRules: GetUserPermissionRulesQueryRepository,
     private readonly authRepository: IWriteSideAggregateRepository<Auth>,
-    private readonly refreshTokens: IRefreshTokens,
-    private readonly cookies: ISessionCookies,
-    private readonly eventBus?: EventBus,
-    private readonly rateLimiter?: RateLimiterLike,
   ) {}
 
   /**
@@ -132,122 +106,47 @@ export class PrincipalLoginService {
   }
 
   /**
-   * Exchanges a valid refresh token for a refreshed session and access token.
+   * Rotates the refresh token of the session `auth` and issues a new access
+   * token, or answers without rotating when the immediately previous token is
+   * presented within the reuse grace window. When a concurrent write wins the
+   * version check, it reloads the session and tries once more; a reloaded
+   * session that no longer knows the presented token is revoked.
    *
-   * Validates the presented token against active sessions and consumed history,
-   * enforcing single-use rotation, reuse detection (revoking compromised sessions),
-   * and reuse grace windows. On successful rotation, persists the updated session,
-   * stores new session cookies, and publishes domain events.
-   *
-   * @param refreshToken - The plain-text refresh token presented by the caller.
-   * @param clientIp - Optional client IP address for partitioned rate limiting.
-   * @returns The refreshed authentication result including the access token and session metadata.
-   * @throws {RateLimitExceededError} When the per-IP refresh rate limit is exceeded.
-   * @throws {InvalidRefreshTokenError} When the token is unknown, expired, or belongs to a missing user.
-   * @throws {RefreshTokenReuseError} When an already consumed token is reused outside the grace window.
+   * @param auth - The session the presented token belongs to.
+   * @param rotation - The digest of the presented token and its replacement.
+   * @returns The refreshed result; it carries `refreshToken` only after a rotation.
+   * @throws {InvalidRefreshTokenError} When the session is revoked or expired,
+   *   expires while the access token is prepared, or its user or row is gone.
+   * @throws {RefreshTokenReuseError} After revoking the session, when a consumed
+   *   token is presented outside the grace window.
+   * @throws {ConcurrencyConflictError} When the second attempt also loses the version check.
    *
    * @example
    * ```ts
-   * const result = await this.principalLoginService.refresh(refreshToken, clientIp);
+   * const result = await this.principalLoginService.refresh(auth, {
+   *   presentedHash,
+   *   nextToken,
+   *   nextHash: this.refreshTokens.hash(nextToken),
+   * });
    * ```
    */
-  async refresh(refreshToken: string, clientIp?: string): Promise<AuthResult> {
-    if (this.rateLimiter && clientIp) {
-      const key = joinKeySegments([
-        requireTenant('the refresh rate limit'),
-        clientIp.trim(),
-        'refresh',
-      ]);
-      try {
-        await this.rateLimiter.consume(key, RATE_LIMIT_COST.refresh);
-      } catch (error) {
-        if (isRateLimiterRes(error)) {
-          throw new RateLimitExceededError({
-            key,
-            requestName: 'refresh',
-            msBeforeNext: error.msBeforeNext,
-            remainingPoints: error.remainingPoints,
-            limit: this.rateLimiter.points,
-            points: RATE_LIMIT_COST.refresh,
-          });
-        }
-        throw error;
-      }
-    }
-
-    const presented = this.refreshTokens.hash(refreshToken);
-    const now = Date.now();
-
-    let auth = await this.authByTokenHash.find(
-      new GetAuthByTokenHashQuery({ tokenHash: presented }),
-    );
-    if (!auth) {
-      const reused = await this.authByConsumedTokenHash.find(
-        new GetAuthByConsumedTokenHashQuery({ tokenHash: presented }),
-      );
-      if (!reused) throw new InvalidRefreshTokenError();
-      await this.revoke(reused, now);
-      throw new RefreshTokenReuseError();
-    }
-
-    const nextToken = this.refreshTokens.generate();
-    const nextHash = this.refreshTokens.hash(nextToken);
-    const graceMs = this.policy.refreshReuseGraceSeconds * 1000;
+  async refresh(
+    auth: Auth,
+    rotation: RefreshTokenRotation,
+  ): Promise<AuthResult> {
+    let session = auth;
 
     for (let attempt = 0; ; attempt++) {
       try {
-        const outcome = auth.refresh(presented, nextHash, Date.now(), graceMs);
-        const user = await this.queryRepository.find(
-          new GetUserQuery({ userId: auth.userId }, { refresh: true }),
-        );
-        if (!user) throw new InvalidRefreshTokenError();
-        const access = await this.sign(user, auth.id);
-        const preparedAt = Date.now();
-        if (preparedAt >= auth.expiresAt) throw new InvalidRefreshTokenError();
-        if (outcome === 'grace') {
-          auth.refresh(presented, nextHash, preparedAt, graceMs);
-        } else {
-          await this.authRepository.save(auth);
-        }
-
-        const result: AuthResult = {
-          aggregate: auth,
-          userId: user.id,
-          principalType: 'user',
-          tenant: requireTenant('refresh'),
-          email: user.email,
-          department: user.department,
-          accessToken: access.accessToken,
-          accessTokenExpiresAt: access.expiresAt,
-          ...(outcome === 'rotated' ? { refreshToken: nextToken } : {}),
-          sessionExpiresAt: auth.expiresAt,
-        };
-        this.cookies.save(result);
-
-        const events = [...auth.getUncommittedEvents()];
-        if (events.length > 0) {
-          this.eventBus?.publishAll(events);
-          auth.uncommit();
-        }
-
-        return result;
+        return await this.rotate(session, rotation);
       } catch (error) {
         if (error instanceof RefreshTokenReuseError) {
-          await this.revoke(auth, Date.now());
+          await this.revoke(session, Date.now());
           throw error;
         }
         if (!(error instanceof ConcurrencyConflictError) || attempt === 1)
           throw error;
-        const reloaded = await this.authRepository.findById(auth.id);
-        if (!reloaded) throw new InvalidRefreshTokenError();
-        auth = reloaded;
-        if (
-          presented !== auth.refreshTokenHash &&
-          presented !== auth.previousRefreshTokenHash
-        ) {
-          await this.revoke(auth, Date.now());
-          throw new RefreshTokenReuseError();
-        }
+        session = await this.reload(session, rotation.presentedHash);
       }
     }
   }
@@ -297,5 +196,52 @@ export class PrincipalLoginService {
         }
       }
     }
+  }
+
+  private async rotate(
+    auth: Auth,
+    { presentedHash, nextToken, nextHash }: RefreshTokenRotation,
+  ): Promise<AuthResult> {
+    const graceMs = this.policy.refreshReuseGraceSeconds * 1000;
+    const outcome = auth.refresh(presentedHash, nextHash, Date.now(), graceMs);
+
+    const user = await this.queryRepository.find(
+      new GetUserQuery({ userId: auth.userId }, { refresh: true }),
+    );
+    if (!user) throw new InvalidRefreshTokenError();
+    const access = await this.sign(user, auth.id);
+    const preparedAt = Date.now();
+    if (preparedAt >= auth.expiresAt) throw new InvalidRefreshTokenError();
+
+    if (outcome === 'grace') {
+      auth.refresh(presentedHash, nextHash, preparedAt, graceMs);
+    } else {
+      await this.authRepository.save(auth);
+    }
+
+    return {
+      aggregate: auth,
+      userId: user.id,
+      principalType: 'user',
+      tenant: requireTenant('refresh'),
+      email: user.email,
+      department: user.department,
+      accessToken: access.accessToken,
+      accessTokenExpiresAt: access.expiresAt,
+      ...(outcome === 'rotated' ? { refreshToken: nextToken } : {}),
+      sessionExpiresAt: auth.expiresAt,
+    };
+  }
+
+  private async reload(auth: Auth, presentedHash: string): Promise<Auth> {
+    const reloaded = await this.authRepository.findById(auth.id);
+    if (!reloaded) throw new InvalidRefreshTokenError();
+    const isKnown =
+      presentedHash === reloaded.refreshTokenHash ||
+      presentedHash === reloaded.previousRefreshTokenHash;
+    if (isKnown) return reloaded;
+
+    await this.revoke(reloaded, Date.now());
+    throw new RefreshTokenReuseError();
   }
 }

@@ -59,6 +59,7 @@ export class Product extends RootEntity<ProductSnapshot> {
   static register(sku: string, name: string, stock: number): Product {
     const product = new Product({ sku, name, stock });
     product.apply(new StockChangedEvent(product));
+
     return product;
   }
 
@@ -97,7 +98,9 @@ export class Product extends RootEntity<ProductSnapshot> {
     if (units > this._stock) {
       throw new OutOfStockException(`Only ${this._stock} of ${this.sku} left.`);
     }
+
     this.applyPatch({ stock: this._stock - units });
+
     return this;
   }
 

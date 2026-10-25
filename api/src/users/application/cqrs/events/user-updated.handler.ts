@@ -11,6 +11,6 @@ export class UserUpdatedHandler implements IEventHandler<UserUpdatedEvent> {
   async handle(event: UserUpdatedEvent): Promise<void> {
     const { id: userId, username } = event.payload;
 
-    await this.userBatchDispatcher.enqueueUserBatch([{ userId, username }]);
+    await this.userBatchDispatcher.enqueue([{ userId, username }]);
   }
 }

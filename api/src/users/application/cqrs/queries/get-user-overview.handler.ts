@@ -20,19 +20,11 @@ import { GetRolesQuery } from '../../../../roles/application/cqrs/queries/get-ro
 import type { Role } from '../../../../roles/domain/models/role.entity.js';
 import type { User } from '../../../domain/models/user.entity.js';
 import type { UserPermissionAssignments } from '../../permission-assignments.js';
+import type { UserOverviewReadModel } from '../../user-overview-read-model.js';
 import { GetUserQuery } from './get-user.query.js';
 import { GetUserCapabilitiesQuery } from './get-user-capabilities.query.js';
 import { GetUserOverviewQuery } from './get-user-overview.query.js';
 import { userOverviewCacheOptions } from './user-overview-cache.policy.js';
-
-export interface UserOverviewDto {
-  id?: string;
-  username?: string;
-  email?: string;
-  department?: string | null;
-  roles?: (string | null)[];
-  capabilities?: (string | null)[];
-}
 
 @QueryHandler(GetUserOverviewQuery)
 @UsePipeline(
@@ -40,7 +32,7 @@ export interface UserOverviewDto {
   cache(userOverviewCacheOptions),
 )
 export class GetUserOverviewHandler
-  implements IQueryHandler<GetUserOverviewQuery, UserOverviewDto | null>
+  implements IQueryHandler<GetUserOverviewQuery, UserOverviewReadModel | null>
 {
   constructor(
     private readonly users: IQueryRepository<GetUserQuery, User | null>,
@@ -52,14 +44,17 @@ export class GetUserOverviewHandler
     private readonly authorizer: CaslAuthorizer,
   ) {}
 
-  async execute(query: GetUserOverviewQuery): Promise<UserOverviewDto | null> {
+  async execute(
+    query: GetUserOverviewQuery,
+  ): Promise<UserOverviewReadModel | null> {
     const user = await this.users.find(
       new GetUserQuery({ userId: query.userId }, { refresh: true }),
     );
     if (!user) return null;
+
     this.authorizer.authorize(APP_ACTIONS.READ, user);
 
-    const candidate: UserOverviewDto = {
+    const candidate: UserOverviewReadModel = {
       id: user.id,
       username: user.username,
       email: user.email,
@@ -72,7 +67,7 @@ export class GetUserOverviewHandler
 
   private async readablePermissions(
     userId: string,
-  ): Promise<Pick<UserOverviewDto, 'roles' | 'capabilities'>> {
+  ): Promise<Pick<UserOverviewReadModel, 'roles' | 'capabilities'>> {
     const permissions = userCapabilitiesSubject(userId);
     if (!this.authorizer.can(APP_ACTIONS.READ, permissions)) return {};
 

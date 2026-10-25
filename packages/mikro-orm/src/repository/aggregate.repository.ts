@@ -103,6 +103,7 @@ export abstract class AggregateRepository<
     }
 
     const snapshot = entity.toJSON() as TSnapshot;
+
     return this.hydrateFn(snapshot);
   }
 }

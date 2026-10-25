@@ -19,6 +19,15 @@ export interface ConditionedRow {
   readonly expectedVersion: number;
 }
 
+/** A version-conditioned write that has run: where, on which row, and how. */
+interface ConditionedWrite<TEntity> {
+  readonly em: EntityManager;
+  readonly entityType: EntityName<TEntity>;
+  readonly row: ConditionedRow;
+  readonly entityName: string;
+  readonly verb: 'updated' | 'deleted';
+}
+
 /**
  * Checks the row count of a write filtered on `{ id, version }`: one row is
  * success; none is diagnosed with one refreshed read on the same manager as
@@ -30,11 +39,13 @@ export interface ConditionedRow {
  */
 export async function expectOneRow<TEntity extends VersionedAggregate>(
   affected: number,
-  em: EntityManager,
-  entityType: EntityName<TEntity>,
-  { id, expectedVersion }: ConditionedRow,
-  entityName: string,
-  verb: 'updated' | 'deleted',
+  {
+    em,
+    entityType,
+    row: { id, expectedVersion },
+    entityName,
+    verb,
+  }: ConditionedWrite<TEntity>,
 ): Promise<void> {
   if (affected === 1) return;
   if (affected === 0) {

@@ -6,9 +6,9 @@ import { decodeJwt } from 'jose';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { User } from '../../users/domain/models/user.entity.js';
 import {
-  AuthConfigurationException,
+  AuthConfigurationError,
   InvalidLoginCredentialsException,
-} from '../domain/errors/authentication.exception.js';
+} from '../domain/models/errors/authentication.exception.js';
 import { SharedDemoLoginCodeVerifier } from './shared-demo-login-code.verifier.js';
 
 const originalEnv = { ...process.env };
@@ -23,7 +23,7 @@ async function loadIssuer(env: Record<string, string | undefined>) {
   vi.resetModules();
   const [{ JoseAccessTokenIssuer }, errors] = await Promise.all([
     import('./jose-access-token.issuer.js'),
-    import('../domain/errors/authentication.exception.js'),
+    import('../domain/models/errors/authentication.exception.js'),
   ]);
   return { JoseAccessTokenIssuer, errors };
 }
@@ -59,7 +59,7 @@ describe('authentication infrastructure adapters', () => {
         userId: 'user-1',
         code: '424242',
       }),
-    ).toThrow(AuthConfigurationException);
+    ).toThrow(AuthConfigurationError);
   });
 
   it('rejects plaintext login-code configuration in production', () => {
@@ -73,7 +73,7 @@ describe('authentication infrastructure adapters', () => {
         userId: 'user-1',
         code: '424242',
       }),
-    ).toThrow(AuthConfigurationException);
+    ).toThrow(AuthConfigurationError);
   });
 
   it('keeps plaintext login-code compatibility for non-production demos', () => {
@@ -127,7 +127,7 @@ describe('authentication infrastructure adapters', () => {
     const user = User.create('Alice', 'alice@example.test');
 
     await expect(issuer.issue({ user, sessionId: 's' })).rejects.toThrow(
-      errors.AuthConfigurationException,
+      errors.AuthConfigurationError,
     );
   });
 });

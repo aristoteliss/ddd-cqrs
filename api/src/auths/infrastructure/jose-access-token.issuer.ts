@@ -15,7 +15,7 @@ import {
   type AccessTokenIssueResult,
   type IAccessTokenIssuer,
 } from '../application/ports/access-token-issuer.port.js';
-import { AuthConfigurationException } from '../domain/errors/authentication.exception.js';
+import { AuthConfigurationError } from '../domain/models/errors/authentication.exception.js';
 
 /**
  * Issues short-lived HS256 access tokens bound to a tenant and a session (`sid`).
@@ -35,10 +35,10 @@ export class JoseAccessTokenIssuer implements IAccessTokenIssuer {
   }: AccessTokenIssueRequest): Promise<AccessTokenIssueResult> {
     const { secret, algorithms, issuer, audience } = JWT;
     if (!secret) {
-      throw new AuthConfigurationException('JWT_SECRET is not configured');
+      throw new AuthConfigurationError('JWT_SECRET is not configured');
     }
     if (algorithms && !algorithms.includes('HS256')) {
-      throw new AuthConfigurationException(
+      throw new AuthConfigurationError(
         'JWT_ALGORITHMS must include HS256 for locally issued login tokens',
       );
     }
@@ -57,8 +57,10 @@ export class JoseAccessTokenIssuer implements IAccessTokenIssuer {
         .setIssuedAt(nowSeconds)
         .setExpirationTime(expSeconds)
         .setJti(randomUUID());
+
       if (issuer) jwt.setIssuer(issuer);
       if (audience) jwt.setAudience(audience);
+
       return jwt.sign(new TextEncoder().encode(secret));
     };
 

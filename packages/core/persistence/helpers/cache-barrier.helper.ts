@@ -74,12 +74,7 @@ export function createCacheMutationBarrier(
       : undefined;
 
   const aggregateId = typeof e?.id === 'string' ? e.id : undefined;
-  const version =
-    typeof e?.version === 'number'
-      ? e.version
-      : typeof (e as { _version?: unknown })?._version === 'number'
-        ? ((e as { _version: number })._version as number)
-        : undefined;
+  const version = versionOf(e);
 
   return {
     __cacheBarrier: true,
@@ -89,6 +84,14 @@ export function createCacheMutationBarrier(
     ...(aggregateId !== undefined ? { aggregateId } : {}),
     ...(version !== undefined ? { version } : {}),
   };
+}
+
+/** The entity's numeric `version`, else its numeric `_version` backing field. */
+function versionOf(
+  entity: Record<string, unknown> | undefined,
+): number | undefined {
+  if (typeof entity?.version === 'number') return entity.version;
+  return typeof entity?._version === 'number' ? entity._version : undefined;
 }
 
 /**

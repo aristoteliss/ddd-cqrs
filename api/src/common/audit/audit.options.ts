@@ -3,6 +3,7 @@
 import type {
   AuditActor,
   AuditBehaviorOptions,
+  AuditMetadataFactory,
 } from '@cqrs-ddd/pipeline-audit';
 import { getSessionPrincipal } from '../context/session-principal.store.js';
 
@@ -52,6 +53,27 @@ export function claimedIdentityActor(claimedEmail?: string): AuditActor {
   return claimedEmail
     ? { ...UNAUTHENTICATED_AUDIT_ACTOR, claimedEmail }
     : UNAUTHENTICATED_AUDIT_ACTOR;
+}
+
+/**
+ * Metadata naming the aggregate a command targets, read from the command's `id`.
+ *
+ * @param key - The metadata field that carries the id.
+ * @returns A `metadata` option recording `{ [key]: id }`, or nothing for a request
+ *   without an `id`.
+ *
+ * @example
+ * ```ts
+ * audit({ action: AUDIT_ACTIONS.ROLE_DELETE, metadata: targetMetadata('targetRoleId') });
+ * ```
+ */
+export function targetMetadata(
+  key: 'targetUserId' | 'targetRoleId',
+): AuditMetadataFactory {
+  return (ctx) => {
+    const id = (ctx.request as { id?: string } | undefined)?.id;
+    return id ? { [key]: id } : {};
+  };
 }
 
 /**

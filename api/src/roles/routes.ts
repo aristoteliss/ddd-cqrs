@@ -8,11 +8,11 @@ import { HttpError } from '../http/http-error.js';
 import { type Route, route } from '../http/route.js';
 import { CreateRoleCommand } from './application/cqrs/commands/create-role.command.js';
 import { DeleteRoleCommand } from './application/cqrs/commands/delete-role.command.js';
-import { UpdateRoleCommand } from './application/cqrs/commands/update-role.command.js';
+import { RenameRoleCommand } from './application/cqrs/commands/rename-role.command.js';
 import { GetRoleQuery } from './application/cqrs/queries/get-role.query.js';
 import { GetRolesQuery } from './application/cqrs/queries/get-roles.query.js';
 import type { RoleReadModel } from './application/role-read-model.js';
-import { Role } from './domain/models/role.entity.js';
+import type { Role } from './domain/models/role.entity.js';
 
 const RoleId = z.object({ id: z.uuid() });
 
@@ -21,13 +21,7 @@ const RoleBody = z.object({
   name: z.string().optional(),
 });
 
-const RoleName = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(Role.rules.name.minLength)
-    .max(Role.rules.name.maxLength),
-});
+const RoleName = z.object({ name: CreateRoleCommand.schema.shape.name });
 
 /**
  * The `/roles` routes: list, read, create, rename and delete, each one command or query
@@ -78,6 +72,7 @@ export function roleRoutes({
       handle: async ({ params }) => {
         const role = await find(params.id, false);
         if (!role) throw new HttpError(404, 'Role not found');
+
         return role;
       },
     }),
@@ -89,12 +84,14 @@ export function roleRoutes({
       response: RoleBody,
       handle: async ({ body, headers }) => {
         const idempotencyKey = headers[HEADERS.IDEMPOTENCY_KEY];
+
         const { id } = await commandBus.execute<CreateRoleCommand, Role>(
           new CreateRoleCommand({
             name: body.name,
             ...(typeof idempotencyKey === 'string' ? { idempotencyKey } : {}),
           }),
         );
+
         return readAfterWrite(id);
       },
     }),
@@ -107,7 +104,7 @@ export function roleRoutes({
       response: RoleBody,
       handle: async ({ params, body }) => {
         await commandBus.execute(
-          new UpdateRoleCommand({ id: params.id, name: body.name }),
+          new RenameRoleCommand({ id: params.id, name: body.name }),
         );
         return readAfterWrite(params.id);
       },

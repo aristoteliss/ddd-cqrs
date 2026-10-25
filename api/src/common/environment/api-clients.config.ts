@@ -43,30 +43,31 @@ function parseApiClients(raw: string | undefined): Map<string, ApiClient> {
   }
 
   for (const entry of Array.isArray(parsed) ? parsed : []) {
-    if (
-      entry &&
+    const isComplete =
+      !!entry &&
       typeof entry.id === 'string' &&
       entry.id.length > 0 &&
       typeof entry.key === 'string' &&
       entry.key.length > 0 &&
-      (typeof entry.tenant === 'string' || Array.isArray(entry.tenants))
-    ) {
-      const configuredTenants: unknown[] =
-        typeof entry.tenant === 'string' ? [entry.tenant] : entry.tenants;
-      const tenants = new Set<string>(
-        configuredTenants.filter(
-          (tenant: unknown): tenant is string =>
-            typeof tenant === 'string' && tenant.length > 0,
-        ),
-      );
-      if (tenants.size === 0) continue;
-      clients.set(entry.id, {
-        key: entry.key,
-        tenants,
-        grants: parseRules(entry.id, entry.rules),
-      });
-    }
+      (typeof entry.tenant === 'string' || Array.isArray(entry.tenants));
+    if (!isComplete) continue;
+    const configuredTenants: unknown[] =
+      typeof entry.tenant === 'string' ? [entry.tenant] : entry.tenants;
+    const tenants = new Set<string>(
+      configuredTenants.filter(
+        (tenant: unknown): tenant is string =>
+          typeof tenant === 'string' && tenant.length > 0,
+      ),
+    );
+    if (tenants.size === 0) continue;
+
+    clients.set(entry.id, {
+      key: entry.key,
+      tenants,
+      grants: parseRules(entry.id, entry.rules),
+    });
   }
+
   return clients;
 }
 

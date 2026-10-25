@@ -4,7 +4,6 @@ import type { Cqrs } from '@cqrs-ddd/cqrs';
 import { UnauthorizedActionException } from '@cqrs-ddd/pipeline-casl';
 import { z } from 'zod';
 import { HEADERS } from '../common/constants/headers.constants.js';
-import { EmailSchema } from '../common/validation/email.schema.js';
 import { HttpError } from '../http/http-error.js';
 import { type Route, route } from '../http/route.js';
 import { CreateUserCommand } from './application/cqrs/commands/create-user.command.js';
@@ -14,27 +13,18 @@ import {
   UpdateUserCommand,
 } from './application/cqrs/commands/update-user.command.js';
 import { GetUserQuery } from './application/cqrs/queries/get-user.query.js';
-import type { UserOverviewDto } from './application/cqrs/queries/get-user-overview.handler.js';
 import { GetUserOverviewQuery } from './application/cqrs/queries/get-user-overview.query.js';
 import { GetUsersQuery } from './application/cqrs/queries/get-users.query.js';
+import type { UserOverviewReadModel } from './application/user-overview-read-model.js';
 import type { UserReadModel } from './application/user-read-model.js';
-import { User } from './domain/models/user.entity.js';
+import type { User } from './domain/models/user.entity.js';
 
 const UserId = z.object({ id: z.uuid() });
 
 const NewUser = z.object({
-  email: EmailSchema,
-  name: z
-    .string()
-    .trim()
-    .min(User.rules.username.minLength)
-    .max(User.rules.username.maxLength),
-  department: z
-    .string()
-    .trim()
-    .min(User.rules.department.minLength)
-    .max(User.rules.department.maxLength)
-    .optional(),
+  email: CreateUserCommand.schema.shape.email,
+  name: CreateUserCommand.schema.shape.username,
+  department: CreateUserCommand.schema.shape.department,
 });
 
 const UserBody = z.object({
@@ -133,6 +123,7 @@ export function userRoutes({
       handle: async ({ params }) => {
         const user = await find(params.id, true);
         if (!user) throw new HttpError(404, 'User not found');
+
         return userBody(user);
       },
     }),
@@ -145,9 +136,10 @@ export function userRoutes({
       handle: async ({ params }) => {
         const overview = await queryBus.execute<
           GetUserOverviewQuery,
-          UserOverviewDto | null
+          UserOverviewReadModel | null
         >(new GetUserOverviewQuery({ userId: params.id }));
         if (!overview) throw new HttpError(404, 'User not found');
+
         return overview;
       },
     }),
@@ -159,6 +151,7 @@ export function userRoutes({
       response: UserBody,
       handle: async ({ body, headers }) => {
         const idempotencyKey = headers[HEADERS.IDEMPOTENCY_KEY];
+
         const { id } = await commandBus.execute<CreateUserCommand, User>(
           new CreateUserCommand({
             username: body.name,
@@ -169,6 +162,7 @@ export function userRoutes({
             ...(typeof idempotencyKey === 'string' ? { idempotencyKey } : {}),
           }),
         );
+
         return readAfterWrite(id);
       },
     }),

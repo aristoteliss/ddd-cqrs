@@ -31,6 +31,7 @@ function schemaOf(type: z.ZodType): JsonSchema {
 function parameters(type: z.ZodType | undefined, where: 'path' | 'query') {
   if (!type) return [];
   const { properties = {}, required = [] } = schemaOf(type);
+
   return Object.entries(properties).map(([name, schema]) => ({
     name,
     in: where,
@@ -94,6 +95,7 @@ export function openApiDocument(
     paths[path] ??= {};
     paths[path][route.method.toLowerCase()] = operation(route, options);
   }
+
   return {
     openapi: '3.1.0',
     info: options.info,

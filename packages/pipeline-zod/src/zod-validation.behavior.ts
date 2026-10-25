@@ -129,12 +129,7 @@ export class ZodValidationBehavior implements IPipelineBehavior {
       : undefined;
 
     if (!schema) return next();
-    if (!context.request || typeof context.request !== 'object') {
-      throw new TypeError(
-        'ZodValidationBehavior requires the pipeline request to be an object when a schema is attached.',
-      );
-    }
-    const request = context.request as Record<string, unknown>;
+    const request = requireObjectRequest(context);
     const state = getValidationState(request);
     if (state?.schema === schema && !hasBeenMutated(request, state.snapshot))
       return next();
@@ -142,18 +137,34 @@ export class ZodValidationBehavior implements IPipelineBehavior {
     const result = await schema.safeParseAsync(request);
     if (!result.success) throw new ZodValidationError(result.error);
     assertPlainRequestOutput(result.data, 'behavior');
-
-    // A previously parsed request only gives up the fields its schema produced;
-    // an unvalidated one gives up every field the schema does not keep.
-    const removable = state
-      ? Object.keys(state.snapshot)
-      : Object.keys(request);
-    for (const key of removable) {
-      if (!Object.hasOwn(result.data, key)) delete request[key];
-    }
-    defineEnumerableDataProperties(request, result.data);
+    applyParsed(request, result.data, state?.snapshot);
     setValidatedData(request, schema, result.data);
 
     return next();
   }
+}
+
+function requireObjectRequest(
+  context: IPipelineContext,
+): Record<string, unknown> {
+  if (!context.request || typeof context.request !== 'object') {
+    throw new TypeError(
+      'ZodValidationBehavior requires the pipeline request to be an object when a schema is attached.',
+    );
+  }
+  return context.request as Record<string, unknown>;
+}
+
+function applyParsed(
+  request: Record<string, unknown>,
+  data: Record<string, unknown>,
+  snapshot: Record<string, unknown> | undefined,
+): void {
+  // A previously parsed request only gives up the fields its schema produced;
+  // an unvalidated one gives up every field the schema does not keep.
+  const removable = snapshot ? Object.keys(snapshot) : Object.keys(request);
+  for (const key of removable) {
+    if (!Object.hasOwn(data, key)) delete request[key];
+  }
+  defineEnumerableDataProperties(request, data);
 }

@@ -50,30 +50,40 @@ export function AsSystem<TGrant>(
   return methodDecorator((original) => {
     return async function (this: unknown, ...args: unknown[]): Promise<void> {
       const { principal, tenants, sources } = activeRegistration();
-      const failures: unknown[] = [];
-      const failed: string[] = [];
-      for (const tenant of tenants) {
-        try {
-          await sources.tenantId.run(tenant, () =>
-            sources.correlationId.run(sources.correlationId.create(), () =>
-              principal.restore(
-                reference,
-                async () => original.apply(this, args),
-                grants,
-              ),
+      await runPerTenant(tenants, (tenant) =>
+        sources.tenantId.run(tenant, () =>
+          sources.correlationId.run(sources.correlationId.create(), () =>
+            principal.restore(
+              reference,
+              async () => original.apply(this, args),
+              grants,
             ),
-          );
-        } catch (error) {
-          failures.push(error);
-          failed.push(tenant);
-        }
-      }
-      if (failures.length > 0) {
-        throw new AggregateError(
-          failures,
-          `System work failed in tenants: ${failed.join(', ')}`,
-        );
-      }
+          ),
+        ),
+      );
     };
   });
+}
+
+/** Runs `work` for each tenant in turn; rejects with an `AggregateError` if any failed. */
+async function runPerTenant(
+  tenants: readonly string[],
+  work: (tenant: string) => Promise<unknown>,
+): Promise<void> {
+  const failures: unknown[] = [];
+  const failed: string[] = [];
+  for (const tenant of tenants) {
+    try {
+      await work(tenant);
+    } catch (error) {
+      failures.push(error);
+      failed.push(tenant);
+    }
+  }
+  if (failures.length > 0) {
+    throw new AggregateError(
+      failures,
+      `System work failed in tenants: ${failed.join(', ')}`,
+    );
+  }
 }

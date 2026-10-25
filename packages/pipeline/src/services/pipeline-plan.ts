@@ -47,7 +47,6 @@ export interface PipelineDeclaration {
  */
 export function compilePipelinePlan(declaration: PipelineDeclaration) {
   const {
-    handlerName,
     requestKind,
     handlerBehaviorTypes,
     handlerOptions,
@@ -55,35 +54,78 @@ export function compilePipelinePlan(declaration: PipelineDeclaration) {
     globalBehaviors,
   } = declaration;
 
-  if (skippedBehaviorTypes && skippedBehaviorTypes.length > 0) {
-    const handlerBehaviorIds = new Set<BehaviorId>(
-      (handlerBehaviorTypes ?? []).map(getBehaviorId),
-    );
-    for (const skippedType of skippedBehaviorTypes) {
-      const id = getBehaviorId(skippedType);
-      if (handlerBehaviorIds.has(id) || handlerOptions?.has(id)) {
-        throw new Error(
-          `Handler ${handlerName} has contradictory pipeline configuration: ` +
-            `behavior ${skippedType.name} is both skipped and declared. ` +
-            `Remove either the skip or the declaration.`,
-        );
-      }
-    }
-  }
+  assertConsistentSkips(declaration);
 
-  const { beforeTypes, afterTypes, globalOptions } = resolveGlobalBehaviors(
-    globalBehaviors,
-    requestKind,
-  );
-
+  const globals = resolveGlobalBehaviors(globalBehaviors, requestKind);
   const skippedBehaviorIds = new Set<BehaviorId>(
     (skippedBehaviorTypes ?? []).map(getBehaviorId),
   );
+  const { behaviorTypes, globalBehaviorIds } = orderBehaviors(
+    globals,
+    handlerBehaviorTypes,
+    skippedBehaviorIds,
+  );
+  const mergedOptions = mergeOptions(
+    globals.globalOptions,
+    handlerOptions,
+    skippedBehaviorIds,
+  );
 
-  const effectiveBeforeTypes = beforeTypes.filter(
+  return {
+    behaviorTypes,
+    mergedOptions,
+    hasPipeline: behaviorTypes.length > 0,
+    handlerOptions,
+    globalOptions: globals.globalOptions,
+    handlerBehaviorTypes,
+    globalBehaviorIds,
+  };
+}
+
+/** The global behaviors that match one request kind, with their tuple options. */
+interface ResolvedGlobals {
+  beforeTypes: Constructor<IPipelineBehavior>[];
+  afterTypes: Constructor<IPipelineBehavior>[];
+  globalOptions: Map<BehaviorId, Record<string, unknown>>;
+}
+
+function assertConsistentSkips(declaration: PipelineDeclaration): void {
+  const {
+    handlerName,
+    handlerBehaviorTypes,
+    handlerOptions,
+    skippedBehaviorTypes,
+  } = declaration;
+
+  if (!skippedBehaviorTypes || skippedBehaviorTypes.length === 0) return;
+
+  const handlerBehaviorIds = new Set<BehaviorId>(
+    (handlerBehaviorTypes ?? []).map(getBehaviorId),
+  );
+  for (const skippedType of skippedBehaviorTypes) {
+    const id = getBehaviorId(skippedType);
+    if (handlerBehaviorIds.has(id) || handlerOptions?.has(id)) {
+      throw new Error(
+        `Handler ${handlerName} has contradictory pipeline configuration: ` +
+          `behavior ${skippedType.name} is both skipped and declared. ` +
+          `Remove either the skip or the declaration.`,
+      );
+    }
+  }
+}
+
+function orderBehaviors(
+  globals: ResolvedGlobals,
+  handlerBehaviorTypes: Constructor<IPipelineBehavior>[] | undefined,
+  skippedBehaviorIds: Set<BehaviorId>,
+): {
+  behaviorTypes: Constructor<IPipelineBehavior>[];
+  globalBehaviorIds: Set<BehaviorId>;
+} {
+  const effectiveBeforeTypes = globals.beforeTypes.filter(
     (type) => !skippedBehaviorIds.has(getBehaviorId(type)),
   );
-  const effectiveAfterTypes = afterTypes.filter(
+  const effectiveAfterTypes = globals.afterTypes.filter(
     (type) => !skippedBehaviorIds.has(getBehaviorId(type)),
   );
 
@@ -106,6 +148,14 @@ export function compilePipelinePlan(declaration: PipelineDeclaration) {
     ...effectiveAfterTypes,
   ];
 
+  return { behaviorTypes, globalBehaviorIds };
+}
+
+function mergeOptions(
+  globalOptions: Map<BehaviorId, Record<string, unknown>>,
+  handlerOptions: Map<BehaviorId, Record<string, unknown>> | undefined,
+  skippedBehaviorIds: Set<BehaviorId>,
+): Map<BehaviorId, Record<string, unknown>> {
   // Handler options shallowly override global options; nested values are replaced.
   const mergedOptions = new Map<BehaviorId, Record<string, unknown>>(
     globalOptions,
@@ -117,16 +167,7 @@ export function compilePipelinePlan(declaration: PipelineDeclaration) {
   for (const skippedId of skippedBehaviorIds) {
     mergedOptions.delete(skippedId);
   }
-
-  return {
-    behaviorTypes,
-    mergedOptions,
-    hasPipeline: behaviorTypes.length > 0,
-    handlerOptions,
-    globalOptions,
-    handlerBehaviorTypes,
-    globalBehaviorIds,
-  };
+  return mergedOptions;
 }
 
 /** Normalizes the single-object and array forms of `globalBehaviors`. */
@@ -154,11 +195,7 @@ function resolveGlobalBehaviors(
     | GlobalBehaviorsOptions[]
     | undefined,
   requestKind: RequestKind,
-): {
-  beforeTypes: Constructor<IPipelineBehavior>[];
-  afterTypes: Constructor<IPipelineBehavior>[];
-  globalOptions: Map<BehaviorId, Record<string, unknown>>;
-} {
+): ResolvedGlobals {
   const configs = toGlobalConfigs(globalBehaviors);
 
   const beforeTypes: Constructor<IPipelineBehavior>[] = [];

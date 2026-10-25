@@ -17,7 +17,7 @@ export type UserBatchDispatchItem = {
  * the tenant, correlation id and principal of the caller.
  */
 export interface IWelcomeEmailDispatcher {
-  enqueueWelcomeEmail(message: WelcomeEmailDispatch): Promise<void>;
+  enqueue(message: WelcomeEmailDispatch): Promise<void>;
 }
 
 /**
@@ -25,5 +25,5 @@ export interface IWelcomeEmailDispatcher {
  * correlation id and principal of the caller.
  */
 export interface IUserBatchDispatcher {
-  enqueueUserBatch(items: readonly UserBatchDispatchItem[]): Promise<void>;
+  enqueue(items: readonly UserBatchDispatchItem[]): Promise<void>;
 }

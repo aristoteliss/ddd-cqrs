@@ -9,7 +9,7 @@ import {
 } from '@cqrs-ddd/core/domain';
 import { RoleCreatedEvent } from '../events/role-created.event.js';
 import { RoleDeletedEvent } from '../events/role-deleted.event.js';
-import { RoleUpdatedEvent } from '../events/role-updated.event.js';
+import { RoleRenamedEvent } from '../events/role-renamed.event.js';
 import { InvalidRoleNameException } from './errors/role-name.exception.js';
 
 export interface RoleSnapshot extends Partial<RootEntitySnapshot> {
@@ -65,7 +65,7 @@ export class Role extends RootEntity<RoleSnapshot> {
     this._name = Role.rules.name.parse(value);
   }
 
-  @ApplyMutation<Role>({ event: (role) => new RoleUpdatedEvent(role) })
+  @ApplyMutation<Role>({ event: (role) => new RoleRenamedEvent(role) })
   rename(name: string): this {
     this.applyPatch({ name });
     return this;

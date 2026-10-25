@@ -55,6 +55,7 @@ export function uuidv7(): string {
 
   // Format as standard UUID string
   const hex = bytes.toString('hex');
+
   return (
     hex.substring(0, 8) +
     '-' +

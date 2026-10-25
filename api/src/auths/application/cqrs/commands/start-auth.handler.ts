@@ -24,14 +24,14 @@ import { type AuthTokenPolicy } from '../../ports/auth-token-policy.port.js';
 import { type IRefreshTokens } from '../../ports/refresh-tokens.port.js';
 import { type ISessionCookies } from '../../ports/session-cookies.port.js';
 import { AuthResult } from '../../results/auth.result.js';
-import { CreateAuthCommand } from './create-auth.command.js';
+import { StartAuthCommand } from './start-auth.command.js';
 
-@CommandHandler(CreateAuthCommand)
+@CommandHandler(StartAuthCommand)
 @UsePipeline(
   metrics({ meterName: 'users-api.auth' }),
   rateLimit({
     keyFactory: createPartitionedRateLimitKeyFactory(
-      (ctx) => (ctx.request as CreateAuthCommand).clientIp,
+      (ctx) => (ctx.request as StartAuthCommand).clientIp,
     ),
     points: RATE_LIMIT_COST.login,
   }),
@@ -40,11 +40,11 @@ import { CreateAuthCommand } from './create-auth.command.js';
     severity: AUDIT_SEVERITY.MEDIUM,
     redactKeys: ['code'],
     actor: (ctx: IPipelineContext) =>
-      claimedIdentityActor((ctx.request as CreateAuthCommand)?.email),
+      claimedIdentityActor((ctx.request as StartAuthCommand)?.email),
   }),
 )
-export class CreateAuthHandler extends CommandBaseHandler<
-  CreateAuthCommand,
+export class StartAuthHandler extends CommandBaseHandler<
+  StartAuthCommand,
   AuthResult
 > {
   constructor(
@@ -58,13 +58,15 @@ export class CreateAuthHandler extends CommandBaseHandler<
     super(eventBus);
   }
 
-  async handle(command: CreateAuthCommand): Promise<AuthResult> {
+  async handle(command: StartAuthCommand): Promise<AuthResult> {
     const { email, code } = command;
+
     const user = await this.principalLoginService.authenticate(email, code);
+
     const refreshToken = this.refreshTokens.generate();
     const sessionExpiresAt =
       Date.now() + this.policy.refreshTokenTtlSeconds * 1000;
-    const auth = Auth.create(
+    const auth = Auth.start(
       user.id,
       this.refreshTokens.hash(refreshToken),
       sessionExpiresAt,
@@ -86,6 +88,7 @@ export class CreateAuthHandler extends CommandBaseHandler<
       sessionExpiresAt,
     };
     this.cookies.save(result);
+
     return result;
   }
 }

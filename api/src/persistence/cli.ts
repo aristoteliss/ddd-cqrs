@@ -70,11 +70,13 @@ function steps(args: string[]): number {
     (flag >= 0
       ? (args[flag + 1] ?? '')
       : args.find((arg) => /^\d+$/.test(arg)));
+
   if (raw === undefined) return 1;
   const value = Number(raw);
   if (!Number.isInteger(value) || value <= 0) {
     throw new Error('--steps must be a positive integer.');
   }
+
   return value;
 }
 

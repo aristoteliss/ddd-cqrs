@@ -13,11 +13,11 @@ import {
 } from '@cqrs-ddd/pipeline-idempotency';
 import { RateLimitExceededError } from '@cqrs-ddd/pipeline-rate-limit';
 import { ZodValidationError } from '@cqrs-ddd/pipeline-zod';
-import { InvalidLoginCredentialsException } from '../../auths/domain/errors/authentication.exception.js';
+import { InvalidLoginCredentialsException } from '../../auths/domain/models/errors/authentication.exception.js';
 import {
   InvalidRefreshTokenError,
   RefreshTokenReuseError,
-} from '../../auths/domain/errors/refresh-token.errors.js';
+} from '../../auths/domain/models/errors/refresh-token.errors.js';
 import {
   InvalidRoleNameException,
   UniqueRoleNameException,
@@ -35,7 +35,7 @@ import {
  *
  * Listed by concrete class, because a listed class also covers its subclasses:
  * listing `DomainException` would also hide misconfigurations such as
- * `AuthConfigurationException`. `dead-letter.options.spec.ts` fails for any
+ * `AuthConfigurationError`. `dead-letter.options.spec.ts` fails for any
  * application or core domain error class that is neither listed here nor
  * declared there as dead-lettered.
  */

@@ -18,6 +18,6 @@ export function routes(app: App): readonly Route[] {
   return [
     ...userRoutes(app.cqrs),
     ...roleRoutes(app.cqrs),
-    ...authRoutes(app.cqrs.commandBus, app.logins),
+    ...authRoutes(app.cqrs.commandBus),
   ];
 }

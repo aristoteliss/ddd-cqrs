@@ -199,128 +199,40 @@ export class LoggingBehavior implements IPipelineBehavior {
   ): Promise<unknown> {
     const options =
       context.getBehaviorOptions<LoggingBehaviorOptions>(LoggingBehavior);
-    const metricLogLevel = options?.metricLogLevel ?? 'log';
-    const requestResponseLogLevel = options?.requestResponseLogLevel ?? 'debug';
-    const errorLogLevel = options?.errorLogLevel ?? 'error';
     const excludeKeys = new Set<string>(options?.excludeKeys);
     const sanitizeOptions = this.buildSanitizeOptions(options, excludeKeys);
-    const excludeRequestObj = options?.excludeRequestObj ?? true;
-    const excludeResponseObj = options?.excludeResponseObj ?? true;
-    const logFormat = options?.logFormat ?? 'text';
-    const structured = logFormat === 'structured';
+    const execution = executionOf(context, options, sanitizeOptions);
 
     this.observe(() => {
-      if (requestResponseLogLevel === 'none') return;
-      const requestPayload = excludeRequestObj
-        ? '[exclude request obj]'
-        : structured
-          ? safeSanitize(context.request, sanitizeOptions)
-          : safeStringify(context.request, sanitizeOptions);
-
-      this.log(
-        requestResponseLogLevel,
-        structured
-          ? { msg: `Request → ${context.handlerName}`, request: requestPayload }
-          : `Request: ${requestPayload}`,
-        context.handlerName,
-      );
+      const request = requestLine(execution);
+      if (request) this.log(...request);
     });
 
     const startTime = performance.now();
 
     try {
       const result = await next();
-      this.observe(() => {
-        const duration = (performance.now() - startTime).toFixed(2);
-
-        const metricMsg =
-          `[${context.correlationId}] ${context.requestKind.toUpperCase()} ` +
-          `${context.requestName} → ${context.handlerName} completed in ${duration}ms`;
-
-        this.log(
-          metricLogLevel,
-          structured
-            ? {
-                msg: metricMsg,
-                correlationId: context.correlationId,
-                requestKind: context.requestKind,
-                requestName: context.requestName,
-                handlerName: context.handlerName,
-                durationMs: Number(duration),
-              }
-            : metricMsg,
-          context.handlerName,
-        );
-
-        if (requestResponseLogLevel === 'none') return;
-        const responsePayload = excludeResponseObj
-          ? '[exclude response obj]'
-          : result != null
-            ? structured
-              ? safeSanitize(result, sanitizeOptions)
-              : safeStringify(result, sanitizeOptions)
-            : '(void)';
-
-        this.log(
-          requestResponseLogLevel,
-          structured
-            ? {
-                msg: `Response ← ${context.handlerName}`,
-                response: responsePayload,
-              }
-            : `Response: ${responsePayload}`,
-          context.handlerName,
-        );
-      });
+      this.observe(() => this.logSuccess(execution, result, startTime));
 
       return result;
     } catch (error) {
       this.observe(() => {
-        const duration = (performance.now() - startTime).toFixed(2);
-        const err = error instanceof Error ? error : undefined;
-        let logLevel = errorLogLevel;
-
-        if (options?.mapLogLevel) {
-          let bestMatch: ErrorClass | undefined;
-          for (const [errorType, level] of options.mapLogLevel.entries()) {
-            if (!(error instanceof errorType)) continue;
-            if (!bestMatch || errorType.prototype instanceof bestMatch) {
-              bestMatch = errorType;
-              logLevel = level;
-            }
-          }
-        }
-
-        const message =
-          `[${context.correlationId}] ${context.requestKind.toUpperCase()} ` +
-          `${context.requestName} → ${context.handlerName} failed after ${duration}ms: ` +
-          `${err ? `${err.name}: ${err.message}` : String(error)}`;
-
-        const params = this.optionalParamsOf(error);
-        const optionalParams = params
-          ? (safeSanitize(params, sanitizeOptions) as unknown[])
-          : undefined;
-
-        if (structured) {
-          const payload: Record<string, unknown> = {
-            message,
-            ...(err?.stack ? { stack: err.stack } : {}),
-            ...(optionalParams ? { optionalParams } : {}),
-          };
-          this.log(logLevel, payload, context.handlerName);
-        } else {
-          this.log(
-            logLevel,
-            message,
-            ...(err?.stack ? [err.stack] : []),
-            ...(optionalParams ?? []),
-            context.handlerName,
-          );
-        }
+        const failure = failureOf(execution, error, startTime);
+        this.log(...errorLine(failure, this.optionalParamsOf(error)));
       });
 
       throw error;
     }
+  }
+
+  private logSuccess(
+    execution: LoggedExecution,
+    result: unknown,
+    startTime: number,
+  ): void {
+    this.log(...metricLine(execution, startTime));
+    const response = responseLine(execution, result);
+    if (response) this.log(...response);
   }
 
   private observe(write: () => void): void {
@@ -409,4 +321,184 @@ export class LoggingBehavior implements IPipelineBehavior {
     if (optionalParams === undefined) return undefined;
     return Array.isArray(optionalParams) ? optionalParams : [optionalParams];
   }
+}
+
+/** One execution's context, with its logging options resolved to their defaults. */
+interface LoggedExecution {
+  context: IPipelineContext;
+  options: LoggingBehaviorOptions | undefined;
+  metricLogLevel: LogLevel | 'none';
+  requestResponseLogLevel: LogLevel | 'none';
+  errorLogLevel: LogLevel | 'none';
+  sanitizeOptions: Set<string> | SanitizeOptions;
+  excludeRequestObj: boolean;
+  excludeResponseObj: boolean;
+  structured: boolean;
+}
+
+/** What a failed execution logs before the error's own `optionalParams`. */
+interface Failure {
+  execution: LoggedExecution;
+  err: Error | undefined;
+  level: LogLevel | 'none';
+  message: string;
+}
+
+type LogLine = [
+  level: LogLevel | 'none',
+  message: unknown,
+  ...optionalParams: unknown[],
+];
+
+function executionOf(
+  context: IPipelineContext,
+  options: LoggingBehaviorOptions | undefined,
+  sanitizeOptions: Set<string> | SanitizeOptions,
+): LoggedExecution {
+  return {
+    context,
+    options,
+    metricLogLevel: options?.metricLogLevel ?? 'log',
+    requestResponseLogLevel: options?.requestResponseLogLevel ?? 'debug',
+    errorLogLevel: options?.errorLogLevel ?? 'error',
+    sanitizeOptions,
+    excludeRequestObj: options?.excludeRequestObj ?? true,
+    excludeResponseObj: options?.excludeResponseObj ?? true,
+    structured: options?.logFormat === 'structured',
+  };
+}
+
+function requestLine(execution: LoggedExecution): LogLine | undefined {
+  const { context, requestResponseLogLevel, structured } = execution;
+  if (requestResponseLogLevel === 'none') return undefined;
+  const requestPayload = execution.excludeRequestObj
+    ? '[exclude request obj]'
+    : payloadOf(execution, context.request);
+
+  return [
+    requestResponseLogLevel,
+    structured
+      ? { msg: `Request → ${context.handlerName}`, request: requestPayload }
+      : `Request: ${requestPayload}`,
+    context.handlerName,
+  ];
+}
+
+function payloadOf(execution: LoggedExecution, value: unknown): unknown {
+  const { structured, sanitizeOptions } = execution;
+  return structured
+    ? safeSanitize(value, sanitizeOptions)
+    : safeStringify(value, sanitizeOptions);
+}
+
+function metricLine(execution: LoggedExecution, startTime: number): LogLine {
+  const { context, metricLogLevel, structured } = execution;
+  const duration = (performance.now() - startTime).toFixed(2);
+
+  const metricMsg =
+    `[${context.correlationId}] ${context.requestKind.toUpperCase()} ` +
+    `${context.requestName} → ${context.handlerName} completed in ${duration}ms`;
+
+  return [
+    metricLogLevel,
+    structured
+      ? {
+          msg: metricMsg,
+          correlationId: context.correlationId,
+          requestKind: context.requestKind,
+          requestName: context.requestName,
+          handlerName: context.handlerName,
+          durationMs: Number(duration),
+        }
+      : metricMsg,
+    context.handlerName,
+  ];
+}
+
+function responseLine(
+  execution: LoggedExecution,
+  result: unknown,
+): LogLine | undefined {
+  const { context, requestResponseLogLevel, structured } = execution;
+  if (requestResponseLogLevel === 'none') return undefined;
+  const responsePayload = responsePayloadOf(execution, result);
+
+  return [
+    requestResponseLogLevel,
+    structured
+      ? { msg: `Response ← ${context.handlerName}`, response: responsePayload }
+      : `Response: ${responsePayload}`,
+    context.handlerName,
+  ];
+}
+
+function responsePayloadOf(
+  execution: LoggedExecution,
+  result: unknown,
+): unknown {
+  if (execution.excludeResponseObj) return '[exclude response obj]';
+  if (result == null) return '(void)';
+  return payloadOf(execution, result);
+}
+
+function failureOf(
+  execution: LoggedExecution,
+  error: unknown,
+  startTime: number,
+): Failure {
+  const { context } = execution;
+  const duration = (performance.now() - startTime).toFixed(2);
+  const err = error instanceof Error ? error : undefined;
+  const level = errorLevelOf(execution, error);
+
+  const message =
+    `[${context.correlationId}] ${context.requestKind.toUpperCase()} ` +
+    `${context.requestName} → ${context.handlerName} failed after ${duration}ms: ` +
+    `${err ? `${err.name}: ${err.message}` : String(error)}`;
+
+  return { execution, err, level, message };
+}
+
+function errorLevelOf(
+  execution: LoggedExecution,
+  error: unknown,
+): LogLevel | 'none' {
+  const { options } = execution;
+  let logLevel = execution.errorLogLevel;
+  if (!options?.mapLogLevel) return logLevel;
+
+  let bestMatch: ErrorClass | undefined;
+  for (const [errorType, level] of options.mapLogLevel.entries()) {
+    if (!(error instanceof errorType)) continue;
+    if (!bestMatch || errorType.prototype instanceof bestMatch) {
+      bestMatch = errorType;
+      logLevel = level;
+    }
+  }
+
+  return logLevel;
+}
+
+function errorLine(failure: Failure, params: unknown[] | undefined): LogLine {
+  const { execution, err, level, message } = failure;
+  const { context, sanitizeOptions } = execution;
+  const optionalParams = params
+    ? (safeSanitize(params, sanitizeOptions) as unknown[])
+    : undefined;
+
+  if (execution.structured) {
+    const payload: Record<string, unknown> = {
+      message,
+      ...(err?.stack ? { stack: err.stack } : {}),
+      ...(optionalParams ? { optionalParams } : {}),
+    };
+    return [level, payload, context.handlerName];
+  }
+  return [
+    level,
+    message,
+    ...(err?.stack ? [err.stack] : []),
+    ...(optionalParams ?? []),
+    context.handlerName,
+  ];
 }

@@ -65,6 +65,7 @@ export class SessionJobPrincipal implements IJobPrincipal<Capability> {
     if (!isPrincipalType(type)) {
       throw new InvalidJobContextError(`principal type "${type}" is unknown`);
     }
+
     const tenant = requireTenant('restoring a job principal');
     if (grants) return { id, type, tenant, grants: [...grants] };
 
@@ -79,22 +80,24 @@ export class SessionJobPrincipal implements IJobPrincipal<Capability> {
     }
 
     const session = sessionId ? await this.sessions.findById(sessionId) : null;
-    if (
+    const isSessionInvalid =
       !session ||
       session.userId !== id ||
       session.revokedAt !== null ||
-      Date.now() >= session.expiresAt
-    ) {
+      Date.now() >= session.expiresAt;
+    if (isSessionInvalid) {
       throw new InvalidJobContextError(
         'the user session is unknown, revoked or expired',
       );
     }
+
     const user = await this.users.find(
       new GetUserQuery({ userId: id }, { refresh: true }),
     );
     if (!user) {
       throw new InvalidJobContextError('the user no longer exists');
     }
+
     return { id, type, tenant, sid: sessionId };
   }
 }

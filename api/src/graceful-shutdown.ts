@@ -26,15 +26,17 @@ export function closeOnShutdownSignals(targets: readonly Closable[]): void {
   for (const signal of SHUTDOWN_SIGNALS) {
     const handler = () => {
       release();
-      void (async () => {
-        for (const target of targets) {
-          await target.close().catch((error: unknown) => {
-            console.error('Shutdown step failed', error);
-          });
-        }
-      })().finally(() => process.kill(process.pid, signal));
+      void closeAll(targets).finally(() => process.kill(process.pid, signal));
     };
     handlers.set(signal, handler);
     process.on(signal, handler);
+  }
+}
+
+async function closeAll(targets: readonly Closable[]): Promise<void> {
+  for (const target of targets) {
+    await target.close().catch((error: unknown) => {
+      console.error('Shutdown step failed', error);
+    });
   }
 }

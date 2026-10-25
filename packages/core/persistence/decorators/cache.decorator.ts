@@ -2,6 +2,7 @@
 
 import {
   type ICache,
+  type IVersionedCache,
   isVersionedCache,
 } from '../../application/ports/cache.port.js';
 import type { ICacheLogger } from '../cache/cache-logger.js';
@@ -21,6 +22,13 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/** Why keys are evicted, for which entity, and how long a barrier lives. */
+interface Eviction {
+  readonly reason: CacheBarrierReason;
+  readonly entity: unknown;
+  readonly barrierTtl: number;
+}
+
 /**
  * Evicts one key using the strongest coordination the adapter supports.
  *
@@ -34,17 +42,15 @@ function errorMessage(err: unknown): string {
 async function evictKey(
   cache: ICache<unknown>,
   key: string,
-  reason: CacheBarrierReason,
-  entity: unknown,
-  barrierTtl: number,
+  eviction: Eviction,
 ): Promise<void> {
   if (isVersionedCache(cache)) {
     await cache.invalidate(key);
     return;
   }
 
-  const barrier = createCacheMutationBarrier(reason, entity);
-  await cache.set(key, barrier, { ttl: barrierTtl });
+  const barrier = createCacheMutationBarrier(eviction.reason, eviction.entity);
+  await cache.set(key, barrier, { ttl: eviction.barrierTtl });
 }
 
 /**
@@ -164,16 +170,8 @@ export function Cache<TEntity = unknown, TResult = unknown | null>(
     );
   }
 
-  const resolvedSetKey = options.setKey ?? null;
-  const resolvedDeleteKeys = options.deleteKeys ?? null;
-  const resolvedInvalidateKeys = options.invalidateKeys ?? null;
-  const resolvedTtl = options.ttl;
-  const resolvedBarrierTtl = options.barrierTtl ?? DEFAULT_BARRIER_TTL_MS;
-  const logger = options.logger ?? defaultLogger;
-  const resolvedIsNewer =
-    options.isNewer === null ? undefined : (options.isNewer ?? isCacheNewer);
-
-  if (!resolvedSetKey && !resolvedDeleteKeys && !resolvedInvalidateKeys) {
+  const resolved = resolveOptions(options);
+  if (!resolved.setKey && !resolved.deleteKeys && !resolved.invalidateKeys) {
     throw new Error(
       '@Cache decorator requires at least one of setKey, deleteKeys, or invalidateKeys to be specified.',
     );
@@ -184,132 +182,236 @@ export function Cache<TEntity = unknown, TResult = unknown | null>(
     _propertyKey: string | symbol,
     descriptor: PropertyDescriptor,
   ) => {
-    const original = descriptor.value as (
-      entity: TEntity,
-    ) => Promise<TResult | null>;
-
-    descriptor.value = async function (
-      this: CommandRepository<TEntity, unknown | null>,
-      entity: TEntity,
-    ): Promise<TResult | null> {
-      // Observed before persistence so a write-through can tell whether anyone
-      // mutated the key while this write was in flight. A versioned adapter has
-      // no barrier value to outrank a late snapshot, so the revision it hands
-      // out here is what keeps a deleted aggregate from being resurrected.
-      let observedKey: string | undefined;
-      let observedRevision: string | undefined;
-      let observedValue: unknown;
-
-      if (this.cache && resolvedSetKey && isVersionedCache(this.cache)) {
-        try {
-          observedKey = resolvedSetKey(entity);
-          const state = await this.cache.readState(observedKey);
-          observedRevision = state.revision;
-          observedValue = state.status === 'hit' ? state.value : undefined;
-        } catch {
-          observedKey = undefined;
-          observedRevision = undefined;
-        }
-      }
-
-      const result = await original.call(this, entity);
-
-      if (!this.cache) {
-        reportMissingCacheProperty(this, '@Cache', options.logger);
-        return result;
-      }
-
-      // Cache maintenance is best-effort: the DB write already succeeded,
-      // so a cache failure must not turn a success into an error.
-      try {
-        const deleting = result === null || result === undefined;
-        const keysFn = deleting ? resolvedDeleteKeys : resolvedInvalidateKeys;
-        if (keysFn) {
-          let keys: string[] = [];
-          try {
-            keys = keysFn(entity) ?? [];
-          } catch (err) {
-            const keyOption = deleting ? 'deleteKeys' : 'invalidateKeys';
-            const operation = deleting ? 'cache eviction' : 'cache maintenance';
-            safeWarn(
-              logger,
-              `Failed resolving ${keyOption} during ${operation}: ${errorMessage(err)}`,
-            );
-          }
-          for (const key of keys) {
-            try {
-              await evictKey(
-                this.cache,
-                key,
-                deleting ? 'deleted' : 'invalidated',
-                entity,
-                resolvedBarrierTtl,
-              );
-            } catch (err) {
-              const action = deleting ? 'evicting deletion' : 'invalidating';
-              safeWarn(
-                logger,
-                `Failed ${action} key "${key}": ${errorMessage(err)}`,
-              );
-            }
-          }
-        }
-        if (deleting) return result;
-
-        if (resolvedSetKey) {
-          let setKey: string | undefined;
-          try {
-            setKey = resolvedSetKey(entity);
-          } catch (err) {
-            safeWarn(
-              logger,
-              `Failed resolving setKey during cache maintenance: ${errorMessage(err)}`,
-            );
-          }
-          if (setKey) {
-            try {
-              const snapshot = toCacheSnapshot(result);
-
-              if (isVersionedCache(this.cache)) {
-                if (observedRevision !== undefined && setKey === observedKey) {
-                  // Skip the write-through when the snapshot observed before
-                  // persistence is already newer; otherwise commit it only if
-                  // the revision still matches, so a concurrent mutation wins.
-                  if (!resolvedIsNewer?.(observedValue, snapshot)) {
-                    await this.cache.tryFill(
-                      setKey,
-                      observedRevision,
-                      snapshot as never,
-                      { ttl: resolvedTtl },
-                    );
-                  }
-                } else {
-                  // No revision was observed for this key before the write, so
-                  // a fill cannot be fenced; drop the pre-write value instead.
-                  await this.cache.invalidate(setKey);
-                }
-              } else {
-                await this.cache.set(setKey, snapshot, {
-                  ttl: resolvedTtl,
-                  isNewer: resolvedIsNewer,
-                });
-              }
-            } catch (err) {
-              safeWarn(
-                logger,
-                `Failed setting cache key "${setKey}": ${errorMessage(err)}`,
-              );
-            }
-          }
-        }
-      } catch (err) {
-        safeWarn(
-          logger,
-          `Unexpected error during cache maintenance: ${errorMessage(err)}`,
-        );
-      }
-
-      return result;
-    };
+    descriptor.value = wrapSave<TEntity, TResult>(
+      descriptor.value,
+      options,
+      resolved,
+    );
   };
+}
+
+/** {@link CacheOptions} with their defaults applied, once per decorator. */
+interface ResolvedCacheOptions<TEntity> {
+  readonly setKey: ((entity: TEntity) => string) | null;
+  readonly deleteKeys: ((entity: TEntity) => string[]) | null;
+  readonly invalidateKeys: ((entity: TEntity) => string[]) | null;
+  readonly ttl: number | undefined;
+  readonly barrierTtl: number;
+  readonly logger: ICacheLogger;
+  readonly isNewer:
+    | ((cached: unknown, incoming: unknown) => boolean)
+    | undefined;
+}
+
+/** The set key's revision and hit value, read before persistence. */
+interface KeyObservation {
+  readonly key: string;
+  readonly revision: string;
+  readonly value: unknown;
+}
+
+/** A successful save, its cache, and the key state read before the save. */
+interface CacheMaintenance<TEntity> {
+  readonly cache: ICache<unknown>;
+  readonly entity: TEntity;
+  readonly result: unknown;
+  readonly observed: KeyObservation | undefined;
+}
+
+function resolveOptions<TEntity>(
+  options: CacheOptions<TEntity>,
+): ResolvedCacheOptions<TEntity> {
+  return {
+    setKey: options.setKey ?? null,
+    deleteKeys: options.deleteKeys ?? null,
+    invalidateKeys: options.invalidateKeys ?? null,
+    ttl: options.ttl,
+    barrierTtl: options.barrierTtl ?? DEFAULT_BARRIER_TTL_MS,
+    logger: options.logger ?? defaultLogger,
+    isNewer:
+      options.isNewer === null ? undefined : (options.isNewer ?? isCacheNewer),
+  };
+}
+
+function wrapSave<TEntity, TResult>(
+  original: (entity: TEntity) => Promise<TResult | null>,
+  options: CacheOptions<TEntity>,
+  resolved: ResolvedCacheOptions<TEntity>,
+) {
+  return async function (
+    this: CommandRepository<TEntity, unknown | null>,
+    entity: TEntity,
+  ): Promise<TResult | null> {
+    // Observed before persistence so a write-through can tell whether anyone
+    // mutated the key while this write was in flight. A versioned adapter has
+    // no barrier value to outrank a late snapshot, so the revision it hands
+    // out here is what keeps a deleted aggregate from being resurrected.
+    const { cache } = this;
+    const { setKey } = resolved;
+    const observable = cache && setKey && isVersionedCache(cache);
+    const observed = observable
+      ? await observeKey(cache, setKey, entity)
+      : undefined;
+
+    const result = await original.call(this, entity);
+
+    if (!this.cache) {
+      reportMissingCacheProperty(this, '@Cache', options.logger);
+      return result;
+    }
+
+    await maintainCache(
+      { cache: this.cache, entity, result, observed },
+      resolved,
+    );
+
+    return result;
+  };
+}
+
+async function observeKey<TEntity>(
+  cache: IVersionedCache<unknown>,
+  setKey: (entity: TEntity) => string,
+  entity: TEntity,
+): Promise<KeyObservation | undefined> {
+  try {
+    const key = setKey(entity);
+    const state = await cache.readState(key);
+    return {
+      key,
+      revision: state.revision,
+      value: state.status === 'hit' ? state.value : undefined,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Evicts the keys the save names, then writes its snapshot through unless the
+ * save deleted the entity.
+ */
+async function maintainCache<TEntity>(
+  run: CacheMaintenance<TEntity>,
+  resolved: ResolvedCacheOptions<TEntity>,
+): Promise<void> {
+  // Cache maintenance is best-effort: the DB write already succeeded,
+  // so a cache failure must not turn a success into an error.
+  try {
+    const deleting = run.result === null || run.result === undefined;
+    const eviction: Eviction = {
+      reason: deleting ? 'deleted' : 'invalidated',
+      entity: run.entity,
+      barrierTtl: resolved.barrierTtl,
+    };
+    await evictAll(run, deleting, eviction, resolved);
+    if (deleting || !resolved.setKey) return;
+
+    const setKey = setKeyOf(run.entity, resolved.setKey, resolved.logger);
+    if (setKey) await writeThrough(run, setKey, resolved);
+  } catch (err) {
+    safeWarn(
+      resolved.logger,
+      `Unexpected error during cache maintenance: ${errorMessage(err)}`,
+    );
+  }
+}
+
+async function evictAll<TEntity>(
+  run: CacheMaintenance<TEntity>,
+  deleting: boolean,
+  eviction: Eviction,
+  resolved: ResolvedCacheOptions<TEntity>,
+): Promise<void> {
+  for (const key of keysToEvict(run.entity, deleting, resolved)) {
+    try {
+      await evictKey(run.cache, key, eviction);
+    } catch (err) {
+      const action = deleting ? 'evicting deletion' : 'invalidating';
+      safeWarn(
+        resolved.logger,
+        `Failed ${action} key "${key}": ${errorMessage(err)}`,
+      );
+    }
+  }
+}
+
+/**
+ * The keys a save evicts; a key function that throws is reported and evicts
+ * none.
+ */
+function keysToEvict<TEntity>(
+  entity: TEntity,
+  deleting: boolean,
+  resolved: ResolvedCacheOptions<TEntity>,
+): string[] {
+  const keysFn = deleting ? resolved.deleteKeys : resolved.invalidateKeys;
+  if (!keysFn) return [];
+  try {
+    return keysFn(entity) ?? [];
+  } catch (err) {
+    const keyOption = deleting ? 'deleteKeys' : 'invalidateKeys';
+    const operation = deleting ? 'cache eviction' : 'cache maintenance';
+    safeWarn(
+      resolved.logger,
+      `Failed resolving ${keyOption} during ${operation}: ${errorMessage(err)}`,
+    );
+    return [];
+  }
+}
+
+/**
+ * The write-through key; a key function that throws is reported and writes
+ * nothing.
+ */
+function setKeyOf<TEntity>(
+  entity: TEntity,
+  setKey: (entity: TEntity) => string,
+  logger: ICacheLogger,
+): string | undefined {
+  try {
+    return setKey(entity);
+  } catch (err) {
+    safeWarn(
+      logger,
+      `Failed resolving setKey during cache maintenance: ${errorMessage(err)}`,
+    );
+    return undefined;
+  }
+}
+
+/**
+ * Writes the save's snapshot under `setKey`: `set` with `isNewer` on an
+ * unversioned adapter, a fenced `tryFill` when the key's revision was observed
+ * before persistence, and an invalidation otherwise.
+ */
+async function writeThrough<TEntity>(
+  run: CacheMaintenance<TEntity>,
+  setKey: string,
+  resolved: ResolvedCacheOptions<TEntity>,
+): Promise<void> {
+  const { cache, observed } = run;
+  const { ttl, isNewer } = resolved;
+  try {
+    const snapshot = toCacheSnapshot(run.result);
+    if (!isVersionedCache(cache)) {
+      await cache.set(setKey, snapshot, { ttl, isNewer });
+    } else if (observed?.revision === undefined || setKey !== observed.key) {
+      // No revision was observed for this key before the write, so
+      // a fill cannot be fenced; drop the pre-write value instead.
+      await cache.invalidate(setKey);
+    } else if (!isNewer?.(observed.value, snapshot)) {
+      // Skip the write-through when the snapshot observed before
+      // persistence is already newer; otherwise commit it only if
+      // the revision still matches, so a concurrent mutation wins.
+      await cache.tryFill(setKey, observed.revision, snapshot as never, {
+        ttl,
+      });
+    }
+  } catch (err) {
+    safeWarn(
+      resolved.logger,
+      `Failed setting cache key "${setKey}": ${errorMessage(err)}`,
+    );
+  }
 }

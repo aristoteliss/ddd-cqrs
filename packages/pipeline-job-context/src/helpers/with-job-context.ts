@@ -35,11 +35,13 @@ export function withJobContext<T extends Record<string, unknown>>(
       'withJobContext(data) requires a plain object payload. Wrap arrays and class instances in a plain object first.',
     );
   }
+
   const { principal, sources } = activeRegistration();
   const tenantId = sources.tenantId.current();
   if (tenantId === undefined) throw new MissingJobContextError('tenant');
   const captured = principal.capture();
   if (captured === undefined) throw new MissingJobContextError('principal');
+
   return {
     ...data,
     jobContext: {

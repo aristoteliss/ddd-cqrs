@@ -30,14 +30,8 @@ import { isCacheMutationBarrier } from './cache-barrier.helper.js';
  * @returns `true` if `cached` is strictly newer than `incoming`, `false` otherwise.
  */
 export function isCacheNewer(cached: unknown, incoming: unknown): boolean {
-  if (
-    !cached ||
-    typeof cached !== 'object' ||
-    !incoming ||
-    typeof incoming !== 'object'
-  ) {
-    return false;
-  }
+  if (!cached || typeof cached !== 'object') return false;
+  if (!incoming || typeof incoming !== 'object') return false;
 
   // A barrier records a mutation that has already been durably applied, so it
   // outranks any snapshot: a write-through that started before a concurrent

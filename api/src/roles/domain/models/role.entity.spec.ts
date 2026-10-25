@@ -4,7 +4,7 @@ import { uuidv7 } from '@cqrs-ddd/uuidv7';
 import { describe, expect, it } from 'vitest';
 import { RoleCreatedEvent } from '../events/role-created.event.js';
 import { RoleDeletedEvent } from '../events/role-deleted.event.js';
-import { RoleUpdatedEvent } from '../events/role-updated.event.js';
+import { RoleRenamedEvent } from '../events/role-renamed.event.js';
 import { InvalidRoleNameException } from './errors/role-name.exception.js';
 import { Role } from './role.entity.js';
 
@@ -43,7 +43,7 @@ describe('Role domain entity', () => {
   });
 
   describe('rename', () => {
-    it('renames role, updates updatedAt, and records RoleUpdatedEvent', () => {
+    it('renames role, updates updatedAt, and records RoleRenamedEvent', () => {
       const past = new Date(Date.now() - 60000);
       const role = Role.fromJSON({
         id: uuidv7(),
@@ -63,8 +63,8 @@ describe('Role domain entity', () => {
 
       const events = role.getUncommittedEvents();
       expect(events).toHaveLength(1);
-      expect(events[0]).toBeInstanceOf(RoleUpdatedEvent);
-      const updateEvent = events[0] as RoleUpdatedEvent;
+      expect(events[0]).toBeInstanceOf(RoleRenamedEvent);
+      const updateEvent = events[0] as RoleRenamedEvent;
       expect(updateEvent.aggregateId).toBe(role.id);
       expect(updateEvent.aggregateVersion).toBe(2);
       expect(updateEvent.payload.version).toBe(2);

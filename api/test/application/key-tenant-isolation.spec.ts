@@ -14,10 +14,10 @@ import {
   type RateLimitKeyFactory,
 } from '@cqrs-ddd/pipeline-rate-limit';
 import { describe, expect, it } from 'vitest';
-import { CreateAuthCommand } from '../../src/auths/application/cqrs/commands/create-auth.command.js';
-import { CreateAuthHandler } from '../../src/auths/application/cqrs/commands/create-auth.handler.js';
 import { RevokeAuthCommand } from '../../src/auths/application/cqrs/commands/revoke-auth.command.js';
 import { RevokeAuthHandler } from '../../src/auths/application/cqrs/commands/revoke-auth.handler.js';
+import { StartAuthCommand } from '../../src/auths/application/cqrs/commands/start-auth.command.js';
+import { StartAuthHandler } from '../../src/auths/application/cqrs/commands/start-auth.handler.js';
 import { sessionPrincipalStore } from '../../src/common/context/session-principal.store.js';
 import { CreateRoleCommand } from '../../src/roles/application/cqrs/commands/create-role.command.js';
 import { CreateRoleHandler } from '../../src/roles/application/cqrs/commands/create-role.handler.js';
@@ -45,7 +45,7 @@ const idempotencyKeyOf = (
     IdempotencyBehavior,
   ).keyFactory;
 
-const createAuthRateLimitKey = rateLimitKeyOf(CreateAuthHandler);
+const createAuthRateLimitKey = rateLimitKeyOf(StartAuthHandler);
 const createUserRateLimitKey = rateLimitKeyOf(CreateUserHandler);
 const createUserIdempotencyKey = idempotencyKeyOf(CreateUserHandler);
 const createRoleIdempotencyKey = idempotencyKeyOf(CreateRoleHandler);
@@ -63,7 +63,7 @@ describe('security-sensitive pipeline key tenant isolation', () => {
       new CreateRoleCommand({ name: 'admin', idempotencyKey: 'op-1' }),
     );
     const auth = context(
-      new CreateAuthCommand({
+      new StartAuthCommand({
         email: 'alice@example.test',
         code: '424242',
         clientIp: '203.0.113.7',
@@ -118,7 +118,7 @@ describe('security-sensitive pipeline key tenant isolation', () => {
     const login = (email: string, clientIp: string) =>
       createAuthRateLimitKey(
         context(
-          new CreateAuthCommand({ email, code: '424242', clientIp }),
+          new StartAuthCommand({ email, code: '424242', clientIp }),
           'tenant_a',
         ),
       );

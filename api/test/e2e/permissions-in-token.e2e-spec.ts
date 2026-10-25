@@ -98,10 +98,10 @@ describe('permissions in the access token (e2e, express)', () => {
   });
 
   async function rulesReader() {
-    const { GetUserPermissionRulesRepository } = await import(
+    const { GetUserPermissionRulesQueryRepository } = await import(
       '../../src/auths/persistence/get-user-permission-rules.query-repository.js'
     );
-    return vi.spyOn(GetUserPermissionRulesRepository.prototype, 'find');
+    return vi.spyOn(GetUserPermissionRulesQueryRepository.prototype, 'find');
   }
 
   it('authorizes an API call from the token without reading permissions', async () => {
@@ -177,7 +177,7 @@ describe('permissions in the access token (e2e, fastify cookie budget)', () => {
     const { JoseAccessTokenIssuer } = await import(
       '../../src/auths/infrastructure/jose-access-token.issuer.js'
     );
-    const { GetUserPermissionRulesRepository } = await import(
+    const { GetUserPermissionRulesQueryRepository } = await import(
       '../../src/auths/persistence/get-user-permission-rules.query-repository.js'
     );
     const { User } = await import(
@@ -193,7 +193,7 @@ describe('permissions in the access token (e2e, fastify cookie budget)', () => {
       const { GetUserPermissionRulesQuery } = await import(
         '../../src/auths/application/cqrs/queries/get-user-permission-rules.query.js'
       );
-      const permissions = await new GetUserPermissionRulesRepository(
+      const permissions = await new GetUserPermissionRulesQueryRepository(
         ctx.storage.cache(),
         ctx.storage.store,
       ).find(new GetUserPermissionRulesQuery({ userId }, { refresh: true }));

@@ -8,14 +8,14 @@ import {
 } from '@cqrs-ddd/pipeline-casl';
 import { ZodValidationError } from '@cqrs-ddd/pipeline-zod';
 import { describe, expect, it, vi } from 'vitest';
-// Auths CQRS & Services
-import { CreateAuthCommand } from '../../src/auths/application/cqrs/commands/create-auth.command.js';
-import { CreateAuthHandler } from '../../src/auths/application/cqrs/commands/create-auth.handler.js';
 import { RevokeAuthCommand } from '../../src/auths/application/cqrs/commands/revoke-auth.command.js';
 import { RevokeAuthHandler } from '../../src/auths/application/cqrs/commands/revoke-auth.handler.js';
+// Auths CQRS & Services
+import { StartAuthCommand } from '../../src/auths/application/cqrs/commands/start-auth.command.js';
+import { StartAuthHandler } from '../../src/auths/application/cqrs/commands/start-auth.handler.js';
 import { GetUserPermissionRulesHandler } from '../../src/auths/application/cqrs/queries/get-user-permission-rules.handler.js';
 import { GetUserPermissionRulesQuery } from '../../src/auths/application/cqrs/queries/get-user-permission-rules.query.js';
-import { InvalidRefreshTokenError } from '../../src/auths/domain/errors/refresh-token.errors.js';
+import { InvalidRefreshTokenError } from '../../src/auths/domain/models/errors/refresh-token.errors.js';
 import { NodeRefreshTokens } from '../../src/auths/infrastructure/node-refresh-tokens.js';
 import { PrincipalLoginService } from '../../src/auths/services/principal-login.service.js';
 import { domainAnswer } from '../../src/domain-answer.js';
@@ -27,8 +27,8 @@ import { CreateRoleCommand } from '../../src/roles/application/cqrs/commands/cre
 import { CreateRoleHandler } from '../../src/roles/application/cqrs/commands/create-role.handler.js';
 import { DeleteRoleCommand } from '../../src/roles/application/cqrs/commands/delete-role.command.js';
 import { DeleteRoleHandler } from '../../src/roles/application/cqrs/commands/delete-role.handler.js';
-import { UpdateRoleCommand } from '../../src/roles/application/cqrs/commands/update-role.command.js';
-import { UpdateRoleHandler } from '../../src/roles/application/cqrs/commands/update-role.handler.js';
+import { RenameRoleCommand } from '../../src/roles/application/cqrs/commands/rename-role.command.js';
+import { RenameRoleHandler } from '../../src/roles/application/cqrs/commands/rename-role.handler.js';
 import { GetRoleHandler } from '../../src/roles/application/cqrs/queries/get-role.handler.js';
 import { GetRoleQuery } from '../../src/roles/application/cqrs/queries/get-role.query.js';
 import { GetRolesHandler } from '../../src/roles/application/cqrs/queries/get-roles.handler.js';
@@ -543,20 +543,20 @@ describe('CQRS Commands & Queries Runtime Error Taxonomy', () => {
       });
     });
 
-    describe('UpdateRoleCommand & Handler', () => {
+    describe('RenameRoleCommand & Handler', () => {
       it('catches EntityNotFoundException when updating non-existent role (404)', async () => {
         const authorizer = createMockAuthorizer(true);
         const commandRepo = {
           findById: vi.fn().mockResolvedValue(null),
           save: vi.fn(),
         };
-        const handler = new UpdateRoleHandler(
+        const handler = new RenameRoleHandler(
           commandRepo as any,
           authorizer,
           eventBus,
         );
 
-        const command = new UpdateRoleCommand({
+        const command = new RenameRoleCommand({
           id: 'a0000000-0000-4000-8000-000000000001',
           name: 'Manager',
         });
@@ -577,13 +577,13 @@ describe('CQRS Commands & Queries Runtime Error Taxonomy', () => {
               new UniqueRoleNameException({ name: 'Viewer' } as any),
             ),
         };
-        const handler = new UpdateRoleHandler(
+        const handler = new RenameRoleHandler(
           commandRepo as any,
           authorizer,
           eventBus,
         );
 
-        const command = new UpdateRoleCommand({
+        const command = new RenameRoleCommand({
           id: existingRole.id,
           name: 'Admin',
         });
@@ -649,11 +649,11 @@ describe('CQRS Commands & Queries Runtime Error Taxonomy', () => {
   });
 
   describe('Auths Model', () => {
-    describe('CreateAuthCommand & Handler', () => {
+    describe('StartAuthCommand & Handler', () => {
       it('catches Zod validation errors on missing login code (400)', () => {
         expect(
           () =>
-            new CreateAuthCommand({
+            new StartAuthCommand({
               email: 'alice@example.test',
               code: '',
               clientIp: '203.0.113.7',
@@ -668,7 +668,7 @@ describe('CQRS Commands & Queries Runtime Error Taxonomy', () => {
             .mockRejectedValue(new HttpError(401, 'Invalid login code')),
         };
         const commandRepo = { save: vi.fn() };
-        const handler = new CreateAuthHandler(
+        const handler = new StartAuthHandler(
           eventBus,
           loginService as unknown as PrincipalLoginService,
           commandRepo as any,
@@ -681,7 +681,7 @@ describe('CQRS Commands & Queries Runtime Error Taxonomy', () => {
           { save: vi.fn(), clear: vi.fn() },
         );
 
-        const command = new CreateAuthCommand({
+        const command = new StartAuthCommand({
           email: 'alice@example.test',
           code: '999999',
           clientIp: '203.0.113.7',
@@ -700,7 +700,7 @@ describe('CQRS Commands & Queries Runtime Error Taxonomy', () => {
             .mockRejectedValue(new HttpError(401, 'Invalid email or password')),
         };
         const commandRepo = { save: vi.fn() };
-        const handler = new CreateAuthHandler(
+        const handler = new StartAuthHandler(
           eventBus,
           loginService as unknown as PrincipalLoginService,
           commandRepo as any,
@@ -713,7 +713,7 @@ describe('CQRS Commands & Queries Runtime Error Taxonomy', () => {
           { save: vi.fn(), clear: vi.fn() },
         );
 
-        const command = new CreateAuthCommand({
+        const command = new StartAuthCommand({
           email: 'unknown@example.test',
           code: '123456',
           clientIp: '203.0.113.7',

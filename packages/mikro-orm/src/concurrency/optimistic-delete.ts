@@ -67,5 +67,11 @@ export async function optimisticDelete<TEntity extends VersionedAggregate>(
     id: row.id,
     version: row.expectedVersion,
   } as FilterQuery<TEntity>);
-  await expectOneRow(affected, em, entityType, row, entityName, 'deleted');
+  await expectOneRow(affected, {
+    em,
+    entityType,
+    row,
+    entityName,
+    verb: 'deleted',
+  });
 }

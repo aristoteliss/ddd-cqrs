@@ -67,13 +67,17 @@ export class CreateUserHandler extends CommandBaseHandler<
 
   async handle(command: CreateUserCommand): Promise<User> {
     const { username, email, department } = command;
+
     const user = User.create(username, email, department);
+
     this.authorizer.authorize('create', user, [
       'username',
       'email',
       ...(department !== undefined ? ['department'] : []),
     ]);
+
     await this.commandRepository.save(user);
+
     return user;
   }
 }

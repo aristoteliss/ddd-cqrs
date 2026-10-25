@@ -75,6 +75,7 @@ export class CaslBehavior implements IPipelineBehavior {
         });
       }
     }
+
     return next();
   }
 }

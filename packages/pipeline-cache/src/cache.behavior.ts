@@ -58,6 +58,19 @@ export const CACHE_KEY_ITEM_TOKEN: PipelineItemToken<string> =
 
 const DEFAULT_KINDS: Array<IPipelineContext['requestKind']> = ['query'];
 
+/** One request's use of the cache: its context, its key and its effective options. */
+interface CacheAccess {
+  readonly context: IPipelineContext;
+  readonly key: string;
+  readonly options: CacheBehaviorOptions;
+}
+
+/** What a read found, and whether the store may take the miss's result. */
+interface CacheRead {
+  readonly cached: unknown;
+  readonly canWrite: boolean;
+}
+
 /** Whether this request kind is configured for caching. */
 function inScope(
   options: CacheBehaviorOptions | undefined,
@@ -193,27 +206,13 @@ export class CacheBehavior
 
     if (!inScope(options, context.requestKind)) return next();
     if (options.condition && !options.condition(context)) return next();
-
-    if (!options.key) {
-      throw new TypeError(
-        `CacheBehavior on ${context.handlerName} requires an explicit \`key\` factory. ` +
-          'A cache hit returns without running the handler, so the key must partition ' +
-          'every dimension that can change the authorized response: tenant, principal, ' +
-          'permission scope and request payload. Use createPartitionedCacheKeyFactory(...).',
-      );
-    }
+    if (!options.key) throw missingKeyError(context.handlerName);
 
     const key = options.key(context);
     setPipelineItem(context, CACHE_KEY_ITEM_TOKEN, key);
+    const access: CacheAccess = { context, key, options };
 
-    let cached: unknown;
-    let canWrite = true;
-    try {
-      cached = await this.cacheAdapter.get(key);
-    } catch (error) {
-      this.handleStoreError('read', context, key, error, options);
-      canWrite = false;
-    }
+    const { cached, canWrite } = await this.read(access);
     if (cached !== undefined && cached !== null) {
       setPipelineItem(context, CACHE_HIT_ITEM_TOKEN, true);
       this.diagnose('debug', `Cache hit for ${context.requestName} (${key})`);
@@ -225,7 +224,29 @@ export class CacheBehavior
 
     const result = await next();
     if (result === undefined || result === null) return result;
+    return this.store(access, result, canWrite);
+  }
 
+  /** Reads the entry; a failed read that fails open is a miss whose result is not written. */
+  private async read(access: CacheAccess): Promise<CacheRead> {
+    try {
+      return {
+        cached: await this.cacheAdapter.get(access.key),
+        canWrite: true,
+      };
+    } catch (error) {
+      this.handleStoreError('read', error, access);
+      return { cached: undefined, canWrite: false };
+    }
+  }
+
+  /** Writes the JSON form of a miss's result, and returns that form. */
+  private async store(
+    access: CacheAccess,
+    result: unknown,
+    canWrite: boolean,
+  ): Promise<unknown> {
+    const { context, key, options } = access;
     const cacheable = toJsonForm(result);
     if (cacheable === undefined) {
       this.diagnose(
@@ -239,20 +260,20 @@ export class CacheBehavior
       try {
         await this.cacheAdapter.set(key, cacheable, options.ttl);
       } catch (error) {
-        this.handleStoreError('write', context, key, error, options);
+        this.handleStoreError('write', error, access);
       }
     }
+
     return cacheable;
   }
 
   /** Logs a store failure and either bypasses it or propagates it. */
   private handleStoreError(
     operation: 'read' | 'write',
-    context: IPipelineContext,
-    key: string,
     error: unknown,
-    options: CacheBehaviorOptions,
+    access: CacheAccess,
   ): void {
+    const { context, key, options } = access;
     const message = error instanceof Error ? error.message : String(error);
 
     if (options.failOpen ?? true) {
@@ -287,6 +308,16 @@ export class CacheBehavior
     if (!options) return this.defaults;
     return { ...this.defaults, ...options };
   }
+}
+
+/** The refusal of a cached request whose options give no key factory. */
+function missingKeyError(handlerName: string): TypeError {
+  return new TypeError(
+    `CacheBehavior on ${handlerName} requires an explicit \`key\` factory. ` +
+      'A cache hit returns without running the handler, so the key must partition ' +
+      'every dimension that can change the authorized response: tenant, principal, ' +
+      'permission scope and request payload. Use createPartitionedCacheKeyFactory(...).',
+  );
 }
 
 /** JSON round-trip of a cacheable result, or `undefined` when it has no JSON form. */

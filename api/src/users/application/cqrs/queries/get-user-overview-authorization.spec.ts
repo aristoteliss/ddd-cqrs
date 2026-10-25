@@ -27,11 +27,9 @@ import type { SessionPrincipal } from '../../../../common/types/session-principa
 import { Role } from '../../../../roles/domain/models/role.entity.js';
 import { User } from '../../../domain/models/user.entity.js';
 import type { UserPermissionAssignments } from '../../permission-assignments.js';
+import type { UserOverviewReadModel } from '../../user-overview-read-model.js';
 import type { GetUserCapabilitiesQuery } from './get-user-capabilities.query.js';
-import {
-  GetUserOverviewHandler,
-  type UserOverviewDto,
-} from './get-user-overview.handler.js';
+import { GetUserOverviewHandler } from './get-user-overview.handler.js';
 import { GetUserOverviewQuery } from './get-user-overview.query.js';
 import {
   OVERVIEW_RESPONSE_POLICY_VERSION,
@@ -76,7 +74,7 @@ describe('User overview composed query security and caching contracts', () => {
   let app: Cqrs;
   let cacheStore: ReturnType<typeof buildCache>;
   let queries: {
-    execute(query: object): Promise<UserOverviewDto | null>;
+    execute(query: object): Promise<UserOverviewReadModel | null>;
   };
 
   let targetUser: User;
@@ -178,7 +176,7 @@ describe('User overview composed query security and caching contracts', () => {
     queries = {
       execute: (query) =>
         runWithTenant(currentTenant, () =>
-          bus.execute<object, UserOverviewDto | null>(query),
+          bus.execute<object, UserOverviewReadModel | null>(query),
         ),
     };
   });

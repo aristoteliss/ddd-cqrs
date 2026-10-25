@@ -6,6 +6,5 @@ import { DomainException } from '@cqrs-ddd/core/domain';
 export class EmptyUserUpdateException extends DomainException {
   constructor() {
     super('At least one user field must be supplied for update.');
-    this.name = 'EmptyUserUpdateException';
   }
 }

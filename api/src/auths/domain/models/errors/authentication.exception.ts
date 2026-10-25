@@ -10,4 +10,4 @@ export class InvalidLoginCredentialsException extends DomainException {
 }
 
 /** Required server-side authentication/token configuration is invalid or absent. */
-export class AuthConfigurationException extends DomainException {}
+export class AuthConfigurationError extends DomainException {}

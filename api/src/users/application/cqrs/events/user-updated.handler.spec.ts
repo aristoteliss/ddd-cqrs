@@ -8,8 +8,8 @@ import { UserUpdatedHandler } from './user-updated.handler.js';
 
 describe('UserUpdatedHandler', () => {
   it('dispatches only application data; logging/correlation are cross-cutting concerns', async () => {
-    const enqueueUserBatch = vi.fn().mockResolvedValue(undefined);
-    const dispatcher = { enqueueUserBatch } as IUserBatchDispatcher;
+    const enqueue = vi.fn().mockResolvedValue(undefined);
+    const dispatcher = { enqueue } as IUserBatchDispatcher;
     const handler = new UserUpdatedHandler(dispatcher);
 
     const user = User.create('john_doe', 'john@example.com');
@@ -19,8 +19,8 @@ describe('UserUpdatedHandler', () => {
 
     await handler.handle(event);
 
-    expect(enqueueUserBatch).toHaveBeenCalledTimes(1);
-    expect(enqueueUserBatch).toHaveBeenCalledWith([
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(enqueue).toHaveBeenCalledWith([
       {
         userId: user.id,
         username: 'john_renamed',

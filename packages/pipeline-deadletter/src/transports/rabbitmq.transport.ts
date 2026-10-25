@@ -120,15 +120,12 @@ export class RabbitMqDeadLetterTransport implements DeadLetterTransport {
     await new Promise<void>((resolve, reject) => {
       let settled = false;
 
-      const cleanup = () => {
-        removeListener.call(this.channel, 'drain', onDrain);
-        removeListener.call(this.channel, 'close', onClose);
-        removeListener.call(this.channel, 'error', onError);
-      };
       const finish = (error?: Error) => {
         if (settled) return;
         settled = true;
-        cleanup();
+        removeListener.call(this.channel, 'drain', onDrain);
+        removeListener.call(this.channel, 'close', onClose);
+        removeListener.call(this.channel, 'error', onError);
         if (error) reject(error);
         else resolve();
       };

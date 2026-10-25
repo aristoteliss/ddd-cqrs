@@ -89,10 +89,10 @@ function buildNamedPolicy(
 ): AnyPolicy {
   const classifiesErrors =
     typeof options.handle === 'function' || options.handleAllErrors === true;
-  if (
-    (options.retry || options.circuitBreaker || options.fallback) &&
-    !classifiesErrors
-  ) {
+  const needsClassifier = Boolean(
+    options.retry || options.circuitBreaker || options.fallback,
+  );
+  if (needsClassifier && !classifiesErrors) {
     throw new ResiliencePolicyConfigurationError(
       name,
       'retry, circuitBreaker and fallback require handle(error) or handleAllErrors: true',
@@ -106,5 +106,6 @@ function buildNamedPolicy(
       'it configures no layer (retry, circuitBreaker, bulkhead, timeout or fallback)',
     );
   }
+
   return policy;
 }

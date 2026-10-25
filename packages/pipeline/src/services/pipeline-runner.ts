@@ -10,6 +10,7 @@ import {
 import type {
   ContextSource,
   ContextSources,
+  CorrelationSource,
 } from '../interfaces/context-source.interface.js';
 import type {
   IPipelineBehavior,
@@ -74,37 +75,20 @@ export function createPipelineRunner(
       typeof behaviors === 'function'
         ? await behaviors(self, request)
         : behaviors;
-    const parent = pipelineStore.getStore();
     const { tenantId: tenant, correlationId: correlation } = sources;
-    const tenantId = tenant ? tenant.current() : parent?.tenantId;
-    const correlationId = correlation
-      ? (correlation.current() ?? correlation.create())
-      : (parent?.correlationId ?? uuidv7());
-    context[SET_CORRELATION_ID](correlationId);
-    if (tenantId !== undefined) context[SET_TENANT_ID](tenantId);
+    assignExecutionValues(context, tenant, correlation);
 
-    let chain: NextDelegate = async () => {
-      // A behavior that replaced the request hands the handler the replacement.
+    const chain = compose(context, localBehaviors, async () => {
       const current = context.request;
-      const replaced = current !== request;
       const result = await invoke(
         self,
         current,
-        args && replaced
-          ? args.length === 1
-            ? [current]
-            : (current as unknown[])
-          : args,
+        handlerArgs(args, current, request),
       );
       context[SET_RESPONSE](result);
-      return result;
-    };
 
-    for (let i = localBehaviors.length - 1; i >= 0; i--) {
-      const behavior = localBehaviors[i];
-      const nextInChain = chain;
-      chain = () => behavior.handle(context, nextInChain);
-    }
+      return result;
+    });
 
     // Behaviors and the handler run inside this execution's values, so a
     // nested dispatch inherits them and cannot see a different tenant.
@@ -114,6 +98,44 @@ export function createPipelineRunner(
       ),
     );
   };
+}
+
+function assignExecutionValues(
+  context: PipelineContext,
+  tenant: ContextSource | undefined,
+  correlation: CorrelationSource | undefined,
+): void {
+  const parent = pipelineStore.getStore();
+  const tenantId = tenant ? tenant.current() : parent?.tenantId;
+  const correlationId = correlation
+    ? (correlation.current() ?? correlation.create())
+    : (parent?.correlationId ?? uuidv7());
+  context[SET_CORRELATION_ID](correlationId);
+  if (tenantId !== undefined) context[SET_TENANT_ID](tenantId);
+}
+
+function compose(
+  context: PipelineContext,
+  behaviors: readonly IPipelineBehavior[],
+  handler: NextDelegate,
+): NextDelegate {
+  let chain = handler;
+  for (let i = behaviors.length - 1; i >= 0; i--) {
+    const behavior = behaviors[i];
+    const nextInChain = chain;
+    chain = () => behavior.handle(context, nextInChain);
+  }
+  return chain;
+}
+
+/** A behavior that replaced the request hands the handler the replacement. */
+function handlerArgs(
+  args: readonly unknown[] | undefined,
+  current: unknown,
+  request: unknown,
+): readonly unknown[] | undefined {
+  if (!args || current === request) return args;
+  return args.length === 1 ? [current] : (current as unknown[]);
 }
 
 function within<T>(

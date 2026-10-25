@@ -32,6 +32,7 @@ function resolveOverviewPrincipal(
     id: viewer?.id,
     type: viewer?.principalType,
   });
+
   return segments && joinKeySegments(segments);
 }
 

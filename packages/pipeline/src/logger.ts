@@ -67,10 +67,12 @@ export function pinoLogger(pino: PinoLike): Required<PipelineLogger> {
         level === 'error' && typeof rest[0] === 'string'
           ? rest.shift()
           : undefined;
+
       const fields: Record<string, unknown> = {};
       if (context !== undefined) fields.context = context;
       if (stack !== undefined) fields.stack = stack;
       if (rest.length > 0) fields.params = rest;
+
       const target = PINO_LEVEL[level];
       if (message instanceof Error) {
         pino[target]({ ...fields, err: message }, message.message);

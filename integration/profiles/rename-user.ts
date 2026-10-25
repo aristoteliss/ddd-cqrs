@@ -43,6 +43,7 @@ export class RenameUserHandler extends CommandBaseHandler<
   async handle(command: RenameUserCommand): Promise<User> {
     const user = this.users.get(command.userId);
     if (!user) throw new EntityNotFoundException('User', command.userId);
+
     return user.rename(command.name);
   }
 

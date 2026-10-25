@@ -104,6 +104,13 @@ interface BooleanEvaluationDetails {
   errorMessage?: string;
 }
 
+/** A provider failure, held until the decision is published. */
+interface EvaluationFailure {
+  message: string;
+  errorCode?: string;
+  cause?: unknown;
+}
+
 /**
  * Pipeline behavior that gates a handler behind an OpenFeature boolean flag.
  *
@@ -245,22 +252,48 @@ export class FeatureFlagBehavior
         FeatureFlagBehavior,
       ),
     );
+    const { flag } = options;
+    if (!flag) return next();
 
-    if (!options.flag) return next();
+    const { decision, failure } = await this.decide(context, flag, options);
 
-    const targetingKeyFactory =
-      options.targetingKeyFactory ?? this.moduleTargetingKeyFactory;
+    // Publish the decision before applying the throw policy so outer audit and
+    // telemetry behaviors can observe provider failures.
+    setPipelineItem(context, FEATURE_FLAG_KEY_ITEM_TOKEN, flag);
+    setPipelineItem(context, FEATURE_FLAG_ITEM_TOKEN, decision.enabled);
+    setPipelineItem(context, FEATURE_FLAG_DECISION_ITEM_TOKEN, decision);
+
+    if (failure && (options.errorPolicy ?? 'use-default') === 'throw') {
+      throw new FeatureFlagEvaluationError(
+        flag,
+        context.requestName,
+        failure.errorCode,
+        failure.message,
+        { cause: failure.cause },
+      );
+    }
+
+    this.logDecision(context.requestName, decision);
+    if (decision.enabled) return next();
+    if (options.fallback) return options.fallback(context);
+    throw new FeatureDisabledError(flag, context.requestName);
+  }
+
+  /** Evaluates the flag for this request and builds the decision that gates it. */
+  private async decide(
+    context: IPipelineContext,
+    flag: string,
+    options: FeatureFlagBehaviorOptions,
+  ): Promise<{ decision: FeatureFlagDecision; failure?: EvaluationFailure }> {
     const evaluationContext = buildEvaluationContext(
       context,
       this.moduleContext,
       options.context,
-      targetingKeyFactory,
+      options.targetingKeyFactory ?? this.moduleTargetingKeyFactory,
     );
-    const defaultValue = options.defaultValue ?? false;
-
     const { details, failure } = await this.evaluate(
-      options.flag,
-      defaultValue,
+      flag,
+      options.defaultValue ?? false,
       evaluationContext,
     );
 
@@ -269,12 +302,11 @@ export class FeatureFlagBehavior
     const variantAllowed =
       !options.allowedVariants?.length ||
       (!!details.variant && options.allowedVariants.includes(details.variant));
-    const enabled = details.value && variantAllowed;
 
     const decision: FeatureFlagDecision = {
-      flagKey: options.flag,
+      flagKey: flag,
       value: details.value,
-      enabled,
+      enabled: details.value && variantAllowed,
       ...(details.variant ? { variant: details.variant } : {}),
       ...(details.reason ? { reason: details.reason } : {}),
       ...(details.errorCode !== undefined
@@ -286,34 +318,23 @@ export class FeatureFlagBehavior
         : {}),
     };
 
-    // Publish the decision before applying the throw policy so outer audit and
-    // telemetry behaviors can observe provider failures.
-    setPipelineItem(context, FEATURE_FLAG_KEY_ITEM_TOKEN, options.flag);
-    setPipelineItem(context, FEATURE_FLAG_ITEM_TOKEN, enabled);
-    setPipelineItem(context, FEATURE_FLAG_DECISION_ITEM_TOKEN, decision);
+    return { decision, failure };
+  }
 
-    if (failure && (options.errorPolicy ?? 'use-default') === 'throw') {
-      throw new FeatureFlagEvaluationError(
-        options.flag,
-        context.requestName,
-        failure.errorCode,
-        failure.message,
-        { cause: failure.cause },
-      );
-    }
+  private logDecision(
+    requestName: string,
+    decision: FeatureFlagDecision,
+  ): void {
+    const variantSuffix = decision.variant
+      ? ` variant=${decision.variant}`
+      : '';
+    const reasonSuffix = decision.reason ? ` reason=${decision.reason}` : '';
 
-    const variantSuffix = details.variant ? ` variant=${details.variant}` : '';
-    const reasonSuffix = details.reason ? ` reason=${details.reason}` : '';
-
-    const state = enabled ? 'enabled' : 'disabled';
+    const state = decision.enabled ? 'enabled' : 'disabled';
     this.logger.debug?.(
-      `Feature "${options.flag}" ${state} for ${context.requestName}${variantSuffix}${reasonSuffix}`,
+      `Feature "${decision.flagKey}" ${state} for ${requestName}${variantSuffix}${reasonSuffix}`,
       FeatureFlagBehavior.name,
     );
-
-    if (enabled) return next();
-    if (options.fallback) return options.fallback(context);
-    throw new FeatureDisabledError(options.flag, context.requestName);
   }
 
   /**
@@ -329,7 +350,7 @@ export class FeatureFlagBehavior
     evaluationContext: EvaluationContext,
   ): Promise<{
     details: BooleanEvaluationDetails;
-    failure?: { message: string; errorCode?: string; cause?: unknown };
+    failure?: EvaluationFailure;
   }> {
     let details: BooleanEvaluationDetails;
 
