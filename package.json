@@ -25,10 +25,7 @@
     "docs:build": "pnpm build && pnpm --filter ddd-cqrs-docs build:site",
     "docs:dev": "pnpm --filter ddd-cqrs-docs dev",
     "copy-licenses": "node -e \"const fs=require('fs'),path=require('path'),dirs=fs.existsSync('packages')?fs.readdirSync('packages').filter(d=>fs.existsSync(path.join('packages',d,'package.json'))):[];for(const d of dirs){fs.copyFileSync('LICENSE',path.join('packages',d,'LICENSE'));fs.copyFileSync('COMMERCIAL_LICENSE.txt',path.join('packages',d,'COMMERCIAL_LICENSE.txt'));}\"",
-    "publish:all": "pnpm copy-licenses && pnpm -r publish --access public",
-    "context:update": "python3 scripts/update-claude-snapshot.py",
-    "context:check": "python3 scripts/update-claude-snapshot.py --check",
-    "context:validate": "python3 scripts/validate-claude-context.py"
+    "publish:all": "pnpm copy-licenses && pnpm -r publish --access public"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.2",

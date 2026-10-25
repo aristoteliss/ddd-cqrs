@@ -142,7 +142,6 @@ Every package has a page on the [documentation site](https://aristoteliss.github
 | `packages/` | The published `@cqrs-ddd/*` packages, each with its own README |
 | `api/` | The example application: users, roles and sessions on every package together |
 | `integration/` | Repository-wide checks, and small applications that use one package family at a time (see its README) |
-| `demo/` | The first example on the published packages, outside the workspace, with its own lockfile |
 | `docs/` | The documentation site |
 | `biome/plugins/` | The Grit plugins that guard the package boundaries |
 | `scripts/` | Generator and validator of the agent context files |
@@ -158,8 +157,6 @@ release check.
 pnpm install
 pnpm verify:all   # lint, tests, build, release check
 ```
-
-`AGENTS.md` holds the repository rules every contributor follows.
 
 ### Releasing
 

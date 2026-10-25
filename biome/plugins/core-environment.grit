@@ -1,7 +1,7 @@
 engine biome(1.0)
 language js(typescript)
 
-// AGENTS.md rule 3: packages read no environment. Configuration comes in through
+// Packages read no environment. Configuration comes in through
 // options and constructor arguments, which the application fills from its own
 // configuration module.
 //

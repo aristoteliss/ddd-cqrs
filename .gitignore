@@ -41,23 +41,8 @@ packages/*/COMMERCIAL_LICENSE.txt
 *.swp
 *.swo
 
-# AI assistant workspace: the context files, scripts and codebase map are shared;
-# only machine-local settings, active task files, launch drafts and generator caches stay out.
-.claude/settings.local.json
-.claude/tasks/*
-!.claude/tasks/TEMPLATE.md
-.claude/launch/
-.claude/state/
-__pycache__/
-
 # Documentation site: Astro cache and generated pages
 docs/.astro/
 docs/src/content/docs/api/
 # internal notes and drafts: private until the owner publishes them
 docs/internal/
-
-# Archify: the local skill toolchain and its build receipts stay out; the diagrams are tracked
-.archify/skills/
-.archify/**/*.finalize*.json
-.archify/**/*.browser-check.json
-.archify/**/*.delivery*.json

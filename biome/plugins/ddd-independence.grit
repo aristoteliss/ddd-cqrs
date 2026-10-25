@@ -1,7 +1,7 @@
 engine biome(1.0)
 language js(typescript)
 
-// AGENTS.md rule 2: `@cqrs-ddd/core` and `@cqrs-ddd/mikro-orm` stay usable without
+// `@cqrs-ddd/core` and `@cqrs-ddd/mikro-orm` stay usable without
 // pipeline behaviors, so they do not import `@cqrs-ddd/pipeline` or a
 // `@cqrs-ddd/pipeline-*` package. A request class tells the pipeline its kind through
 // the `Symbol.for('@cqrs-ddd/request-kind')` brand, which needs no import. Every

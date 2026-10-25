@@ -25,12 +25,6 @@ describe('the first example of the documentation', () => {
     assert.match(run.stderr, /createOrder failed after .+ZodValidationError/);
   });
 
-  it('is the file the demo directory runs', () => {
-    const demo = new URL('../../demo/create-order.mjs', import.meta.url);
-
-    assert.equal(readFileSync(demo, 'utf8'), source);
-  });
-
   for (const page of pages) {
     it(`is shown unchanged in ${page.replace('../../', '')}`, () => {
       const text = readFileSync(new URL(page, import.meta.url), 'utf8');

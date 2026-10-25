@@ -1,7 +1,7 @@
 engine biome(1.0)
 language js(typescript)
 
-// AGENTS.md rule 2: a pipeline package (`@cqrs-ddd/pipeline`, `@cqrs-ddd/pipeline-*`)
+// A pipeline package (`@cqrs-ddd/pipeline`, `@cqrs-ddd/pipeline-*`)
 // stays usable without DDD, so it does not import `@cqrs-ddd/core` or
 // `@cqrs-ddd/mikro-orm`. The two sides meet through the
 // `Symbol.for('@cqrs-ddd/request-kind')` brand, which needs no import. Every static
