@@ -70,7 +70,8 @@ The rest of this page takes the same pieces one at a time.
 pnpm add @cqrs-ddd/pipeline
 ```
 
-The packages require Node.js 22.12 or later. The release check also loads every entry
+The packages require Node.js 22.12 or later; `@cqrs-ddd/mikro-orm` requires 22.17 or
+later, as MikroORM 7 does. The release check also loads every entry
 point in Bun; the test suites run on Node.js only, and no other runtime is tested. The
 packages are published as ES modules; a CommonJS application loads them with `require()`.
 

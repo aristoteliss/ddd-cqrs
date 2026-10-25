@@ -149,8 +149,8 @@ interface ClaimAttempt {
  * later retry may execute the handler again. Set it to `false` when retaining
  * the claim after a failure is preferable to retryability.
  *
- * Store-agnostic by design: memory (default), Redis, Postgres, or your own are
- * one-line swaps of the store passed to the constructor. When no key is produced,
+ * Store-agnostic by design: memory, Redis, Postgres, or your own are one-line
+ * swaps of the store passed to the constructor, which requires one. When no key is produced,
  * the handler runs normally.
  *
  * @example Per-handler idempotency

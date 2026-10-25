@@ -20,6 +20,13 @@ package is released at 0.5.1 on the `latest` dist-tag.
 - `@cqrs-ddd/mikro-orm` and `@cqrs-ddd/nestjs` take the other `@cqrs-ddd` packages at
   `^0.5.1`, as every release moves in lockstep.
 
+### Documentation
+
+- The Node.js minimum names its exception everywhere it is stated: `@cqrs-ddd/mikro-orm`
+  needs 22.17, the other packages 22.12. Developing in the repository needs 22.17.
+- `MemoryIdempotencyStore` and `IdempotencyBehavior` no longer call the memory store the
+  default: the behavior's constructor requires a store.
+
 ### Example application (`api/`, not published)
 
 - A refresh runs on the command bus as `RefreshAuthCommand`, with its rate limit as a

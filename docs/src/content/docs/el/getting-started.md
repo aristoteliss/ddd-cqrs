@@ -72,7 +72,8 @@ Invalid order rejected before the function ran
 pnpm add @cqrs-ddd/pipeline
 ```
 
-Τα πακέτα απαιτούν Node.js 22.12 ή νεότερο. Ο έλεγχος κυκλοφορίας (release check)
+Τα πακέτα απαιτούν Node.js 22.12 ή νεότερο· το `@cqrs-ddd/mikro-orm` απαιτεί 22.17 ή
+νεότερο, όπως και το MikroORM 7. Ο έλεγχος κυκλοφορίας (release check)
 φορτώνει επίσης κάθε entry point σε Bun· οι σουίτες δοκιμών εκτελούνται μόνο σε Node.js
 και κανένα άλλο runtime δεν δοκιμάζεται. Τα πακέτα δημοσιεύονται ως ES modules· μια
 εφαρμογή CommonJS τα φορτώνει με `require()`.

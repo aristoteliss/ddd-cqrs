@@ -11,7 +11,8 @@ Start with a function, add command and query buses when they help, or keep your 
 NestJS application.
 
 This repository is `ddd-cqrs`; its packages install from the npm scope `@cqrs-ddd/*`. They
-need Node.js 22.12 or later and no framework or dependency-injection container. They are
+need Node.js 22.12 or later (`@cqrs-ddd/mikro-orm` 22.17) and no framework or
+dependency-injection container. They are
 dual-licensed, AGPLv3 or commercial: see
 [License and Commercial Use](#license-and-commercial-use).
 
@@ -149,8 +150,9 @@ Every package has a page on the [documentation site](https://aristoteliss.github
 
 ## Development
 
-Requirements: Node.js 22.12 or later, pnpm 9 or later, and Bun on `PATH` for the release
-check.
+Requirements: Node.js 22.17 or later (the repository's tooling and `@cqrs-ddd/mikro-orm`
+need it; the other packages run from 22.12), pnpm 9 or later, and Bun on `PATH` for the
+release check.
 
 ```bash
 pnpm install

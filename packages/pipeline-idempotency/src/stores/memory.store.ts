@@ -21,8 +21,9 @@ export interface MemoryIdempotencyStoreOptions {
 
 /**
  * Zero-dependency, in-process {@link IdempotencyStore} backed by a `Map` with
- * per-entry expiry and bounded memory capacity. The **default** store — ideal
- * for a single instance, tests, or local development.
+ * per-entry expiry and bounded memory capacity, for a single instance, tests or
+ * local development. `IdempotencyBehavior` has no default store: pass this one, or a
+ * shared store, to its constructor.
  *
  * Because Node runs JavaScript on a single thread, {@link setIfAbsent},
  * {@link completeIfOwned}, and {@link deleteIfOwned} are effectively atomic
