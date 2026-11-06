@@ -4,6 +4,10 @@ description: "NestJS adapter for the @cqrs-ddd packages: runs @nestjs/cqrs handl
 sidebar:
   order: 3
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/nestjs.svg)](https://www.npmjs.com/package/@cqrs-ddd/nestjs)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/nestjs.svg)](https://www.npmjs.com/package/@cqrs-ddd/nestjs)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/nestjs.svg)](https://www.npmjs.com/package/@cqrs-ddd/nestjs)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 The NestJS adapter for the [`@cqrs-ddd`](https://github.com/aristoteliss/ddd-cqrs) packages.
 

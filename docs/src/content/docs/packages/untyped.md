@@ -5,6 +5,11 @@ editUrl: false
 sidebar:
   order: 51
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/untyped.svg)](https://www.npmjs.com/package/@cqrs-ddd/untyped)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/untyped.svg)](https://www.npmjs.com/package/@cqrs-ddd/untyped)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/untyped.svg)](https://www.npmjs.com/package/@cqrs-ddd/untyped)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
+
 A typed replacement for `as any` when code must read a property the type does not
 declare, such as framework metadata on a wrapper object. `untyped(value)` returns the
 same value typed as `T & Record<string | symbol, unknown>`: declared properties keep

@@ -4,6 +4,10 @@ description: "Correlation id propagation through HTTP requests, message consumer
 sidebar:
   order: 31
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/pipeline-correlation.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-correlation)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/pipeline-correlation.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-correlation)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/pipeline-correlation.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-correlation)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 Propagates a correlation id, the id that ties a piece of work to the request or message
 that caused it, through a Node.js application:

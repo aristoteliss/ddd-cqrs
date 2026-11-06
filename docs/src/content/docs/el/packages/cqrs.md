@@ -4,6 +4,10 @@ description: "Command, query και event buses με handler decorators και �
 sidebar:
   order: 2
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/cqrs.svg)](https://www.npmjs.com/package/@cqrs-ddd/cqrs)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/cqrs.svg)](https://www.npmjs.com/package/@cqrs-ddd/cqrs)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/cqrs.svg)](https://www.npmjs.com/package/@cqrs-ddd/cqrs)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 Εκτελεί commands, queries και events μέσω των διακοσμημένων handlers τους, καθένας εκ των οποίων γίνεται compile μέσα στο δικό του pipeline από behaviors.
 

@@ -4,6 +4,10 @@ description: "Retry, timeout και bulkhead γύρω από λειτουργί�
 sidebar:
   order: 15
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/pipeline-resilience.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-resilience)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/pipeline-resilience.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-resilience)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/pipeline-resilience.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-resilience)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 Πολιτικές ανοχής σφαλμάτων και αξιοπιστίας βασισμένες στο [cockatiel](https://github.com/connor4312/cockatiel), εφαρμοζόμενες σε δύο διακριτά αρχιτεκτονικά επίπεδα:
 

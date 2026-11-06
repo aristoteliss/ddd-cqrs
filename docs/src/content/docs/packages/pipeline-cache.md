@@ -4,6 +4,10 @@ description: "Result caching on cache-manager and Keyv stores, with keys partiti
 sidebar:
   order: 12
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/pipeline-cache.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-cache)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/pipeline-cache.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-cache)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/pipeline-cache.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-cache)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 Caches composed query results on [cache-manager](https://github.com/jaredwray/cacheable) and Keyv backends: memory, Redis, Memcache, SQLite, PostgreSQL, or multi-tier combinations.
 

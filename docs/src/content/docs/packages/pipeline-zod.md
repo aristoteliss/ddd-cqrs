@@ -4,6 +4,10 @@ description: "Zod validation for wrapped functions and for request classes that 
 sidebar:
   order: 10
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/pipeline-zod.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-zod)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/pipeline-zod.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-zod)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/pipeline-zod.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-zod)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 Validates and sanitizes inputs using [Zod](https://zod.dev) schemas before operations execute. Unknown properties are stripped, coercions and defaults applied, and invalid payloads rejected with structured validation errors.
 

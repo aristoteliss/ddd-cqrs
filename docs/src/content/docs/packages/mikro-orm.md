@@ -6,7 +6,9 @@ sidebar:
   order: 41
 ---
 [![npm version](https://img.shields.io/npm/v/@cqrs-ddd/mikro-orm.svg)](https://www.npmjs.com/package/@cqrs-ddd/mikro-orm)
-[![License](https://img.shields.io/npm/l/@cqrs-ddd/mikro-orm.svg)](https://www.npmjs.com/package/@cqrs-ddd/mikro-orm)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/mikro-orm.svg)](https://www.npmjs.com/package/@cqrs-ddd/mikro-orm)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/mikro-orm.svg)](https://www.npmjs.com/package/@cqrs-ddd/mikro-orm)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 MikroORM 7 adapters for [`@cqrs-ddd/core`](https://www.npmjs.com/package/@cqrs-ddd/core):
 authoritative aggregate loading, version-conditioned writes, the persistence dialect

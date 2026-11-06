@@ -4,6 +4,10 @@ description: "CASL authorization: type-level checks before an operation runs, an
 sidebar:
   order: 11
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/pipeline-casl.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-casl)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/pipeline-casl.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-casl)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/pipeline-casl.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-casl)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 Fine-grained attribute- and role-based authorization using [CASL](https://casl.js.org). 
 

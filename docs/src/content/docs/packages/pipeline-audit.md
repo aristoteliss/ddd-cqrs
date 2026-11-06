@@ -4,6 +4,10 @@ description: "Audit records of who did what, in which tenant and correlation, wi
 sidebar:
   order: 17
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/pipeline-audit.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-audit)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/pipeline-audit.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-audit)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/pipeline-audit.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-audit)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 Writes an audit record for each audited operation: who did what, in which tenant and
 correlation, with which outcome and how long it took, with the request (and optionally the

@@ -4,6 +4,10 @@ description: "Διάδοση correlation id μέσω HTTP αιτημάτων, κ
 sidebar:
   order: 31
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/pipeline-correlation.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-correlation)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/pipeline-correlation.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-correlation)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/pipeline-correlation.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-correlation)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 Διαδίδει ένα correlation id —το μοναδικό αναγνωριστικό που συνδέει μια εργασία με το αίτημα ή το μήνυμα που την προκάλεσε— σε ολόκληρη την εφαρμογή Node.js:
 

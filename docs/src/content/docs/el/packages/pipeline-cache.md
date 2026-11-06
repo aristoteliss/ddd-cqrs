@@ -4,6 +4,10 @@ description: "Caching αποτελεσμάτων σε cache-manager και Keyv 
 sidebar:
   order: 12
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/pipeline-cache.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-cache)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/pipeline-cache.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-cache)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/pipeline-cache.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-cache)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 Αποθηκεύει συντεθειμένα αποτελέσματα queries σε backends [cache-manager](https://github.com/jaredwray/cacheable) και Keyv: μνήμη (in-memory), Redis, Memcache, SQLite, PostgreSQL, ή πολυεπίπεδους (multi-tier) συνδυασμούς.
 

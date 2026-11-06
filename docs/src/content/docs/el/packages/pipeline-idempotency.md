@@ -4,6 +4,10 @@ description: "Αποφυγή διπλότυπων commands ανά κλειδί �
 sidebar:
   order: 13
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/pipeline-idempotency.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-idempotency)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/pipeline-idempotency.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-idempotency)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/pipeline-idempotency.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-idempotency)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 Αποτρέπει τα διπλότυπα commands ανά κλειδί λειτουργίας. Όσο η εγγραφή ενός κλειδιού είναι ενεργή, μια δεύτερη κλήση με το ίδιο κλειδί δεν εκτελεί τον handler: λαμβάνει την αποθηκευμένη απάντηση όταν η πρώτη κλήση έχει ολοκληρωθεί, και απορρίπτεται με HTTP 409 Conflict όσο η πρώτη κλήση εκτελείται ακόμη. Η επαναχρησιμοποίηση του ίδιου κλειδιού με τροποποιημένο payload απορρίπτεται με HTTP 422 Unprocessable Entity.
 

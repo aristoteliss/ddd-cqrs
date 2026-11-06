@@ -4,6 +4,10 @@ description: "Command, query and event buses with handler decorators and a pipel
 sidebar:
   order: 2
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/cqrs.svg)](https://www.npmjs.com/package/@cqrs-ddd/cqrs)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/cqrs.svg)](https://www.npmjs.com/package/@cqrs-ddd/cqrs)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/cqrs.svg)](https://www.npmjs.com/package/@cqrs-ddd/cqrs)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 Runs commands, queries, and events through their decorated handlers, each compiled inside its own pipeline of behaviors. 
 

@@ -4,6 +4,10 @@ description: "The current tenant of an execution, kept in AsyncLocalStorage and 
 sidebar:
   order: 30
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/pipeline-tenant.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-tenant)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/pipeline-tenant.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-tenant)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/pipeline-tenant.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-tenant)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 Keeps the current tenant of an execution in `AsyncLocalStorage`. `runWithTenant(id, fn)`
 sets it for everything `fn` calls, synchronously or asynchronously; `currentTenantId()`

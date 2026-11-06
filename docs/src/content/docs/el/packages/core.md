@@ -6,7 +6,9 @@ sidebar:
   order: 40
 ---
 [![npm version](https://img.shields.io/npm/v/@cqrs-ddd/core.svg)](https://www.npmjs.com/package/@cqrs-ddd/core)
-[![License](https://img.shields.io/npm/l/@cqrs-ddd/core.svg)](https://www.npmjs.com/package/@cqrs-ddd/core)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/core.svg)](https://www.npmjs.com/package/@cqrs-ddd/core)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/core.svg)](https://www.npmjs.com/package/@cqrs-ddd/core)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 Δομικά στοιχεία ανεξάρτητα από framework για domain-driven design σε TypeScript: aggregates με εκδοχοποιημένα mutations (versioned mutations), αποσυνδεδεμένα domain events (detached events), ένας command handler που δημοσιεύει αυτά τα events, repository contracts, decorators κύκλου ζωής persistence, ένα revision-fenced repository cache, cache keys διαχωρισμένα ανά tenant και αντιστοίχιση HTTP status για τα domain errors.
 

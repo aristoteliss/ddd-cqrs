@@ -4,6 +4,10 @@ description: "Καταγραφή αποτυχημένων λειτουργιών
 sidebar:
   order: 18
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/pipeline-deadletter.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-deadletter)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/pipeline-deadletter.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-deadletter)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/pipeline-deadletter.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-deadletter)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 Καταγράφει μια αποτυχημένη λειτουργία ως dead letter: το αίτημα, το σφάλμα, το tenant και το correlation id της, αποστέλλοντάς τα σε ένα transport (BullMQ, RabbitMQ ή PostgreSQL). Εξ ορισμού καταγράφονται μόνο events, καθώς ο καλών ενός command ή query λαμβάνει ήδη το σφάλμα. Το `DeadLetterRedriver` εκτελεί ένα καταγεγραμμένο αίτημα εκ νέου αργότερα.
 

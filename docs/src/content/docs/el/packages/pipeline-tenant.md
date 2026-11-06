@@ -4,6 +4,10 @@ description: "Το τρέχον tenant μιας εκτέλεσης, διατηρ
 sidebar:
   order: 30
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/pipeline-tenant.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-tenant)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/pipeline-tenant.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-tenant)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/pipeline-tenant.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-tenant)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 Διατηρεί το τρέχον tenant μιας εκτέλεσης στο `AsyncLocalStorage`. Η συνάρτηση `runWithTenant(id, fn)` το ορίζει για οτιδήποτε καλείται από τη `fn`, σύγχρονα ή ασύγχρονα. Το `currentTenantId()` το διαβάζει, και το `tenantSource` το παραδίδει στο pipeline, ώστε κάθε pipeline να εκτελείται στο tenant της εργασίας που το ξεκίνησε. Το πακέτο δεν έχει εξωτερικές εξαρτήσεις.
 
