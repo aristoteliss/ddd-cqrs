@@ -1,6 +1,6 @@
 {
   "name": "@cqrs-ddd/pipeline-deadletter",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Dead letters for @cqrs-ddd/pipeline: captures failed commands and events with their context to a queue or table, and redrives them",
   "author": "Aristotelis",
   "license": "SEE LICENSE IN LICENSE",

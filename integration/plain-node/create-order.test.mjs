@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { stripVTControlCharacters } from 'node:util';
 
 const script = fileURLToPath(new URL('./create-order.mjs', import.meta.url));
 const source = readFileSync(script, 'utf8');
@@ -18,11 +19,13 @@ const pages = [
 describe('the first example of the documentation', () => {
   it('creates a valid order and rejects an invalid one', () => {
     const run = spawnSync(process.execPath, [script], { encoding: 'utf8' });
+    const stdout = stripVTControlCharacters(run.stdout);
+    const stderr = stripVTControlCharacters(run.stderr);
 
     assert.equal(run.status, 0);
-    assert.match(run.stdout, /\{ id: 'ord_123', status: 'created' \}/);
-    assert.match(run.stdout, /Invalid order rejected before the function ran/);
-    assert.match(run.stderr, /createOrder failed after .+ZodValidationError/);
+    assert.match(stdout, /\{ id: 'ord_123', status: 'created' \}/);
+    assert.match(stdout, /Invalid order rejected before the function ran/);
+    assert.match(stderr, /createOrder failed after .+ZodValidationError/);
   });
 
   for (const page of pages) {

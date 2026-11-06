@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.5.2
+
+A patch release with a security fix and one opt-in addition in
+`@cqrs-ddd/pipeline-correlation`; the other packages have no code change. Every package is
+released at 0.5.2 on the `latest` dist-tag. `@cqrs-ddd/mikro-orm` and `@cqrs-ddd/nestjs`
+take the other `@cqrs-ddd` packages at `^0.5.2`, as every release moves in lockstep.
+
+### Fixed
+
+- `@cqrs-ddd/pipeline-correlation`: every write to the correlation store first requires a
+  string of printable ASCII (0x20 to 0x7E) without leading or trailing spaces, and no
+  option turns that check off. `runWithCorrelationId` and `@WithCorrelation` keep the
+  current id or generate one instead of storing a failing id, and `correlationSource.run`
+  runs without one. Before, they stored any non-empty value, so an id from a queue message
+  or a gRPC or Kafka header could carry CR/LF into the logs and the response headers.
+  `validateIncoming` of `httpCorrelation` sees only ids that pass the check.
+
+### Added
+
+- `@cqrs-ddd/pipeline-correlation`: `configureCorrelation({ maxLength, validateIncoming,
+  onRejected })` sets, once for the process, the rules every incoming correlation id must
+  pass in `httpCorrelation`, `runWithCorrelationId`, `@WithCorrelation` and
+  `correlationSource.accepts`, which job contexts use. `onRejected` receives each replaced
+  id as a `CorrelationRejection`: `{ reason, source, length }`, without the id itself.
+  It is opt-in: until an application calls it, `runWithCorrelationId` and
+  `@WithCorrelation` apply only the built-in check, and `httpCorrelation` and `accepts`
+  keep their default rule (at most 128 characters matching
+  `DEFAULT_CORRELATION_ID_PATTERN`). Calling it, even as `configureCorrelation({})`,
+  applies that rule to every entry point.
+
+### Changed
+
+- `@cqrs-ddd/pipeline-correlation`: `httpCorrelation` reads the configured rules on each
+  request and runs the request with the id it chose without checking that id again, so an
+  id it generates is never rejected by an application rule.
+
 ## 0.5.1
 
 A patch release. No export, signature, error message or documented behavior changes. Every

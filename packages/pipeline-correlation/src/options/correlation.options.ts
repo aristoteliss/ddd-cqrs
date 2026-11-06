@@ -17,10 +17,11 @@ export const DEFAULT_CORRELATION_ID_PATTERN = /^[A-Za-z0-9._~:/+=@-]+$/;
  * transports (Bull, RabbitMQ, etc.), use `runWithCorrelationId()` directly in
  * your processor/handler.
  *
- * An incoming header value is accepted only when it is at most
- * {@link DEFAULT_CORRELATION_ID_MAX_LENGTH} characters and matches
+ * An incoming header value is accepted only when it passes the rules
+ * `configureCorrelation` sets, by default at most
+ * {@link DEFAULT_CORRELATION_ID_MAX_LENGTH} characters matching
  * {@link DEFAULT_CORRELATION_ID_PATTERN}; otherwise a local ID is used.
- * `maxLength` and `validateIncoming` replace these defaults.
+ * `maxLength` and `validateIncoming` replace those rules for this middleware.
  *
  * @example
  * ```ts
@@ -77,15 +78,17 @@ export interface CorrelationOptions {
    * Maximum accepted incoming correlation-ID length. Longer values are
    * discarded and replaced by the locally resolved/generated ID.
    *
-   * @default 128
+   * @default the `maxLength` of `configureCorrelation`, 128 unless configured
    */
   maxLength?: number;
 
   /**
-   * Validation predicate for incoming IDs; replaces the default
-   * {@link DEFAULT_CORRELATION_ID_PATTERN} check. Returning `false` (or
-   * throwing) rejects the incoming value and falls back to the local
-   * correlation ID. `maxLength` still applies.
+   * Validation predicate for incoming IDs; replaces the `validateIncoming` of
+   * `configureCorrelation`, by default the {@link DEFAULT_CORRELATION_ID_PATTERN}
+   * check. Returning `false` (or throwing) rejects the incoming value and falls
+   * back to the local correlation ID. `maxLength` still applies, and the
+   * predicate sees only values of printable ASCII (0x20 to 0x7E) that neither
+   * start nor end with a space.
    *
    * @example
    * ```ts

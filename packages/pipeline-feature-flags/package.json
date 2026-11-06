@@ -1,6 +1,6 @@
 {
   "name": "@cqrs-ddd/pipeline-feature-flags",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Feature flags for @cqrs-ddd/pipeline through OpenFeature: an operation runs only while its flag is on",
   "author": "Aristotelis",
   "license": "SEE LICENSE IN LICENSE",

@@ -1,6 +1,6 @@
 {
   "name": "@cqrs-ddd/pipeline-audit",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Audit records for @cqrs-ddd/pipeline: who did what, in which tenant, with redacted payloads, to a log or PostgreSQL sink",
   "author": "Aristotelis",
   "license": "SEE LICENSE IN LICENSE",

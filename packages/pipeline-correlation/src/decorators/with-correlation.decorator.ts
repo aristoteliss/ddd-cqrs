@@ -2,10 +2,7 @@
 
 import { untyped } from '@cqrs-ddd/untyped';
 import { DEFAULT_CORRELATION_HEADER } from '../constants/correlation.constants.js';
-import {
-  getCorrelationId,
-  runWithCorrelationId,
-} from '../correlation.store.js';
+import { getCorrelationId, runWithIncoming } from '../correlation.store.js';
 import {
   type DualMethodDecorator,
   methodDecorator,
@@ -134,9 +131,11 @@ function getByPath(obj: unknown, path: string): string | undefined {
  * not replace or interfere with them.
  *
  * It extracts the correlation ID from the method arguments (via `path` or
- * `extract`) and runs the method inside {@link runWithCorrelationId}, which
- * keeps the current id, or makes one with `correlationSource.create()`, when
- * no ID is found.
+ * `extract`) and runs the method with it when it is printable ASCII without
+ * surrounding spaces and, once `configureCorrelation` has been called, passes its
+ * rules. Otherwise the method keeps the current id, or gets a new one from
+ * `correlationSource.create()`, and a rejected id is reported to `onRejected` with the
+ * source `'Class.method'`.
  *
  * **⚠️ Array payloads:**
  * When using the default dot-path extraction, the first argument must be an
@@ -210,10 +209,11 @@ export function WithCorrelation(
         options.logger ??
         (untyped(this)?.logger as CorrelationLogger | undefined) ??
         console;
+      const source = `${untyped(this).constructor?.name}.${String(_propertyKey)}`;
 
       if (!extract && Array.isArray(args[0])) {
         logger.warn(
-          `${untyped(this).constructor?.name}.${String(_propertyKey)}: first argument is an array — ` +
+          `${source}: first argument is an array — ` +
             `dot-path "${path}" cannot extract a correlation ID from it. ` +
             `Use the 'extract' option for array payloads.`,
         );
@@ -223,10 +223,10 @@ export function WithCorrelation(
         ? extract(...args)
         : getByPath(args[0], path);
 
-      return runWithCorrelationId(correlationId, () => {
+      return runWithIncoming(correlationId, source, () => {
         const log = logAt(logger, options.logLevel);
         log?.(
-          `🔗 Starting ${untyped(this).constructor?.name}.${String(_propertyKey)} with correlationId: ${getCorrelationId()}`,
+          `🔗 Starting ${source} with correlationId: ${getCorrelationId()}`,
         );
         return originalMethod.apply(this, args);
       });

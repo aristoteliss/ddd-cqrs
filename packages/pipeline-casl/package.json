@@ -1,6 +1,6 @@
 {
   "name": "@cqrs-ddd/pipeline-casl",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "CASL authorization for @cqrs-ddd/pipeline: type-level checks before the handler, entity and field checks after it",
   "author": "Aristotelis",
   "license": "SEE LICENSE IN LICENSE",

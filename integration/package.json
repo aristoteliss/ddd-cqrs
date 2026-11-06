@@ -1,7 +1,7 @@
 {
   "name": "ddd-cqrs-integration",
   "private": true,
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Repository-wide checks and applications built on the packages one at a time: the Biome Grit plugin specs, the release verification, cross-package pipeline contracts, a pipeline-only payments service, a domain-only library, MikroORM repositories, a plain Node.js module, standard decorators and a NestJS application on the adapter, tested over HTTP",
   "type": "module",
   "scripts": {

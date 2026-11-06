@@ -28,3 +28,9 @@ export {
   DEFAULT_CORRELATION_ID_MAX_LENGTH,
   DEFAULT_CORRELATION_ID_PATTERN,
 } from './options/correlation.options.js';
+export type {
+  CorrelationPolicy,
+  CorrelationRejection,
+  CorrelationRejectionReason,
+} from './policy/correlation.policy.js';
+export { configureCorrelation } from './policy/correlation.policy.js';

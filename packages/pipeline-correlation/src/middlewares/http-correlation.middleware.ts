@@ -2,15 +2,9 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { DEFAULT_CORRELATION_HEADER } from '../constants/correlation.constants.js';
-import {
-  getCorrelationId,
-  runWithCorrelationId,
-} from '../correlation.store.js';
-import {
-  type CorrelationOptions,
-  DEFAULT_CORRELATION_ID_MAX_LENGTH,
-  DEFAULT_CORRELATION_ID_PATTERN,
-} from '../options/correlation.options.js';
+import { correlationSource, getCorrelationId } from '../correlation.store.js';
+import type { CorrelationOptions } from '../options/correlation.options.js';
+import { admit, assertMaxLength } from '../policy/correlation.policy.js';
 
 const HTTP_FIELD_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 
@@ -29,9 +23,12 @@ export type HttpMiddleware = (
  * The header name defaults to `x-correlation-id`. If `header` is omitted or is any
  * non-string value (including `false`), the default header is used.
  *
- * An incoming id longer than 128 characters or outside the default character set is
- * replaced by a local id. `acceptIncoming`, `trimIncoming`, `maxLength` and
- * `validateIncoming` adjust that policy.
+ * An incoming id that the rules `configureCorrelation` sets reject (by default, longer
+ * than 128 characters or outside the default character set) is replaced by a local id
+ * and reported to `onRejected` with the source `'http'`. `acceptIncoming`,
+ * `trimIncoming`, `maxLength` and `validateIncoming` adjust that policy for this
+ * middleware. None of them lets through an id that is not printable ASCII or that starts
+ * or ends with a space.
  *
  * @throws TypeError when `header` is not a valid HTTP field name, or `maxLength` is not
  *   a positive safe integer.
@@ -45,14 +42,7 @@ export function httpCorrelation(options?: CorrelationOptions): HttpMiddleware {
   if (typeof h === 'string' && !HTTP_FIELD_NAME.test(h)) {
     throw new TypeError(`Invalid correlation HTTP header name: "${h}".`);
   }
-  if (
-    options?.maxLength !== undefined &&
-    (!Number.isSafeInteger(options.maxLength) || options.maxLength <= 0)
-  ) {
-    throw new TypeError(
-      'Correlation maxLength must be a positive safe integer when provided.',
-    );
-  }
+  assertMaxLength(options?.maxLength);
 
   const header =
     typeof h === 'string' ? h.toLowerCase() : DEFAULT_CORRELATION_HEADER;
@@ -65,7 +55,7 @@ export function httpCorrelation(options?: CorrelationOptions): HttpMiddleware {
     if (typeof res?.setHeader === 'function') {
       res.setHeader(header, correlationId);
     }
-    runWithCorrelationId(correlationId, next);
+    correlationSource.run(correlationId, next);
   };
 }
 
@@ -75,19 +65,13 @@ function incomingResolver(
 ): (raw: string | undefined) => string | undefined {
   const acceptIncoming = options?.acceptIncoming ?? true;
   const trimIncoming = options?.trimIncoming ?? false;
-  const maxLength = options?.maxLength ?? DEFAULT_CORRELATION_ID_MAX_LENGTH;
-  const validateIncoming =
-    options?.validateIncoming ??
-    ((id: string) => DEFAULT_CORRELATION_ID_PATTERN.test(id));
+  const overrides = {
+    maxLength: options?.maxLength,
+    validateIncoming: options?.validateIncoming,
+  };
 
   return (raw) => {
     if (!acceptIncoming || typeof raw !== 'string') return undefined;
-    const value = trimIncoming ? raw.trim() : raw;
-    if (value.length === 0 || value.length > maxLength) return undefined;
-    try {
-      return validateIncoming(value) ? value : undefined;
-    } catch {
-      return undefined;
-    }
+    return admit(trimIncoming ? raw.trim() : raw, 'http', 'checked', overrides);
   };
 }

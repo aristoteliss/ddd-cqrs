@@ -1,6 +1,6 @@
 {
   "name": "@cqrs-ddd/untyped",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "A typed replacement for `as any`: reads undeclared properties as unknown. No dependencies and no framework.",
   "author": "Aristotelis",
   "license": "SEE LICENSE IN LICENSE",

@@ -1,6 +1,6 @@
 {
   "name": "@cqrs-ddd/pipeline-resilience",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Retry, timeout, circuit breaker, bulkhead and fallback policies (cockatiel) for @cqrs-ddd/pipeline",
   "author": "Aristotelis",
   "license": "SEE LICENSE IN LICENSE",

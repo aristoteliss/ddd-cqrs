@@ -1,6 +1,6 @@
 {
   "name": "@cqrs-ddd/pipeline-rate-limit",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Rate limiting for @cqrs-ddd/pipeline, with keys partitioned by tenant, principal and operation",
   "author": "Aristotelis",
   "license": "SEE LICENSE IN LICENSE",

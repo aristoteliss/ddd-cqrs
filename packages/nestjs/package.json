@@ -1,6 +1,6 @@
 {
   "name": "@cqrs-ddd/nestjs",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "NestJS adapter for the @cqrs-ddd packages: runs @nestjs/cqrs handlers through their pipelines, answers every package error as a NestJS HttpException, and wires correlation and job context",
   "author": "Aristotelis",
   "license": "SEE LICENSE IN LICENSE",

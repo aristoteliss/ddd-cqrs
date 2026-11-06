@@ -3,10 +3,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { uuidv7 } from '@cqrs-ddd/uuidv7';
 import { DEFAULT_CORRELATION_HEADER } from './constants/correlation.constants.js';
-import {
-  DEFAULT_CORRELATION_ID_MAX_LENGTH,
-  DEFAULT_CORRELATION_ID_PATTERN,
-} from './options/correlation.options.js';
+import { admit, isAccepted, isPortable } from './policy/correlation.policy.js';
 
 const correlation = new AsyncLocalStorage<string | undefined>();
 
@@ -16,11 +13,12 @@ const correlation = new AsyncLocalStorage<string | undefined>();
  * `@cqrs-ddd/pipeline-job-context`. Unlike {@link getCorrelationId}, `current()`
  * generates nothing: it returns `undefined` when no id is set, so a pipeline
  * generates one and runs with it, and {@link getCorrelationId} inside the
- * handler returns that id. `create()` makes a new id, the one way this
- * package, pipelines and jobs generate one. `accepts(id)` tells whether an id received from
- * outside, such as in a job payload, is well formed: at most
- * {@link DEFAULT_CORRELATION_ID_MAX_LENGTH} characters matching
- * {@link DEFAULT_CORRELATION_ID_PATTERN}.
+ * handler returns that id. `run(id, fn)` runs `fn` with `id`, or with no id when `id`
+ * is not printable ASCII without surrounding spaces. `create()` makes a new id, the one
+ * way this package, pipelines and jobs generate one. `accepts(id)` tells whether an id
+ * received from outside, such as in a job payload, passes the rules
+ * `configureCorrelation` sets: by default at most 128 characters matching
+ * `DEFAULT_CORRELATION_ID_PATTERN`. It reports nothing to `onRejected`.
  *
  * @example
  * ```ts
@@ -30,11 +28,9 @@ const correlation = new AsyncLocalStorage<string | undefined>();
 export const correlationSource = {
   current: (): string | undefined => correlation.getStore(),
   run: <T>(value: string | undefined, fn: () => T): T =>
-    correlation.run(value, fn),
+    correlation.run(isPortable(value) ? value : undefined, fn),
   create: (): string => uuidv7(),
-  accepts: (id: string): boolean =>
-    id.length <= DEFAULT_CORRELATION_ID_MAX_LENGTH &&
-    DEFAULT_CORRELATION_ID_PATTERN.test(id),
+  accepts: (id: string): boolean => isAccepted(id),
 } as const;
 
 /**
@@ -44,11 +40,13 @@ export const correlationSource = {
  * WebSocket handlers, scheduled jobs) to propagate an external correlation ID
  * into everything the callback runs, wrapped operations included.
  *
- * If `correlationId` is falsy (`undefined` or empty), the id is resolved via
- * {@link getCorrelationId} (the current one, or a new one from
- * `correlationSource.create()`), so
- * `fn` always runs with a correlation id. A pipeline dispatched inside `fn`
- * takes it as its `context.correlationId`.
+ * When `correlationId` is missing, empty, not printable ASCII without surrounding
+ * spaces, or, once `configureCorrelation` has been called, rejected by its rules, `fn`
+ * runs with the id {@link getCorrelationId}
+ * returns (the current one, or a new one from `correlationSource.create()`), so it always
+ * runs with a correlation id. A rejected id is reported to `onRejected` with the source
+ * `'runWithCorrelationId'`. A pipeline dispatched inside `fn` takes the id as its
+ * `context.correlationId`.
  *
  * @example
  * ```ts
@@ -68,14 +66,26 @@ export const correlationSource = {
  * setInterval(() => runWithCorrelationId(undefined, () => hourlySync()), 3_600_000);
  * ```
  *
- * @param correlationId - The correlation ID to propagate. If falsy, falls back to {@link getCorrelationId}.
+ * @param correlationId - The correlation ID to propagate, as received from outside.
  * @param fn - The callback to execute within the correlation context.
  */
 export function runWithCorrelationId<T>(
   correlationId: string | undefined,
   fn: () => T,
 ): T {
-  return correlation.run(correlationId || getCorrelationId(), fn);
+  return runWithIncoming(correlationId, 'runWithCorrelationId', fn);
+}
+
+/** Runs `fn` with `id` when the rules accept it, else with the current or a new id. */
+export function runWithIncoming<T>(
+  id: unknown,
+  source: string,
+  fn: () => T,
+): T {
+  return correlation.run(
+    admit(id, source, 'unchecked') ?? getCorrelationId(),
+    fn,
+  );
 }
 
 /**

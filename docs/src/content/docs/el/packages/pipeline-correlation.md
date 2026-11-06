@@ -55,6 +55,8 @@ export class AppModule implements NestModule {
 }
 ```
 
+Το middleware εφαρμόζει τους κανόνες που ορίζει το `configureCorrelation()`· δείτε την ενότητα «Κανόνες για εισερχόμενα ids».
+
 ## Το HTTP middleware
 
 | Επιλογή | Σημασία | Προεπιλογή |
@@ -62,10 +64,42 @@ export class AppModule implements NestModule {
 | `header` | η επικεφαλίδα ανάγνωσης (μη έγκυρο όνομα ρίχνει σφάλμα κατά την κατασκευή) | `'x-correlation-id'` |
 | `acceptIncoming` | αποδοχή id που στάλθηκε από τον client | `true` |
 | `trimIncoming` | αφαίρεση κενών γύρω από το εισερχόμενο id | `false` |
-| `maxLength` | μέγιστο αποδεκτό μήκος εισερχόμενου id | `128` |
-| `validateIncoming` | predicate που πρέπει να περάσει το εισερχόμενο id | χαρακτήρες του `DEFAULT_CORRELATION_ID_PATTERN` |
+| `maxLength` | μέγιστο αποδεκτό μήκος εισερχόμενου id | το `maxLength` του `configureCorrelation()`, προεπιλογή `128` |
+| `validateIncoming` | predicate που πρέπει να περάσει το εισερχόμενο id | το `validateIncoming` του `configureCorrelation()`, προεπιλογή οι χαρακτήρες του `DEFAULT_CORRELATION_ID_PATTERN` |
 
-Ένα εισερχόμενο id που αποτυγχάνει σε αυτούς τους ελέγχους αντικαθίσταται από ένα νέο.
+Ένα εισερχόμενο id που αποτυγχάνει σε αυτούς τους ελέγχους αντικαθίσταται από ένα νέο και αναφέρεται στο `onRejected` με πηγή (source) `'http'`.
+
+## Κανόνες για εισερχόμενα ids
+
+Από την έκδοση 0.5.2, κάθε σημείο εισόδου ελέγχει το id που λαμβάνει: τα `httpCorrelation()`, `runWithCorrelationId()`, `@WithCorrelation()` και `correlationSource.accepts()`, το οποίο χρησιμοποιούν τα job contexts. Ένα id περνά όταν:
+
+1. είναι εκτυπώσιμοι χαρακτήρες ASCII (0x20 έως 0x7E) και ούτε αρχίζει ούτε τελειώνει με κενό. Τίποτα δεν απενεργοποιεί αυτόν τον έλεγχο: οποιοδήποτε άλλο id αλλάζει μεταξύ υπηρεσιών (τα HTTP και gRPC αφαιρούν τα κενά στα άκρα, τα text metadata του gRPC απορρίπτουν χαρακτήρες εκτός ASCII) ή μεταφέρει χαρακτήρες ελέγχου στα logs και στα headers·
+2. έχει το πολύ `maxLength` χαρακτήρες, προεπιλογή 128·
+3. το `validateIncoming` το αποδέχεται· από προεπιλογή ταιριάζει με το `DEFAULT_CORRELATION_ID_PATTERN`.
+
+Μέχρι να κληθεί το `configureCorrelation()`, τα `runWithCorrelationId()` και `@WithCorrelation()` εφαρμόζουν μόνο τον πρώτο έλεγχο, και τα `httpCorrelation()` και `accepts()` εφαρμόζουν και τους τρεις με τις προεπιλογές τους, όπως πριν από την 0.5.2. Μόλις κληθεί, ακόμη και ως `configureCorrelation({})`, κάθε σημείο εισόδου εφαρμόζει και τους τρεις.
+
+Ένα id που απορρίπτεται αντικαθίσταται από το τρέχον id ή από νέο, και η εργασία συνεχίζεται· ένα id που λείπει ή είναι κενό αντικαθίσταται με τον ίδιο τρόπο. Ορίστε τους κανόνες μία φορά, κατά την εκκίνηση:
+
+```ts
+import { configureCorrelation } from '@cqrs-ddd/pipeline-correlation';
+
+configureCorrelation({
+  validateIncoming: (id) => /^[0-9a-f-]{36}$/i.test(id),
+  onRejected: ({ reason, source, length }) =>
+    logger.warn({ reason, source, length }, 'correlation id replaced'),
+});
+```
+
+| Πεδίο | Σημασία | Προεπιλογή |
+| --- | --- | --- |
+| `maxLength` | μέγιστο αποδεκτό μήκος εισερχόμενου id· θετικός ασφαλής ακέραιος, αλλιώς η κλήση ρίχνει σφάλμα | `128` |
+| `validateIncoming` | ο κανόνας της εφαρμογής· επιστροφή `false` ή σφάλμα απορρίπτει το id | χαρακτήρες του `DEFAULT_CORRELATION_ID_PATTERN` |
+| `onRejected` | καλείται με `{ reason, source, length }` για κάθε id που αντικαθίσταται | κανένα |
+
+Το `reason` είναι `'not-string'`, `'too-long'`, `'invalid-character'`, `'surrounding-space'` ή `'rule'`. Το `source` είναι `'http'`, `'runWithCorrelationId'` ή `'Class.method'` για μια μέθοδο με `@WithCorrelation()`. Η αναφορά παραλείπει το ίδιο το id, ώστε μια πλαστή τιμή να μη φτάνει ποτέ σε log μέσω αυτής. Ένα id που λείπει ή είναι κενό δεν αναφέρεται, το `correlationSource.accepts()` δεν αναφέρει τίποτα, και ένα σφάλμα που ρίχνει το `onRejected` αγνοείται.
+
+Κάθε κλήση αντικαθιστά όλους τους κανόνες, και το `configureCorrelation()` χωρίς πολιτική επαναφέρει την κατάσταση πριν από την πρώτη κλήση. Το `validateIncoming` πρέπει να αποδέχεται τα UUIDv7 ids που φτιάχνει το `correlationSource.create()`: τα jobs που βάζει στην ουρά ένα αίτημα φέρουν το id του αιτήματος, και ένα job του οποίου το context έχει id που το `accepts()` απορρίπτει αποτυγχάνει. Οι επιλογές `maxLength` και `validateIncoming` του `httpCorrelation()` αντικαθιστούν αυτούς τους κανόνες μόνο για εκείνο το middleware. Μια εφαρμογή που εμφανίζει ένα correlation id σε HTML εξακολουθεί να το κάνει escape.
 
 ## Καταναλωτές (Consumers)
 
@@ -113,7 +147,7 @@ await queue.add('welcome', addCorrelationId({ userId }));
 await runWithCorrelationId(job.correlationId, () => processBatch(job));
 ```
 
-Το `addCorrelationId(data)` επιστρέφει αντίγραφο απλού αντικειμένου με προστεθειμένο το `correlationId`. Το `runWithCorrelationId(id, fn)` εκτελεί τη `fn` εντός αυτού του id.
+Το `addCorrelationId(data)` επιστρέφει αντίγραφο απλού αντικειμένου με προστεθειμένο το `correlationId`. Το `runWithCorrelationId(id, fn)` εκτελεί τη `fn` εντός αυτού του id όταν οι κανόνες το αποδέχονται, και αλλιώς εντός του τρέχοντος id ή ενός νέου.
 
 ## API reference
 

@@ -59,6 +59,9 @@ export class AppModule implements NestModule {
 }
 ```
 
+The middleware applies the rules `configureCorrelation()` sets; see
+[Rules for incoming ids](#rules-for-incoming-ids).
+
 ## The HTTP middleware
 
 | Option | Meaning | Default |
@@ -66,10 +69,61 @@ export class AppModule implements NestModule {
 | `header` | the header to read; an invalid field name throws when the middleware is built | `'x-correlation-id'` |
 | `acceptIncoming` | accept an id sent by the client | `true` |
 | `trimIncoming` | trim whitespace around an incoming id | `false` |
-| `maxLength` | the longest incoming id accepted | `128` |
-| `validateIncoming` | a predicate an incoming id must pass | the characters of `DEFAULT_CORRELATION_ID_PATTERN` |
+| `maxLength` | the longest incoming id accepted | the `maxLength` of `configureCorrelation()`, `128` by default |
+| `validateIncoming` | a predicate an incoming id must pass | the `validateIncoming` of `configureCorrelation()`, the characters of `DEFAULT_CORRELATION_ID_PATTERN` by default |
 
-An incoming id that fails these checks is replaced by a new one.
+An incoming id that fails these checks is replaced by a new one and reported to
+`onRejected` with the source `'http'`.
+
+## Rules for incoming ids
+
+From 0.5.2, every entry point checks the id it receives: `httpCorrelation()`,
+`runWithCorrelationId()`, `@WithCorrelation()`, and `correlationSource.accepts()`, which job
+contexts use. An id passes when:
+
+1. it is printable ASCII (0x20 to 0x7E) and neither starts nor ends with a space. Nothing
+   turns this check off: any other id changes between services (HTTP and gRPC strip
+   surrounding spaces, gRPC text metadata refuses non-ASCII characters) or carries
+   control characters into logs and headers;
+2. it is at most `maxLength` characters, 128 by default;
+3. `validateIncoming` accepts it; by default it matches `DEFAULT_CORRELATION_ID_PATTERN`.
+
+Until `configureCorrelation()` is called, `runWithCorrelationId()` and `@WithCorrelation()`
+apply only the first check, and `httpCorrelation()` and `accepts()` apply all three with
+their defaults, as before 0.5.2. Once it is called, even as `configureCorrelation({})`,
+every entry point applies all three.
+
+A rejected id is replaced by the current id or a new one, and the work goes on; a missing
+or empty id is replaced the same way. Set the rules once, at startup:
+
+```ts
+import { configureCorrelation } from '@cqrs-ddd/pipeline-correlation';
+
+configureCorrelation({
+  validateIncoming: (id) => /^[0-9a-f-]{36}$/i.test(id),
+  onRejected: ({ reason, source, length }) =>
+    logger.warn({ reason, source, length }, 'correlation id replaced'),
+});
+```
+
+| Field | Meaning | Default |
+| --- | --- | --- |
+| `maxLength` | the longest incoming id accepted; a positive safe integer, or the call throws | `128` |
+| `validateIncoming` | the application's rule; returning `false` or throwing rejects the id | the characters of `DEFAULT_CORRELATION_ID_PATTERN` |
+| `onRejected` | called with `{ reason, source, length }` for each replaced id | none |
+
+`reason` is `'not-string'`, `'too-long'`, `'invalid-character'`, `'surrounding-space'` or
+`'rule'`. `source` is `'http'`, `'runWithCorrelationId'`, or `'Class.method'` for a
+`@WithCorrelation()` method. The report leaves out the id itself, so a forged value never
+reaches a log through it. A missing or empty id is not reported, `correlationSource.accepts()`
+reports nothing, and an error `onRejected` throws is ignored.
+
+Each call replaces every rule, and `configureCorrelation()` without a policy restores the
+state before the first call. `validateIncoming` must accept the UUIDv7 ids `correlationSource.create()` makes:
+the jobs a request enqueues carry the request's id, and a job whose context holds an id that
+`accepts()` refuses fails. The `maxLength` and `validateIncoming` options of
+`httpCorrelation()` replace these rules for that middleware only. An application that
+renders a correlation id in HTML still escapes it.
 
 ## Consumers
 
@@ -121,8 +175,8 @@ await runWithCorrelationId(job.correlationId, () => processBatch(job));
 ```
 
 `addCorrelationId(data)` returns a shallow copy of a plain object with `correlationId`
-added; `runWithCorrelationId(id, fn)` runs `fn` with that id, or the current one when `id`
-is empty.
+added; `runWithCorrelationId(id, fn)` runs `fn` with that id when the
+[rules](#rules-for-incoming-ids) accept it, and otherwise with the current id or a new one.
 
 ## API reference
 

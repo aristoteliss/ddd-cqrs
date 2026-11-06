@@ -1,6 +1,6 @@
 {
   "name": "@cqrs-ddd/pipeline-job-context",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Carries the tenant, correlation id and principal of a request into the queue jobs it enqueues, and gives system-started work an explicit context",
   "author": "Aristotelis",
   "license": "SEE LICENSE IN LICENSE",

@@ -1,6 +1,6 @@
 {
   "name": "@cqrs-ddd/pipeline-tenant",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "The current tenant: the running pipeline's tenant, or the tenant of a runWithTenant scope",
   "author": "Aristotelis",
   "license": "SEE LICENSE IN LICENSE",

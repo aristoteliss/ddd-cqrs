@@ -1,6 +1,6 @@
 {
   "name": "@cqrs-ddd/pipeline-cache",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Result caching for @cqrs-ddd/pipeline on cache-manager and Keyv stores, with keys partitioned by tenant, principal and permission scope",
   "author": "Aristotelis",
   "license": "SEE LICENSE IN LICENSE",
