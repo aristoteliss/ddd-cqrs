@@ -5,6 +5,10 @@ editUrl: false
 sidebar:
   order: 50
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/safe-stringify.svg)](https://www.npmjs.com/package/@cqrs-ddd/safe-stringify)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/safe-stringify.svg)](https://www.npmjs.com/package/@cqrs-ddd/safe-stringify)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/safe-stringify.svg)](https://www.npmjs.com/package/@cqrs-ddd/safe-stringify)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 Δύο serializers JSON με αντίθετους στόχους, και helpers τμημάτων κλειδιών για τη δημιουργία κλειδιών ταυτότητας. Χωρίς runtime εξαρτήσεις και χωρίς framework.
 

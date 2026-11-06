@@ -4,6 +4,10 @@ description: "Μεταφορά του tenant, correlation id και principal ε
 sidebar:
   order: 32
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/pipeline-job-context.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-job-context)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/pipeline-job-context.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-job-context)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/pipeline-job-context.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-job-context)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 Η εκτέλεση background εργασιών χάνει το αρχικό context του αιτήματος που τις ξεκίνησε. Αυτό το πακέτο μεταφέρει το tenant, το correlation id και το principal ενός αιτήματος στα jobs που τοποθετούνται σε ουρά, και τα επαναφέρει όταν το job εκτελείται. Εργασίες που δεν ξεκίνησαν από αίτημα, όπως cron jobs, δηλώνουν το δικό τους ρητό context: ένα service principal, τα grants του και τα tenants στα οποία εκτελείται.
 

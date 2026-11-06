@@ -4,6 +4,10 @@ description: "Rate limits for wrapped functions and methods on any limiter with 
 sidebar:
   order: 14
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/pipeline-rate-limit.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-rate-limit)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/pipeline-rate-limit.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-rate-limit)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/pipeline-rate-limit.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-rate-limit)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 Enforces throughput throttling and quota policies across distributed microservices. Works with any limiter exposing a `consume()` method, including [rate-limiter-flexible](https://github.com/animir/node-rate-limiter-flexible) (Redis, Memory, PostgreSQL, MySQL).
 

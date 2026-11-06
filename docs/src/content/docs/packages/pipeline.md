@@ -4,6 +4,10 @@ description: "The pipeline engine: createPipeline(), pipeline.wrap(), the loggin
 sidebar:
   order: 1
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/pipeline.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/pipeline.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/pipeline.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 The engine of the pipeline family. `createPipeline()` configures behaviors once;
 `pipeline.wrap()` runs them around a plain function or a class method. It needs no

@@ -4,6 +4,10 @@ description: "Capture failed operations with their request, error, tenant and co
 sidebar:
   order: 18
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/pipeline-deadletter.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-deadletter)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/pipeline-deadletter.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-deadletter)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/pipeline-deadletter.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-deadletter)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 Captures a failed operation as a dead letter: its request, error, tenant and correlation
 id, sent to a transport (BullMQ, RabbitMQ or PostgreSQL). By default only events are

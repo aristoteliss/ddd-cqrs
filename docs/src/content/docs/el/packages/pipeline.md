@@ -4,6 +4,10 @@ description: "Η μηχανή του pipeline: createPipeline(), pipeline.wrap()
 sidebar:
   order: 1
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/pipeline.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/pipeline.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/pipeline.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 Η κεντρική μηχανή της οικογένειας pipeline. Το `createPipeline()` ρυθμίζει τα behaviors μία φορά,
 ενώ το `pipeline.wrap()` τα εκτελεί γύρω από μια απλή συνάρτηση ή μέθοδο κλάσης. Δεν απαιτεί

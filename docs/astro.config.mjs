@@ -1,11 +1,27 @@
 import starlight from '@astrojs/starlight';
 import { defineConfig } from 'astro/config';
 import starlightLinksValidator from 'starlight-links-validator';
+import starlightThemeNova from 'starlight-theme-nova';
 import starlightTypeDoc, { typeDocSidebarGroup } from 'starlight-typedoc';
+
+const base = '/ddd-cqrs';
+
+// Top bar links, one per main sidebar group, with the label and URL of each language.
+const navLink = (path, en, el) => ({
+  label: { en, el },
+  href: { en: `${base}/${path}/`, el: `${base}/el/${path}/` },
+});
+const nav = [
+  navLink('overview', 'Start', 'Ξεκίνημα'),
+  navLink('concepts/wrapping', 'Concepts', 'Έννοιες'),
+  navLink('guides/plain-node', 'Guides', 'Οδηγοί'),
+  navLink('packages/pipeline', 'Packages', 'Πακέτα'),
+  navLink('api', 'API reference', 'Αναφορά API'),
+];
 
 export default defineConfig({
   site: 'https://aristoteliss.github.io',
-  base: '/ddd-cqrs',
+  base,
   integrations: [
     starlight({
       title: 'ddd-cqrs',
@@ -23,7 +39,10 @@ export default defineConfig({
           href: 'https://github.com/aristoteliss/ddd-cqrs',
         },
       ],
+      components: { Header: './src/components/Header.astro' },
+      customCss: ['./src/styles/custom.css'],
       plugins: [
+        starlightThemeNova({ nav }),
         starlightTypeDoc({
           entryPoints: ['../packages/*'],
           tsconfig: '../tsconfig.base.json',

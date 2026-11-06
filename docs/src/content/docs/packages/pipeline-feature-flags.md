@@ -4,6 +4,10 @@ description: "Gate operations behind OpenFeature boolean flags, with sticky roll
 sidebar:
   order: 16
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/pipeline-feature-flags.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-feature-flags)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/pipeline-feature-flags.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-feature-flags)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/pipeline-feature-flags.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-feature-flags)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 Runs an operation only while its boolean flag is on, through
 [OpenFeature](https://openfeature.dev), so any OpenFeature provider works: Unleash,

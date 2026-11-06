@@ -4,6 +4,10 @@ description: "Έλεγχος εκτέλεσης λειτουργιών βάσε�
 sidebar:
   order: 16
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/pipeline-feature-flags.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-feature-flags)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/pipeline-feature-flags.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-feature-flags)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/pipeline-feature-flags.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-feature-flags)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 Εκτελεί μια λειτουργία μόνο όταν το αντίστοιχο boolean flag είναι ενεργό, μέσω του [OpenFeature](https://openfeature.dev), επιτρέποντας οποιονδήποτε OpenFeature provider: Unleash, Flagsmith, LaunchDarkly, flagd ή τοπικό αρχείο. Ένα απενεργοποιημένο flag διακόπτει τη λειτουργία πριν εκτελεστεί, είτε ρίχνοντας σφάλμα είτε επιστρέφοντας μια εναλλακτική τιμή (fallback).
 

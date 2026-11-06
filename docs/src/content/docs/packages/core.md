@@ -6,7 +6,9 @@ sidebar:
   order: 40
 ---
 [![npm version](https://img.shields.io/npm/v/@cqrs-ddd/core.svg)](https://www.npmjs.com/package/@cqrs-ddd/core)
-[![License](https://img.shields.io/npm/l/@cqrs-ddd/core.svg)](https://www.npmjs.com/package/@cqrs-ddd/core)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/core.svg)](https://www.npmjs.com/package/@cqrs-ddd/core)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/core.svg)](https://www.npmjs.com/package/@cqrs-ddd/core)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 Framework-neutral building blocks for domain-driven design in TypeScript: aggregates with
 versioned mutations, detached domain events, a command handler that publishes those

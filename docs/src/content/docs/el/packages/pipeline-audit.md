@@ -4,6 +4,10 @@ description: "Εγγραφές audit για το ποιος έκανε τι, σ�
 sidebar:
   order: 17
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/pipeline-audit.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-audit)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/pipeline-audit.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-audit)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/pipeline-audit.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-audit)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 Καταγράφει μια εγγραφή ελέγχου (audit record) για κάθε λειτουργία: ποιος έκανε τι, σε ποιο tenant και correlation, με ποιο αποτέλεσμα και πόση διάρκεια είχε, με το request (και προαιρετικά το response) καλυμμένο ως προς τα ευαίσθητα δεδομένα (redacted). Το behavior εξαρτάται αποκλειστικά από το interface `AuditSink`. Το `LogAuditSink` γράφει σε logger και το `PostgresAuditSink` σε πίνακα βάσης δεδομένων.
 

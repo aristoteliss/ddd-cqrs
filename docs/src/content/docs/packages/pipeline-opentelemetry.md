@@ -4,6 +4,10 @@ description: "OpenTelemetry spans, metrics and decision attributes for every wra
 sidebar:
   order: 19
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/pipeline-opentelemetry.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-opentelemetry)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/pipeline-opentelemetry.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-opentelemetry)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/pipeline-opentelemetry.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-opentelemetry)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 OpenTelemetry instrumentation for wrapped operations:
 

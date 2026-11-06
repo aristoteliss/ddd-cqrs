@@ -6,7 +6,9 @@ sidebar:
   order: 41
 ---
 [![npm version](https://img.shields.io/npm/v/@cqrs-ddd/mikro-orm.svg)](https://www.npmjs.com/package/@cqrs-ddd/mikro-orm)
-[![License](https://img.shields.io/npm/l/@cqrs-ddd/mikro-orm.svg)](https://www.npmjs.com/package/@cqrs-ddd/mikro-orm)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/mikro-orm.svg)](https://www.npmjs.com/package/@cqrs-ddd/mikro-orm)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/mikro-orm.svg)](https://www.npmjs.com/package/@cqrs-ddd/mikro-orm)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 Adapters για το MikroORM 7 για το [`@cqrs-ddd/core`](https://www.npmjs.com/package/@cqrs-ddd/core): έγκυρη φόρτωση aggregates (authoritative loading), εγγραφές με έλεγχο έκδοσης (version-conditioned writes), persistence dialect που αντιστοιχίζει unique violations και παροδικά σφάλματα, ένα revision-fenced cache αποθηκευμένο στη βάση δεδομένων, και αντιστοίχιση `EntitySchema` για το `RootEntity`.
 

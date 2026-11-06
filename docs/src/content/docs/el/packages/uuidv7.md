@@ -5,6 +5,10 @@ editUrl: false
 sidebar:
   order: 52
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/uuidv7.svg)](https://www.npmjs.com/package/@cqrs-ddd/uuidv7)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/uuidv7.svg)](https://www.npmjs.com/package/@cqrs-ddd/uuidv7)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/uuidv7.svg)](https://www.npmjs.com/package/@cqrs-ddd/uuidv7)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 Παράγει και επικυρώνει αναγνωριστικά UUID version 7 όπως ορίζονται από το [RFC 9562](https://www.rfc-editor.org/rfc/rfc9562). Δεν έχει runtime εξαρτήσεις και κανένα framework: χρησιμοποιεί αποκλειστικά το ενσωματωμένο `crypto.randomBytes()` του Node.
 

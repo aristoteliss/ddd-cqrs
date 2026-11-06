@@ -5,6 +5,10 @@ editUrl: false
 sidebar:
   order: 51
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/untyped.svg)](https://www.npmjs.com/package/@cqrs-ddd/untyped)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/untyped.svg)](https://www.npmjs.com/package/@cqrs-ddd/untyped)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/untyped.svg)](https://www.npmjs.com/package/@cqrs-ddd/untyped)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 Μια typed αντικατάσταση για το `as any` όταν ο κώδικας πρέπει να διαβάσει μια ιδιότητα που δεν δηλώνεται στον τύπο, όπως metadata ενός framework σε ένα wrapper object. Το `untyped(value)` επιστρέφει την ίδια τιμή με τύπο `T & Record<string | symbol, unknown>`: οι δηλωμένες ιδιότητες διατηρούν τους τύπους τους, ενώ κάθε άλλη ιδιότητα διαβάζεται ως `unknown`, υποχρεώνοντας τον καλούντα να κάνει type narrowing. Ικανοποιεί τον κανόνα `noExplicitAny` του Biome χωρίς να απαιτείται καταστολή του κανόνα (lint suppression).
 

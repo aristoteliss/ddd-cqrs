@@ -4,6 +4,10 @@ description: "Deduplicate commands by operation key, replay the stored response 
 sidebar:
   order: 13
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/pipeline-idempotency.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-idempotency)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/pipeline-idempotency.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-idempotency)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/pipeline-idempotency.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-idempotency)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 Deduplicates commands by operation key. While the record of a key is live, a second call with that key does not run the handler: it receives the stored response when the first call has completed, and is rejected with HTTP 409 Conflict while the first call is still running. Reusing the same key with an altered request payload is rejected with HTTP 422 Unprocessable Entity.
 

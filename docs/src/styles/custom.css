@@ -1,0 +1,16 @@
+/* Top bar links: one line each, and hidden where they don't fit next to the search (the sidebar
+   has the same sections). */
+header > div > nav a {
+  white-space: nowrap;
+}
+
+/* Package badges sit on one line; Starlight makes content images block-level. */
+.sl-markdown-content img[src^="https://img.shields.io/"] {
+  display: inline-block;
+}
+
+@media (max-width: 74.99rem) {
+  header > div > nav {
+    visibility: hidden;
+  }
+}

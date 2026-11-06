@@ -5,6 +5,11 @@ editUrl: false
 sidebar:
   order: 50
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/safe-stringify.svg)](https://www.npmjs.com/package/@cqrs-ddd/safe-stringify)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/safe-stringify.svg)](https://www.npmjs.com/package/@cqrs-ddd/safe-stringify)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/safe-stringify.svg)](https://www.npmjs.com/package/@cqrs-ddd/safe-stringify)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
+
 Two JSON serializers with opposite goals, and the key-segment helpers that build
 identity keys. No runtime dependencies and no framework.
 

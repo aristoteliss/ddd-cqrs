@@ -4,6 +4,10 @@ description: "Carry the tenant, correlation id and principal of a request into t
 sidebar:
   order: 32
 ---
+[![npm version](https://img.shields.io/npm/v/@cqrs-ddd/pipeline-job-context.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-job-context)
+[![npm downloads](https://img.shields.io/npm/dm/@cqrs-ddd/pipeline-job-context.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-job-context)
+[![Node.js](https://img.shields.io/node/v/@cqrs-ddd/pipeline-job-context.svg)](https://www.npmjs.com/package/@cqrs-ddd/pipeline-job-context)
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%7C%20commercial-blue.svg)](https://github.com/aristoteliss/ddd-cqrs#license-and-commercial-use)
 
 Background work loses the context of the request that started it. This package carries
 the tenant, the correlation id and the principal of a request into the queue jobs it
