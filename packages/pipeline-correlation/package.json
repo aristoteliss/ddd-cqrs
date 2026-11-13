@@ -1,6 +1,6 @@
 {
   "name": "@cqrs-ddd/pipeline-correlation",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "description": "Correlation id propagation for any Node.js application: HTTP middleware, queue and message consumers, cron jobs",
   "author": "Aristotelis",
   "license": "SEE LICENSE IN LICENSE",

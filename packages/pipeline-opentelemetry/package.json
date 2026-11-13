@@ -1,6 +1,6 @@
 {
   "name": "@cqrs-ddd/pipeline-opentelemetry",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "description": "OpenTelemetry tracing, metrics and span attribute behaviors for @cqrs-ddd/pipeline",
   "author": "Aristotelis",
   "license": "SEE LICENSE IN LICENSE",

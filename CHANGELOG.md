@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.6.0
+
+A minor release with breaking changes, defect repairs and simplifications across the
+packages. Every package is released at 0.6.0 on the `latest` dist-tag. The packages take
+each other at `^0.6.0`, as every release moves in lockstep. Read the breaking changes
+before you upgrade from 0.5.x.
 
 ### Breaking changes
 

@@ -1,6 +1,6 @@
 {
   "name": "@cqrs-ddd/pipeline-zod",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "description": "Zod validation for @cqrs-ddd/pipeline: validates and parses the input of a command, query, event or wrapped function",
   "author": "Aristotelis",
   "license": "SEE LICENSE IN LICENSE",
