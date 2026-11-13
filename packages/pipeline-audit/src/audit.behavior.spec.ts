@@ -8,7 +8,7 @@ import {
 } from '@cqrs-ddd/pipeline';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  AUDIT_RECORD_ITEM,
+  AUDIT_RECORD_ITEM_TOKEN,
   AUDIT_START_RECORD_ITEM_TOKEN,
   AuditBehavior,
 } from './audit.behavior.js';
@@ -217,7 +217,7 @@ describe('AuditBehavior', () => {
       message: 'denied',
     });
     expect(record.error?.stack).toBeTypeOf('string');
-    expect(ctx.items.get(AUDIT_RECORD_ITEM)).toBe(record);
+    expect(getPipelineItem(ctx, AUDIT_RECORD_ITEM_TOKEN)).toBe(record);
   });
 
   it('records throw undefined as a failure', async () => {

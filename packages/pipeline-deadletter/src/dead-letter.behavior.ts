@@ -29,22 +29,13 @@ import type {
 const DEFAULT_CAPTURE_KINDS: readonly DeadLetterRequestKind[] = ['event'];
 
 /**
- * Unique symbol key set on `context.items` to `true` or `false` recording whether
+ * The `context.items` entry to `true` or `false` recording whether
  * delivery to the dead-letter transport succeeded.
  *
- * @example
- * ```ts
- * const delivered = context.items.get(DEAD_LETTER_ITEM) === true;
- * ```
- */
-export const DEAD_LETTER_ITEM = Symbol('DEAD_LETTER_ITEM');
-
-/**
- * Typed token for {@link DEAD_LETTER_ITEM}: the dead-letter delivery outcome. Reads and writes the same
- * `context.items` entry through `getPipelineItem` / `requirePipelineItem`.
+ * Read it with `getPipelineItem` or `requirePipelineItem`.
  */
 export const DEAD_LETTER_ITEM_TOKEN: PipelineItemToken<boolean> =
-  createPipelineItem<boolean>('DEAD_LETTER_ITEM', DEAD_LETTER_ITEM);
+  createPipelineItem<boolean>('DEAD_LETTER_ITEM');
 
 /**
  * Pipeline behavior that forwards **failed** requests to a dead-letter sink.
@@ -198,10 +189,9 @@ export class DeadLetterBehavior implements IPipelineBehavior {
 
     const { ignoreErrors } = options;
 
-    return !(
-      (typeof ignoreErrors === 'function' || Array.isArray(ignoreErrors)) &&
-      matchesIgnoredError(ignoreErrors, error, context)
-    );
+    const isFilter =
+      typeof ignoreErrors === 'function' || Array.isArray(ignoreErrors);
+    return !isFilter || !matchesIgnoredError(ignoreErrors, error, context);
   }
 
   /** Merges per-handler options over the constructor defaults. */
@@ -215,22 +205,12 @@ export class DeadLetterBehavior implements IPipelineBehavior {
       ...handlerOptions,
     };
 
-    if (this.defaults.ignoreErrors && handlerOptions.ignoreErrors) {
-      if (
-        Array.isArray(this.defaults.ignoreErrors) &&
-        Array.isArray(handlerOptions.ignoreErrors)
-      ) {
-        merged.ignoreErrors = [
-          ...this.defaults.ignoreErrors,
-          ...handlerOptions.ignoreErrors,
-        ];
-      } else {
-        const defaultFilter = this.defaults.ignoreErrors;
-        const handlerFilter = handlerOptions.ignoreErrors;
-        merged.ignoreErrors = (err, ctx) =>
-          matchesIgnoredError(defaultFilter, err, ctx) ||
-          matchesIgnoredError(handlerFilter, err, ctx);
-      }
+    const defaultFilter = this.defaults.ignoreErrors;
+    const handlerFilter = handlerOptions.ignoreErrors;
+    if (defaultFilter && handlerFilter) {
+      merged.ignoreErrors = (error, ctx) =>
+        matchesIgnoredError(defaultFilter, error, ctx) ||
+        matchesIgnoredError(handlerFilter, error, ctx);
     }
 
     if (this.defaults.redactKeys && handlerOptions.redactKeys) {

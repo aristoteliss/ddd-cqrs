@@ -242,6 +242,7 @@ describe('PostgresDeadLetterTransport', () => {
       0,
       'open',
       false,
+      null,
     ]);
   });
 
@@ -273,6 +274,12 @@ describe('PostgresDeadLetterTransport', () => {
   it('createDeadLetterTableSql emits CREATE TABLE for a valid name', () => {
     expect(createDeadLetterTableSql()).toContain(
       'CREATE TABLE IF NOT EXISTS dead_letters',
+    );
+    expect(createDeadLetterTableSql('ops.dead_letters')).toContain(
+      'ALTER TABLE ops.dead_letters ADD COLUMN IF NOT EXISTS claimed_until TIMESTAMPTZ;',
+    );
+    expect(createDeadLetterTableSql()).toContain(
+      'ALTER TABLE dead_letters ADD COLUMN IF NOT EXISTS tenant_id TEXT;',
     );
     expect(() => createDeadLetterTableSql('bad name')).toThrow(
       /Invalid dead-letter table name/,
@@ -400,8 +407,29 @@ describe('PostgresDeadLetterTransport as a store', () => {
     await store.list();
 
     expect(query.mock.calls[0]?.[0]).toContain('ORDER BY id');
-    expect(query.mock.calls[0]?.[1]).toEqual(['open', 'UserCreatedEvent', 5]);
-    expect(query.mock.calls[1]?.[1]).toEqual([null, null, 100]);
+    expect(query.mock.calls[0]?.[1]).toEqual([
+      'open',
+      'UserCreatedEvent',
+      5,
+      null,
+    ]);
+    expect(query.mock.calls[1]?.[1]).toEqual([null, null, 100, null]);
+  });
+
+  it('stores the tenant in its column, lists by it and reads it before the metadata copy', async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [{ ...row, tenant_id: 't-2' }] });
+    const store = new PostgresDeadLetterTransport({ query });
+
+    await store.send({ ...record, tenantId: 't-2' });
+    const [listed] = await store.list({ tenantId: 't-2' });
+
+    expect(query.mock.calls[0]?.[1]?.[12]).toBe('t-2');
+    expect(query.mock.calls[1]?.[0]).toContain('tenant_id = $4');
+    expect(query.mock.calls[1]?.[1]).toEqual([null, null, 100, 't-2']);
+    expect(listed?.tenantId).toBe('t-2');
   });
 
   it('counts an attempt with its error, and marks a record resolved', async () => {
@@ -412,12 +440,30 @@ describe('PostgresDeadLetterTransport as a store', () => {
     await store.markResolved('dl-1');
 
     expect(query.mock.calls[0]).toEqual([
-      'UPDATE dead_letters SET attempts = attempts + 1, last_error = $2 WHERE id = $1',
+      'UPDATE dead_letters SET attempts = attempts + 1, last_error = $2, claimed_until = NULL WHERE id = $1',
       ['dl-1', JSON.stringify({ name: 'Error', message: 'again' })],
     ]);
     expect(query.mock.calls[1]).toEqual([
-      "UPDATE dead_letters SET status = 'resolved', resolved_at = now() WHERE id = $1",
+      "UPDATE dead_letters SET status = 'resolved', resolved_at = now(), claimed_until = NULL WHERE id = $1",
       ['dl-1'],
     ]);
+  });
+
+  it('claims an open record that no live claim holds, and reports whether a row changed', async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [{ id: 'dl-1' }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({});
+    const store = new PostgresDeadLetterTransport({ query });
+
+    await expect(store.claim('dl-1', 60_000)).resolves.toBe(true);
+    await expect(store.claim('dl-1', 60_000)).resolves.toBe(false);
+    await expect(store.claim('dl-1', 60_000)).resolves.toBe(false);
+
+    const [sql, values] = query.mock.calls[0] ?? [];
+    expect(sql).toContain("WHERE id = $1 AND status = 'open'");
+    expect(sql).toContain('claimed_until IS NULL OR claimed_until <= now()');
+    expect(values).toEqual(['dl-1', 60_000]);
   });
 });

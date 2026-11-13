@@ -1,13 +1,9 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
+import type { HttpResponse } from '@cqrs-ddd/pipeline';
 import type { UnauthorizedActionException } from './errors/unauthorized-action.exception.js';
 
-/** An HTTP answer for an error: status, JSON body and headers. */
-export interface HttpResponse {
-  status: number;
-  body: Record<string, unknown>;
-  headers: Record<string, string>;
-}
+export type { HttpResponse };
 
 /**
  * The HTTP answer for an {@link UnauthorizedActionException}: `403 Forbidden`, naming the

@@ -5,7 +5,7 @@ import { DiscoveryModule } from '@nestjs/core';
 import {
   PIPELINE_OPTIONS,
   PipelineBootstrap,
-  type PipelineOptions,
+  type PipelineModuleOptions,
 } from './pipeline.bootstrap.js';
 
 /**
@@ -32,7 +32,7 @@ import {
  */
 @Module({})
 export class PipelineModule {
-  static forRoot(options: PipelineOptions = {}): DynamicModule {
+  static forRoot(options: PipelineModuleOptions = {}): DynamicModule {
     return {
       module: PipelineModule,
       imports: [DiscoveryModule],

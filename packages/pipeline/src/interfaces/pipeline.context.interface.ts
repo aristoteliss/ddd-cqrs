@@ -1,6 +1,6 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
-import type { Constructor } from '../types.js';
+import type { Constructor, RequestKind } from '../types.js';
 
 /**
  * Rich context available to every pipeline behavior during execution.
@@ -43,7 +43,7 @@ export interface IPipelineContext<TRequest = unknown, TResponse = unknown> {
   readonly handlerName: string;
 
   /** 'command', 'query', or 'event': declared when wrapping, or read from the request's brand. */
-  readonly requestKind: 'command' | 'query' | 'event' | 'unknown';
+  readonly requestKind: RequestKind;
 
   /** UTC timestamp when the pipeline execution started. */
   readonly startedAt: Date;

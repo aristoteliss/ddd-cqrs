@@ -2,6 +2,7 @@
 
 import {
   type IPipelineContext,
+  principalSegments,
   type TenantPartitionOptions,
   tenantSegments,
 } from '@cqrs-ddd/pipeline';
@@ -15,9 +16,12 @@ import type { RateLimitKeyFactory } from '../interfaces/rate-limit-options.inter
  *
  * Typical values are an authenticated user ID, account ID, API-client ID, or a
  * trusted transport identity copied into `context.items` by an earlier behavior.
+ *
+ * @typeParam TRequest - The request class the handler receives, which types
+ *   `context.request`. The factory does not check it at run time.
  */
-export type RateLimitPartitionFactory = (
-  context: IPipelineContext,
+export type RateLimitPartitionFactory<TRequest = unknown> = (
+  context: IPipelineContext<TRequest>,
 ) => string | undefined;
 
 /** Options for {@link createPartitionedRateLimitKeyFactory}. */
@@ -64,6 +68,11 @@ export interface PartitionedRateLimitKeyOptions extends TenantPartitionOptions {
  * }
  * ```
  *
+ * @example Per value of the request, typed by the request class
+ * ```ts
+ * createPartitionedRateLimitKeyFactory<LoginCommand>((ctx) => ctx.request.clientIp);
+ * ```
+ *
  * @example Single-tenant deployment — say so explicitly
  * ```ts
  * createPartitionedRateLimitKeyFactory(readUserId, { includeTenant: false });
@@ -74,8 +83,8 @@ export interface PartitionedRateLimitKeyOptions extends TenantPartitionOptions {
  * createPartitionedRateLimitKeyFactory(readAccountId, { includeTenant: true });
  * ```
  */
-export function createPartitionedRateLimitKeyFactory(
-  partitionFactory: RateLimitPartitionFactory,
+export function createPartitionedRateLimitKeyFactory<TRequest = unknown>(
+  partitionFactory: RateLimitPartitionFactory<TRequest>,
   options: PartitionedRateLimitKeyOptions = {},
 ): RateLimitKeyFactory {
   const onMissingPartition = options.onMissingPartition ?? 'throw';
@@ -87,8 +96,10 @@ export function createPartitionedRateLimitKeyFactory(
       MissingRateLimitPartitionError,
     );
 
-    const resolved = partitionFactory(context);
-    const partition = typeof resolved === 'string' ? resolved.trim() : '';
+    const resolved = partitionFactory(context as IPipelineContext<TRequest>);
+    const partition = principalSegments(
+      typeof resolved === 'string' ? resolved : undefined,
+    );
 
     if (!partition) {
       if (onMissingPartition === 'throw') {
@@ -103,7 +114,7 @@ export function createPartitionedRateLimitKeyFactory(
       return joinKeySegments([...tenant, context.requestName]);
     }
 
-    return joinKeySegments([...tenant, partition, context.requestName]);
+    return joinKeySegments([...tenant, ...partition, context.requestName]);
   };
 
   return keyFor;

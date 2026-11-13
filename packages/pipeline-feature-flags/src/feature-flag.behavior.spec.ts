@@ -1,6 +1,7 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
 import {
+  getPipelineItem,
   type IPipelineBehaviorContract,
   type IPipelineContext,
   PIPELINE_BEHAVIOR_CONTRACT,
@@ -10,9 +11,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FeatureDisabledError } from './errors/feature-disabled.error.js';
 import { FeatureFlagEvaluationError } from './errors/feature-flag-evaluation.error.js';
 import {
-  FEATURE_FLAG_DECISION_ITEM,
-  FEATURE_FLAG_ITEM,
-  FEATURE_FLAG_KEY_ITEM,
+  FEATURE_FLAG_DECISION_ITEM_TOKEN,
+  FEATURE_FLAG_ITEM_TOKEN,
+  FEATURE_FLAG_KEY_ITEM_TOKEN,
   FeatureFlagBehavior,
 } from './feature-flag.behavior.js';
 import type { FeatureFlagBehaviorOptions } from './interfaces/feature-flags-options.interface.js';
@@ -58,7 +59,6 @@ describe('FeatureFlagBehavior', () => {
     const logger = { debug: vi.fn(), setContext: vi.fn() };
     const behavior = new FeatureFlagBehavior(
       client,
-      undefined,
       undefined,
       logger as never,
     );
@@ -118,8 +118,10 @@ describe('FeatureFlagBehavior', () => {
 
     expect(result).toBe('ok');
     expect(next).toHaveBeenCalledTimes(1);
-    expect(ctx.items.get(FEATURE_FLAG_KEY_ITEM)).toBe('new-checkout');
-    expect(ctx.items.get(FEATURE_FLAG_ITEM)).toBe(true);
+    expect(getPipelineItem(ctx, FEATURE_FLAG_KEY_ITEM_TOKEN)).toBe(
+      'new-checkout',
+    );
+    expect(getPipelineItem(ctx, FEATURE_FLAG_ITEM_TOKEN)).toBe(true);
   });
 
   it('evaluates fail-closed by default without using correlationId as targetingKey', async () => {
@@ -227,7 +229,9 @@ describe('FeatureFlagBehavior', () => {
       environment: 'prod',
       region: 'eu',
     };
-    const behavior = new FeatureFlagBehavior(client, {}, moduleContext);
+    const behavior = new FeatureFlagBehavior(client, {
+      baseContext: moduleContext,
+    });
     const ctx = withOptions(makeCtx(), {
       flag: 'f',
       context: () => ({ region: 'us', tenant: 'acme' }),
@@ -258,13 +262,10 @@ describe('FeatureFlagBehavior', () => {
       flag: 'checkout',
       allowedVariants: ['treatment'],
     });
-    const behavior = new FeatureFlagBehavior(
-      client,
-      undefined,
-      moduleContext,
-      undefined,
-      () => 'user-42',
-    );
+    const behavior = new FeatureFlagBehavior(client, {
+      baseContext: moduleContext,
+      targetingKeyFactory: () => 'user-42',
+    });
 
     await behavior.handle(ctx, vi.fn().mockResolvedValue('ok'));
 
@@ -276,9 +277,11 @@ describe('FeatureFlagBehavior', () => {
         environment: 'prod',
       }),
     );
-    expect(ctx.items.get(FEATURE_FLAG_ITEM)).toBe(true);
-    expect(ctx.items.get(FEATURE_FLAG_KEY_ITEM)).toBe('checkout');
-    expect(ctx.items.get(FEATURE_FLAG_DECISION_ITEM)).toMatchObject({
+    expect(getPipelineItem(ctx, FEATURE_FLAG_ITEM_TOKEN)).toBe(true);
+    expect(getPipelineItem(ctx, FEATURE_FLAG_KEY_ITEM_TOKEN)).toBe('checkout');
+    expect(
+      getPipelineItem(ctx, FEATURE_FLAG_DECISION_ITEM_TOKEN),
+    ).toMatchObject({
       flagKey: 'checkout',
       value: true,
       enabled: true,
@@ -294,13 +297,9 @@ describe('FeatureFlagBehavior', () => {
       flag: 'f',
       targetingKeyFactory: () => 'account-7',
     });
-    const behavior = new FeatureFlagBehavior(
-      client,
-      undefined,
-      undefined,
-      undefined,
-      () => 'module-user',
-    );
+    const behavior = new FeatureFlagBehavior(client, {
+      targetingKeyFactory: () => 'module-user',
+    });
 
     await behavior.handle(ctx, vi.fn().mockResolvedValue(null));
 
@@ -325,7 +324,9 @@ describe('FeatureFlagBehavior', () => {
     await expect(
       new FeatureFlagBehavior(client).handle(ctx, vi.fn()),
     ).rejects.toBeInstanceOf(FeatureDisabledError);
-    expect(ctx.items.get(FEATURE_FLAG_DECISION_ITEM)).toMatchObject({
+    expect(
+      getPipelineItem(ctx, FEATURE_FLAG_DECISION_ITEM_TOKEN),
+    ).toMatchObject({
       value: true,
       enabled: false,
       variant: 'control',
@@ -379,7 +380,9 @@ describe('FeatureFlagBehavior', () => {
       providerMessage: 'socket hang up',
       cause: 'socket hang up',
     });
-    expect(ctx.items.get(FEATURE_FLAG_DECISION_ITEM)).toMatchObject({
+    expect(
+      getPipelineItem(ctx, FEATURE_FLAG_DECISION_ITEM_TOKEN),
+    ).toMatchObject({
       reason: 'ERROR',
       errorMessage: 'socket hang up',
     });
@@ -420,7 +423,9 @@ describe('FeatureFlagBehavior', () => {
     const result = await new FeatureFlagBehavior(client).handle(ctx, vi.fn());
 
     expect(result).toBe('legacy');
-    expect(ctx.items.get(FEATURE_FLAG_DECISION_ITEM)).toMatchObject({
+    expect(
+      getPipelineItem(ctx, FEATURE_FLAG_DECISION_ITEM_TOKEN),
+    ).toMatchObject({
       enabled: false,
       reason: 'ERROR',
       errorMessage: 'provider offline',
@@ -429,7 +434,7 @@ describe('FeatureFlagBehavior', () => {
 });
 
 /**
- * With `errorPolicy: 'throw'`, `FEATURE_FLAG_DECISION_ITEM` must be written
+ * With `errorPolicy: 'throw'`, `FEATURE_FLAG_DECISION_ITEM_TOKEN` must be written
  * before the evaluation error propagates, and the error must keep the provider
  * failure. An outer audit or telemetry behavior needs to record exactly this case.
  */
@@ -463,7 +468,7 @@ describe('FeatureFlagBehavior decision record on evaluation failure', () => {
     expect(thrown).toBeInstanceOf(FeatureFlagEvaluationError);
     expect((thrown as FeatureFlagEvaluationError).cause).toBe(providerError);
 
-    const decision = context.items.get(FEATURE_FLAG_DECISION_ITEM);
+    const decision = getPipelineItem(context, FEATURE_FLAG_DECISION_ITEM_TOKEN);
     expect(decision).toMatchObject({
       flagKey: flag,
       enabled: false,
@@ -486,7 +491,9 @@ describe('FeatureFlagBehavior decision record on evaluation failure', () => {
     await expect(behavior.handle(context, vi.fn())).rejects.toBeInstanceOf(
       FeatureFlagEvaluationError,
     );
-    expect(context.items.get(FEATURE_FLAG_DECISION_ITEM)).toMatchObject({
+    expect(
+      getPipelineItem(context, FEATURE_FLAG_DECISION_ITEM_TOKEN),
+    ).toMatchObject({
       errorCode: 'PROVIDER_NOT_READY',
     });
   });
@@ -513,7 +520,9 @@ describe('FeatureFlagBehavior decision record on evaluation failure', () => {
     await expect(behavior.handle(context, next)).rejects.toBeInstanceOf(
       FeatureDisabledError,
     );
-    expect(context.items.get(FEATURE_FLAG_DECISION_ITEM)).toMatchObject({
+    expect(
+      getPipelineItem(context, FEATURE_FLAG_DECISION_ITEM_TOKEN),
+    ).toMatchObject({
       enabled: false,
       reason: 'ERROR',
     });

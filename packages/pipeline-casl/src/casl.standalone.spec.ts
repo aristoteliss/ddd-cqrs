@@ -48,6 +48,30 @@ describe('CaslBehavior on wrapped functions', () => {
     });
   });
 
+  it('refuses a call-site declaration without rules', () => {
+    const wrap = (entry: Parameters<typeof pipeline.wrap>[1]) =>
+      pipeline.wrap(
+        { name: 'unchecked', kind: 'command' },
+        entry,
+      )(async () => 'ran');
+
+    expect(() => wrap(CaslBehavior)).toThrow('declared without rules');
+    expect(() => wrap([CaslBehavior, {}])).toThrow('declared without rules');
+    expect(() => wrap([CaslBehavior, { rules: [] }])).toThrow(
+      'declared without rules',
+    );
+  });
+
+  it('accepts a global declaration without rules, which passes through', async () => {
+    const global = createPipeline({
+      behaviors: [new CaslBehavior(source)],
+      globalBehaviors: { before: [CaslBehavior] },
+    });
+    const open = global.wrap({ name: 'open', kind: 'query' })(async () => 'ok');
+
+    await expect(open()).resolves.toBe('ok');
+  });
+
   it('cannot be built without a permission source', () => {
     expect(() => new CaslBehavior(undefined as never)).toThrow(
       'CaslBehavior requires a permission source',

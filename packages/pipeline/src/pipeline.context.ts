@@ -11,7 +11,7 @@ import { type BehaviorId, getBehaviorId } from './helpers/behavior-id.js';
 import { IPipelineBehavior } from './interfaces/pipeline.behavior.interface.js';
 import { IPipelineContext } from './interfaces/pipeline.context.interface.js';
 import { PipelineHandlerMeta } from './interfaces/pipeline-handler-meta.interface.js';
-import type { Constructor } from './types.js';
+import type { Constructor, RequestKind } from './types.js';
 
 /**
  * Abstract base class with shared implementation for all pipeline contexts.
@@ -69,7 +69,7 @@ export abstract class BasePipelineContext<
   abstract readonly requestName: string;
   abstract readonly handlerType: Constructor;
   abstract readonly handlerName: string;
-  abstract readonly requestKind: 'command' | 'query' | 'event' | 'unknown';
+  abstract readonly requestKind: RequestKind;
 
   readonly startedAt: Date;
   /**
@@ -133,7 +133,7 @@ export class PipelineContext<
   readonly requestName: string;
   readonly handlerType: Constructor;
   readonly handlerName: string;
-  readonly requestKind: 'command' | 'query' | 'event' | 'unknown';
+  readonly requestKind: RequestKind;
 
   protected readonly behaviorOptionsMap:
     | Map<BehaviorId, Record<string, unknown>>

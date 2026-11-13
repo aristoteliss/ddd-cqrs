@@ -1,17 +1,14 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
+import type { HttpResponse } from '@cqrs-ddd/pipeline';
 import { RateLimitExceededError } from './errors/rate-limit-exceeded.error.js';
 
-/** An HTTP answer for an error: status, JSON body and headers. */
-export interface HttpResponse {
-  status: number;
-  body: Record<string, unknown>;
-  headers: Record<string, string>;
-}
+export type { HttpResponse };
 
 /**
  * The HTTP answer for a {@link RateLimitExceededError}: `429 Too Many Requests` with a
  * `Retry-After` header. Framework filters and Express handlers reply with it.
+ * The body never carries the bucket key, which holds the tenant and the caller.
  *
  * @example
  * ```ts
@@ -28,7 +25,7 @@ export function toHttpResponse(error: RateLimitExceededError): HttpResponse {
     body: {
       statusCode: 429,
       error: 'Too Many Requests',
-      message: error.message,
+      message: `Rate limit exceeded; retry after ${error.retryAfterSeconds}s`,
       retryAfter: error.retryAfterSeconds,
     },
     headers: { 'Retry-After': String(error.retryAfterSeconds) },

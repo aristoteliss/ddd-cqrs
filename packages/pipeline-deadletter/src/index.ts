@@ -6,7 +6,6 @@ export {
   redactValue,
 } from '@cqrs-ddd/safe-stringify';
 export {
-  DEAD_LETTER_ITEM,
   DEAD_LETTER_ITEM_TOKEN,
   DeadLetterBehavior,
 } from './dead-letter.behavior.js';

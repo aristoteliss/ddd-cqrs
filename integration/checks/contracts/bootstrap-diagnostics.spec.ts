@@ -52,7 +52,7 @@ describe('Pipeline registration diagnostics', () => {
     @QueryHandler(DummyQuery)
     @UsePipeline(
       [CacheBehavior, { key: () => 'cache-key' }],
-      [CaslBehavior, {}],
+      [CaslBehavior, { rules: [{ action: 'read', subject: 'Dummy' }] }],
     )
     class MisorderedQueryHandler implements IQueryHandler<DummyQuery> {
       async execute(_query: DummyQuery): Promise<string> {
@@ -63,7 +63,7 @@ describe('Pipeline registration diagnostics', () => {
     @CommandHandler(DummyCommand)
     @UsePipeline(
       [CacheBehavior, { key: () => 'cache-key' }],
-      [CaslBehavior, {}],
+      [CaslBehavior, { rules: [{ action: 'read', subject: 'Dummy' }] }],
     )
     class InactiveCacheCommandHandler implements ICommandHandler<DummyCommand> {
       async execute(_command: DummyCommand): Promise<string> {
@@ -74,7 +74,7 @@ describe('Pipeline registration diagnostics', () => {
     @CommandHandler(DummyCommand)
     @UsePipeline(
       [CacheBehavior, { key: () => 'cache-key', kinds: ['command'] }],
-      [CaslBehavior, {}],
+      [CaslBehavior, { rules: [{ action: 'read', subject: 'Dummy' }] }],
     )
     class ExplicitCacheCommandHandler implements ICommandHandler<DummyCommand> {
       async execute(_command: DummyCommand): Promise<string> {
@@ -117,7 +117,7 @@ describe('Pipeline registration diagnostics', () => {
     @CommandHandler(DummyCommand)
     @UsePipeline(
       [IdempotencyBehavior, { keyFactory: () => 'idemp-key' }],
-      [CaslBehavior, {}],
+      [CaslBehavior, { rules: [{ action: 'read', subject: 'Dummy' }] }],
     )
     class MisorderedIdempotencyCommandHandler
       implements ICommandHandler<DummyCommand>
@@ -130,7 +130,7 @@ describe('Pipeline registration diagnostics', () => {
     @QueryHandler(DummyQuery)
     @UsePipeline(
       [IdempotencyBehavior, { keyFactory: () => 'idemp-key' }],
-      [CaslBehavior, {}],
+      [CaslBehavior, { rules: [{ action: 'read', subject: 'Dummy' }] }],
     )
     class InactiveIdempotencyQueryHandler implements IQueryHandler<DummyQuery> {
       async execute(_query: DummyQuery): Promise<string> {

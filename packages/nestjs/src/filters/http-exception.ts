@@ -2,6 +2,7 @@
 
 import { createRequire } from 'node:module';
 import { domainErrorHttpStatus } from '@cqrs-ddd/core/http';
+import type { HttpResponse } from '@cqrs-ddd/pipeline';
 import { BadRequestException, HttpException } from '@nestjs/common';
 
 /** A NestJS exception for a package error, and the headers its answer carries. */
@@ -14,12 +15,6 @@ export interface HttpAnswer {
 export interface ValidationDetails {
   readonly formErrors: readonly string[];
   readonly fieldErrors: Readonly<Record<string, readonly string[] | undefined>>;
-}
-
-interface HttpResponse {
-  readonly status: number;
-  readonly body: Record<string, unknown>;
-  readonly headers: Record<string, string>;
 }
 
 type Convert = (error: unknown) => HttpAnswer | undefined;
@@ -82,17 +77,19 @@ function packageConverter(
   };
 }
 
-const validationConverter: Convert = (error) =>
-  named(error, 'ZodValidationError')
-    ? {
-        exception: new BadRequestException(
-          validationMessages(
-            (error as unknown as { details: ValidationDetails }).details,
-          ),
-        ),
-        headers: {},
-      }
-    : undefined;
+const validationConverter: Convert = (error) => {
+  if (!named(error, 'ZodValidationError')) return undefined;
+  const { details } = error as { details?: Partial<ValidationDetails> };
+  if (!Array.isArray(details?.formErrors) || !details.fieldErrors) {
+    return undefined;
+  }
+  return {
+    exception: new BadRequestException(
+      validationMessages(details as ValidationDetails),
+    ),
+    headers: {},
+  };
+};
 
 const domainConverter: Convert = (error) => {
   const status = domainErrorHttpStatus(error);

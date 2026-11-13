@@ -1,16 +1,16 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
-import type {
-  Constructor,
-  IPipelineBehavior,
-  PipelineLogger,
+import {
+  type Constructor,
+  createBehaviorResolver,
+  type IPipelineBehavior,
+  type PipelineLogger,
 } from '@cqrs-ddd/pipeline';
 import { CommandBus } from './command.bus.js';
 import { commandOf, eventsOf, queryOf } from './decorators.js';
 import { EventBus } from './event.bus.js';
 import { QueryBus } from './query.bus.js';
 import {
-  behaviorResolver,
   Handlers,
   type RegistrationOptions,
   type Registry,
@@ -76,11 +76,12 @@ export interface Cqrs {
  */
 export function createCqrs(options: CqrsOptions = {}): Cqrs {
   const logger = options.logger ?? console;
-  const behavior = behaviorResolver(
-    options.behaviors ?? [],
-    options.globalBehaviors,
+  const behavior = createBehaviorResolver({
+    owner: 'createCqrs',
+    given: options.behaviors ?? [],
+    globalBehaviors: options.globalBehaviors,
     logger,
-  );
+  });
 
   const handlers = new Handlers();
   const registry: Registry = { handlers, behavior, options, logger };

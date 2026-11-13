@@ -25,7 +25,7 @@ export function baseEvaluationContext(
 
 /**
  * Builds an evaluation context in this order:
- * base pipeline attributes → module context → handler context → targeting-key factory.
+ * base pipeline attributes → `baseContext` → `context` → targeting-key factory.
  *
  * A targeting key already provided by module/handler context is preserved when
  * the factory returns `undefined`. A non-empty factory result wins when present.

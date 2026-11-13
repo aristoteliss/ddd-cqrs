@@ -13,7 +13,7 @@ import {
   type PipelineBehaviorOrderRule,
   type PipelineBehaviorValidationContext,
 } from '../interfaces/pipeline-behavior-contract.interface.js';
-import type { Constructor } from '../types.js';
+import type { Constructor, DeclaredKind } from '../types.js';
 
 /**
  * Validates the ordering rules and option contracts that behavior classes declare
@@ -29,7 +29,7 @@ import type { Constructor } from '../types.js';
 export function validateBehaviorContracts(params: {
   handlerType: Constructor;
   handlerName: string;
-  requestKind: 'command' | 'query' | 'event';
+  requestKind: DeclaredKind;
   behaviorTypes: Constructor<IPipelineBehavior>[];
   resolvedBehaviors: Map<number, IPipelineBehavior>;
   mergedOptions: Map<BehaviorId, Record<string, unknown>>;

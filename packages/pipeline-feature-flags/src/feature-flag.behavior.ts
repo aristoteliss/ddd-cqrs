@@ -21,79 +21,42 @@ import { buildEvaluationContext } from './helpers/evaluation-context.js';
 import type {
   FeatureFlagBehaviorOptions,
   FeatureFlagDecision,
-  TargetingKeyFactory,
 } from './interfaces/feature-flags-options.interface.js';
 
 /**
- * Unique symbol key set on `context.items` recording the final boolean gate
+ * The `context.items` entry recording the final boolean gate
  * decision (`true` means the handler was allowed to execute).
  *
  * Use this when only the final gate result is needed. For provider variant,
  * reason, error metadata, and targeting identity use
  * {@link FEATURE_FLAG_DECISION_ITEM}.
  *
- * @example
- * ```ts
- * const isEnabled = context.items.get(FEATURE_FLAG_ITEM) === true;
- * ```
- */
-export const FEATURE_FLAG_ITEM = Symbol('FEATURE_FLAG_ITEM');
-
-/**
- * Typed token for {@link FEATURE_FLAG_ITEM}: the feature flag gate decision. Reads and writes the same
- * `context.items` entry through `getPipelineItem` / `requirePipelineItem`.
+ * Read it with `getPipelineItem` or `requirePipelineItem`.
  */
 export const FEATURE_FLAG_ITEM_TOKEN: PipelineItemToken<boolean> =
-  createPipelineItem<boolean>('FEATURE_FLAG_ITEM', FEATURE_FLAG_ITEM);
+  createPipelineItem<boolean>('FEATURE_FLAG_ITEM');
 
 /**
- * Unique symbol key set on `context.items` recording the evaluated feature flag
+ * The `context.items` entry recording the evaluated feature flag
  * key string.
  *
- * @example
- * ```ts
- * const flagKey = context.items.get(FEATURE_FLAG_KEY_ITEM) as string | undefined;
- * ```
- */
-export const FEATURE_FLAG_KEY_ITEM = Symbol('FEATURE_FLAG_KEY_ITEM');
-
-/**
- * Typed token for {@link FEATURE_FLAG_KEY_ITEM}: the evaluated feature flag key. Reads and writes the same
- * `context.items` entry through `getPipelineItem` / `requirePipelineItem`.
+ * Read it with `getPipelineItem` or `requirePipelineItem`.
  */
 export const FEATURE_FLAG_KEY_ITEM_TOKEN: PipelineItemToken<string> =
-  createPipelineItem<string>('FEATURE_FLAG_KEY_ITEM', FEATURE_FLAG_KEY_ITEM);
+  createPipelineItem<string>('FEATURE_FLAG_KEY_ITEM');
 
 /**
- * Unique symbol key set on `context.items` with the full
+ * The `context.items` entry with the full
  * {@link FeatureFlagDecision}: raw boolean value, final enabled decision,
  * provider variant/reason/error metadata, and targeting key when available.
  *
  * This lets audit/logging/telemetry behaviors inspect the exact decision without
  * evaluating the flag a second time.
  *
- * @example
- * ```ts
- * const decision = context.items.get(FEATURE_FLAG_DECISION_ITEM) as
- *   | FeatureFlagDecision
- *   | undefined;
- *
- * if (decision?.variant === 'treatment-a') {
- *   // enrich telemetry/audit metadata
- * }
- * ```
- */
-export const FEATURE_FLAG_DECISION_ITEM = Symbol('FEATURE_FLAG_DECISION_ITEM');
-
-/**
- * Typed token for {@link FEATURE_FLAG_DECISION_ITEM}: the feature flag decision. Reads and writes the same
- * `context.items` entry through `getPipelineItem` / `requirePipelineItem`.
+ * Read it with `getPipelineItem` or `requirePipelineItem`.
  */
 export const FEATURE_FLAG_DECISION_ITEM_TOKEN: PipelineItemToken<FeatureFlagDecision> =
-  createPipelineItem<FeatureFlagDecision>(
-    'FEATURE_FLAG_DECISION_ITEM',
-    FEATURE_FLAG_DECISION_ITEM,
-  );
+  createPipelineItem<FeatureFlagDecision>('FEATURE_FLAG_DECISION_ITEM');
 
 /** Minimal OpenFeature boolean detail shape used by the behavior. */
 interface BooleanEvaluationDetails {
@@ -230,9 +193,7 @@ export class FeatureFlagBehavior
   constructor(
     private readonly client: Client,
     defaults?: FeatureFlagBehaviorOptions,
-    private readonly moduleContext?: EvaluationContext,
     logger?: PipelineLogger,
-    private readonly moduleTargetingKeyFactory?: TargetingKeyFactory,
   ) {
     if (typeof client?.getBooleanDetails !== 'function') {
       throw new TypeError(
@@ -287,9 +248,9 @@ export class FeatureFlagBehavior
   ): Promise<{ decision: FeatureFlagDecision; failure?: EvaluationFailure }> {
     const evaluationContext = buildEvaluationContext(
       context,
-      this.moduleContext,
+      options.baseContext,
       options.context,
-      options.targetingKeyFactory ?? this.moduleTargetingKeyFactory,
+      options.targetingKeyFactory,
     );
     const { details, failure } = await this.evaluate(
       flag,

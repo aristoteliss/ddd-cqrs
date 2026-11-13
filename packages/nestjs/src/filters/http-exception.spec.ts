@@ -39,6 +39,13 @@ describe('validationMessages', () => {
 });
 
 describe('httpAnswer', () => {
+  it('leaves an error that only has the name ZodValidationError to Nest', () => {
+    const error = new Error('not ours');
+    error.name = 'ZodValidationError';
+
+    expect(httpAnswer(error)).toBeUndefined();
+  });
+
   it('answers a ZodValidationError with the BadRequestException of the validation pipe', () => {
     const answer = httpAnswer(validationError());
 

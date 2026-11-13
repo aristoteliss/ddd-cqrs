@@ -1,6 +1,6 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
-import type { Constructor } from '../types.js';
+import type { Constructor, DeclaredKind } from '../types.js';
 import type { IPipelineBehavior } from './pipeline.behavior.interface.js';
 
 /**
@@ -21,7 +21,7 @@ export interface PipelineBehaviorValidationContext {
   /** The name of the CQRS handler. */
   handlerName: string;
   /** The request kind of the handler ('command' | 'query' | 'event'). */
-  requestKind: 'command' | 'query' | 'event';
+  requestKind: DeclaredKind;
   /**
    * Source where this behavior was declared for the current handler:
    * - `'handler'`: declared at the call site, such as `pipeline.wrap(options, ...entries)`.
@@ -53,6 +53,30 @@ export interface PipelineBehaviorDiagnostic {
   message: string;
   /** Concrete remediation recommendation to resolve the issue. */
   fix: string;
+}
+
+/**
+ * The one diagnostic a contract validator returns for a violation, named after the
+ * handler under validation.
+ *
+ * @param behaviorName - The behavior that reports it, such as `CacheBehavior.name`.
+ * @example
+ * ```ts
+ * validate: (context) =>
+ *   context.effectiveOptions?.key
+ *     ? undefined
+ *     : behaviorDiagnostic(context, CacheBehavior.name, {
+ *         message: 'Active CacheBehavior requires an explicit `key` factory',
+ *         fix: 'Provide a key factory in the cache({ key }) entry.',
+ *       }),
+ * ```
+ */
+export function behaviorDiagnostic(
+  context: Pick<PipelineBehaviorValidationContext, 'handlerName'>,
+  behaviorName: string,
+  violation: Pick<PipelineBehaviorDiagnostic, 'message' | 'fix'>,
+): PipelineBehaviorDiagnostic[] {
+  return [{ handlerName: context.handlerName, behaviorName, ...violation }];
 }
 
 /**

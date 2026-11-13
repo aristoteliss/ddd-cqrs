@@ -8,7 +8,6 @@ export {
 } from './constants/pipeline-context.constants.js';
 export {
   createPipeline,
-  type DeclaredKind,
   type Pipeline,
   type PipelineOptions,
   REQUEST_KIND,
@@ -44,6 +43,8 @@ export {
   logging,
 } from './helpers/logging.intent.js';
 export { toPostgresJson } from './helpers/postgres-json.js';
+export { assertSafeTable } from './helpers/postgres-table.js';
+export { principalSegments } from './helpers/principal-partition.js';
 export { replaceRequest } from './helpers/replace-request.js';
 export {
   type TenantPartitionOptions,
@@ -54,10 +55,12 @@ export type {
   ContextSources,
   CorrelationSource,
 } from './interfaces/context-source.interface.js';
+export type { HttpResponse } from './interfaces/http-response.interface.js';
 export * from './interfaces/pipeline.behavior.interface.js';
 export * from './interfaces/pipeline.context.interface.js';
 export * from './interfaces/pipeline-behavior-contract.interface.js';
 export * from './interfaces/pipeline-handler-meta.interface.js';
+export type { PostgresQueryableLike } from './interfaces/postgres-queryable.interface.js';
 export {
   type LogLevel,
   type PinoLike,
@@ -74,11 +77,19 @@ export { validateBehaviorContracts } from './services/pipeline-contracts.js';
 export {
   compilePipelinePlan,
   type PipelineDeclaration,
-  type RequestKind,
   toGlobalConfigs,
 } from './services/pipeline-plan.js';
 export {
   createPipelineRunner,
   type PipelineRunner,
 } from './services/pipeline-runner.js';
-export type { Constructor } from './types.js';
+export {
+  type BehaviorResolver,
+  compileHandlerPlan,
+  createBehaviorResolver,
+  createHandlerRunner,
+  type DiagnosticsMode,
+  type PipelinePlan,
+  reportDiagnostics,
+} from './services/pipeline-setup.js';
+export type { Constructor, DeclaredKind, RequestKind } from './types.js';

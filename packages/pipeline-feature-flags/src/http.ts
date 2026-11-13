@@ -1,13 +1,9 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
+import type { HttpResponse } from '@cqrs-ddd/pipeline';
 import type { FeatureDisabledError } from './errors/feature-disabled.error.js';
 
-/** An HTTP answer for an error: status, JSON body and headers. */
-export interface HttpResponse {
-  status: number;
-  body: Record<string, unknown>;
-  headers: Record<string, string>;
-}
+export type { HttpResponse };
 
 /**
  * The HTTP answer for a {@link FeatureDisabledError}: `403 Forbidden` naming the flag, or

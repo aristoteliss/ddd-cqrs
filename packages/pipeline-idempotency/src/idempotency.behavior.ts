@@ -2,6 +2,7 @@
 
 import { randomUUID } from 'node:crypto';
 import {
+  behaviorDiagnostic,
   createPipelineItem,
   type IPipelineBehavior,
   type IPipelineBehaviorContract,
@@ -9,9 +10,6 @@ import {
   type IPipelineContext,
   type NextDelegate,
   PIPELINE_BEHAVIOR_CONTRACT,
-  type PipelineBehaviorDiagnostic,
-  type PipelineBehaviorOrderRule,
-  type PipelineBehaviorValidationContext,
   type PipelineItemToken,
   type PipelineLogger,
   setPipelineItem,
@@ -34,66 +32,31 @@ import type {
 import type { IdempotencyStore } from './interfaces/idempotency-store.interface.js';
 
 /**
- * Unique symbol key set on `context.items` holding the active idempotency key string.
+ * The `context.items` entry holding the active idempotency key string.
  *
- * @example
- * ```ts
- * const key = context.items.get(IDEMPOTENCY_KEY_ITEM) as string | undefined;
- * ```
- */
-export const IDEMPOTENCY_KEY_ITEM = Symbol('IDEMPOTENCY_KEY_ITEM');
-
-/**
- * Typed token for {@link IDEMPOTENCY_KEY_ITEM}: the active idempotency key. Reads and writes the same
- * `context.items` entry through `getPipelineItem` / `requirePipelineItem`.
+ * Read it with `getPipelineItem` or `requirePipelineItem`.
  */
 export const IDEMPOTENCY_KEY_ITEM_TOKEN: PipelineItemToken<string> =
-  createPipelineItem<string>('IDEMPOTENCY_KEY_ITEM', IDEMPOTENCY_KEY_ITEM);
+  createPipelineItem<string>('IDEMPOTENCY_KEY_ITEM');
 
 /**
- * Unique symbol key set on `context.items` to `true` when the response was replayed
+ * The `context.items` entry to `true` when the response was replayed
  * from a previously-stored record (the handler did not run this time).
  *
- * @example
- * ```ts
- * const wasReplayed = context.items.get(IDEMPOTENCY_REPLAYED_ITEM) === true;
- * ```
- */
-export const IDEMPOTENCY_REPLAYED_ITEM = Symbol('IDEMPOTENCY_REPLAYED_ITEM');
-
-/**
- * Typed token for {@link IDEMPOTENCY_REPLAYED_ITEM}: the idempotent replay flag. Reads and writes the same
- * `context.items` entry through `getPipelineItem` / `requirePipelineItem`.
+ * Read it with `getPipelineItem` or `requirePipelineItem`.
  */
 export const IDEMPOTENCY_REPLAYED_ITEM_TOKEN: PipelineItemToken<boolean> =
-  createPipelineItem<boolean>(
-    'IDEMPOTENCY_REPLAYED_ITEM',
-    IDEMPOTENCY_REPLAYED_ITEM,
-  );
+  createPipelineItem<boolean>('IDEMPOTENCY_REPLAYED_ITEM');
 
 /**
- * Unique symbol key set on `context.items` to `true` when a handler completed after
+ * The `context.items` entry to `true` when a handler completed after
  * its claim had expired or been replaced. The successful handler result is returned,
  * but this execution is not allowed to overwrite the newer owner's replay state.
  *
- * @example
- * ```ts
- * const ownershipLost = context.items.get(IDEMPOTENCY_OWNERSHIP_LOST_ITEM) === true;
- * ```
- */
-export const IDEMPOTENCY_OWNERSHIP_LOST_ITEM = Symbol(
-  'IDEMPOTENCY_OWNERSHIP_LOST_ITEM',
-);
-
-/**
- * Typed token for {@link IDEMPOTENCY_OWNERSHIP_LOST_ITEM}: the idempotency ownership-lost flag. Reads and writes the same
- * `context.items` entry through `getPipelineItem` / `requirePipelineItem`.
+ * Read it with `getPipelineItem` or `requirePipelineItem`.
  */
 export const IDEMPOTENCY_OWNERSHIP_LOST_ITEM_TOKEN: PipelineItemToken<boolean> =
-  createPipelineItem<boolean>(
-    'IDEMPOTENCY_OWNERSHIP_LOST_ITEM',
-    IDEMPOTENCY_OWNERSHIP_LOST_ITEM,
-  );
+  createPipelineItem<boolean>('IDEMPOTENCY_OWNERSHIP_LOST_ITEM');
 
 const DEFAULT_SCOPE: IdempotencyRequestKind[] = ['command'];
 
@@ -112,14 +75,11 @@ function inScope(
  * completion of that claim need.
  */
 interface ClaimAttempt {
-  key: string;
-  claimId: string;
+  /** The in-progress record: key, claim id, fingerprint and replay scope. */
+  claim: IdempotencyRecord & { claimId: string };
   ttl: number;
-  fingerprint: string | undefined;
-  replayScope: string | undefined;
   scopeRequired: boolean;
-  claim: IdempotencyRecord;
-  options: IdempotencyBehaviorOptions;
+  releaseOnError: boolean;
 }
 
 /**
@@ -175,58 +135,35 @@ export class IdempotencyBehavior
     IPipelineBehaviorOptionsResolver<IdempotencyBehaviorOptions>
 {
   static readonly [PIPELINE_BEHAVIOR_CONTRACT]: IPipelineBehaviorContract = {
-    order: (
-      context: PipelineBehaviorValidationContext,
-    ): PipelineBehaviorOrderRule | undefined => {
+    order: ({ effectiveOptions, requestKind }) =>
+      inScope(
+        effectiveOptions as IdempotencyBehaviorOptions | undefined,
+        requestKind,
+      )
+        ? { after: ['@cqrs-ddd/pipeline-casl:CaslBehavior', 'CaslBehavior'] }
+        : undefined,
+    validate: (context) => {
       const options = context.effectiveOptions as
         | IdempotencyBehaviorOptions
         | undefined;
-      if (!inScope(options, context.requestKind)) {
-        return undefined;
-      }
-      return {
-        after: ['@cqrs-ddd/pipeline-casl:CaslBehavior', 'CaslBehavior'],
-      };
-    },
-    validate: (
-      context: PipelineBehaviorValidationContext,
-    ): PipelineBehaviorDiagnostic[] | undefined => {
-      const options = context.effectiveOptions as
-        | IdempotencyBehaviorOptions
-        | undefined;
-      if (!inScope(options, context.requestKind)) {
-        return undefined;
-      }
+      if (!inScope(options, context.requestKind)) return undefined;
 
-      if (
-        (context.declarationSource === 'handler' ||
-          context.declarationSource === 'both') &&
-        !options?.keyFactory
-      ) {
-        return [
-          {
-            handlerName: context.handlerName,
-            behaviorName: IdempotencyBehavior.name,
-            message:
-              'Explicit IdempotencyBehavior intent requires an explicit `keyFactory` for deduplication',
-            fix:
-              'Provide keyFactory in the idempotent({ keyFactory }) entry ' +
-              'or use createPartitionedIdempotencyKeyFactory(...).',
-          },
-        ];
+      const isDeclaredByHandler = context.declarationSource !== 'global';
+      if (isDeclaredByHandler && !options?.keyFactory) {
+        return behaviorDiagnostic(context, IdempotencyBehavior.name, {
+          message:
+            'Explicit IdempotencyBehavior intent requires an explicit `keyFactory` for deduplication',
+          fix:
+            'Provide keyFactory in the idempotent({ keyFactory }) entry ' +
+            'or use createPartitionedIdempotencyKeyFactory(...).',
+        });
       }
-
       if (options?.keyFactory && typeof options.keyFactory !== 'function') {
-        return [
-          {
-            handlerName: context.handlerName,
-            behaviorName: IdempotencyBehavior.name,
-            message: `IdempotencyBehavior keyFactory must be a callable function, received ${typeof options.keyFactory}`,
-            fix: 'Pass a valid function (ctx) => string as the keyFactory option of the idempotent({ keyFactory }) entry.',
-          },
-        ];
+        return behaviorDiagnostic(context, IdempotencyBehavior.name, {
+          message: `IdempotencyBehavior keyFactory must be a callable function, received ${typeof options.keyFactory}`,
+          fix: 'Pass a valid function (ctx) => string as the keyFactory option of the idempotent({ keyFactory }) entry.',
+        });
       }
-
       return undefined;
     },
   };
@@ -297,55 +234,34 @@ export class IdempotencyBehavior
     options: IdempotencyBehaviorOptions,
     key: string,
   ): ClaimAttempt {
-    const ttl = options.ttl ?? DEFAULT_IDEMPOTENCY_TTL_MS;
-    if (!Number.isSafeInteger(ttl) || ttl <= 0) {
-      throw new TypeError(
-        'Idempotency ttl must be a positive safe integer in milliseconds.',
-      );
-    }
-
-    const fingerprint =
-      (options.fingerprint ?? true)
-        ? fingerprintValue(context.request)
-        : undefined;
-    // Resolved before the claim, so a replayScopeFactory that throws rejects the
-    // operation before any key is claimed.
-    const replayScope = options.replayScopeFactory?.(context);
-    const scopeRequired = options.replayScopeFactory !== undefined;
-    const claimId = randomUUID();
-
-    const claim: IdempotencyRecord = {
-      key,
-      status: 'in_progress',
-      requestName: context.requestName,
-      claimId,
-      fingerprint,
-      replayScope,
-      createdAt: new Date().toISOString(),
-    };
-
     return {
-      key,
-      claimId,
-      ttl,
-      fingerprint,
-      replayScope,
-      scopeRequired,
-      claim,
-      options,
+      ttl: ttlOf(options),
+      scopeRequired: options.replayScopeFactory !== undefined,
+      releaseOnError: options.releaseOnError ?? true,
+      claim: {
+        key,
+        status: 'in_progress',
+        requestName: context.requestName,
+        claimId: randomUUID(),
+        fingerprint:
+          (options.fingerprint ?? true)
+            ? fingerprintValue(context.request)
+            : undefined,
+        // Resolved before the claim, so a replayScopeFactory that throws rejects
+        // the operation before any key is claimed.
+        replayScope: options.replayScopeFactory?.(context),
+        createdAt: new Date().toISOString(),
+      },
     };
   }
 
-  /**
-   * The first claim failed. Replay or refuse against the record found; when
-   * that record disappeared or expired meanwhile, claim the key once more.
-   */
   private async replayOrReclaim(
     context: IPipelineContext,
     attempt: ClaimAttempt,
     next: NextDelegate,
   ): Promise<unknown> {
-    const existing = await this.store.get(attempt.key);
+    const { key } = attempt.claim;
+    const existing = await this.store.get(key);
     if (existing) {
       return this.replayOrConflict(context, attempt, existing);
     }
@@ -354,7 +270,7 @@ export class IdempotencyBehavior
     // request one bounded opportunity to claim the now-available key instead
     // of reporting a false in-progress conflict.
     const claimed = await this.store.setIfAbsent(
-      attempt.key,
+      key,
       attempt.claim,
       attempt.ttl,
     );
@@ -374,8 +290,8 @@ export class IdempotencyBehavior
     try {
       response = await next();
     } catch (error) {
-      if (attempt.options.releaseOnError ?? true) {
-        await this.release(attempt.key, attempt.claimId);
+      if (attempt.releaseOnError) {
+        await this.release(attempt.claim.key, attempt.claim.claimId);
       }
       throw error;
     }
@@ -392,7 +308,7 @@ export class IdempotencyBehavior
     attempt: ClaimAttempt,
     response: unknown,
   ): JsonValue | undefined {
-    const { key, claimId } = attempt;
+    const { key, claimId } = attempt.claim;
     try {
       return toJsonSnapshot(response);
     } catch (cause) {
@@ -418,7 +334,7 @@ export class IdempotencyBehavior
     attempt: ClaimAttempt,
     responseSnapshot: JsonValue | undefined,
   ): Promise<void> {
-    const { key, claimId } = attempt;
+    const { key, claimId } = attempt.claim;
     // The handler has already succeeded. Completion must be conditional on
     // still owning the claim; a stale execution must never overwrite a newer
     // execution that reclaimed the key after this claim's TTL elapsed.
@@ -467,12 +383,12 @@ export class IdempotencyBehavior
     attempt: ClaimAttempt,
     knownExisting?: IdempotencyRecord,
   ): Promise<unknown> {
-    const existing = knownExisting ?? (await this.store.get(attempt.key));
+    const existing = knownExisting ?? (await this.store.get(attempt.claim.key));
     this.refuseReplay(context, attempt, existing);
 
     setPipelineItem(context, IDEMPOTENCY_REPLAYED_ITEM_TOKEN, true);
     this.logger.debug?.(
-      `Replaying idempotent response for ${context.requestName} (key: ${attempt.key})`,
+      `Replaying idempotent response for ${context.requestName} (key: ${attempt.claim.key})`,
       IdempotencyBehavior.name,
     );
 
@@ -485,7 +401,7 @@ export class IdempotencyBehavior
     attempt: ClaimAttempt,
     existing: IdempotencyRecord | undefined,
   ): asserts existing is IdempotencyRecord {
-    const { key, fingerprint } = attempt;
+    const { key, fingerprint, replayScope } = attempt.claim;
 
     // A second failed claim followed by another disappearing record indicates
     // repeated contention. The retry is deliberately bounded to avoid a hot
@@ -513,7 +429,7 @@ export class IdempotencyBehavior
     if (
       attempt.scopeRequired &&
       (existing.replayScope === undefined ||
-        existing.replayScope !== attempt.replayScope)
+        existing.replayScope !== replayScope)
     ) {
       this.logger.warn?.(
         `Refusing to replay ${context.requestName} (key: ${key}): the stored ` +
@@ -547,6 +463,16 @@ export class IdempotencyBehavior
     if (!options) return this.defaults;
     return { ...this.defaults, ...options };
   }
+}
+
+function ttlOf(options: IdempotencyBehaviorOptions): number {
+  const ttl = options.ttl ?? DEFAULT_IDEMPOTENCY_TTL_MS;
+  if (!Number.isSafeInteger(ttl) || ttl <= 0) {
+    throw new TypeError(
+      'Idempotency ttl must be a positive safe integer in milliseconds.',
+    );
+  }
+  return ttl;
 }
 
 function conflict(

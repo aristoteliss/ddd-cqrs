@@ -1,6 +1,6 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
-import type { Constructor } from '@cqrs-ddd/pipeline';
+import type { Constructor, PipelineLogger } from '@cqrs-ddd/pipeline';
 import { DeadLetterRedriveError } from './errors/dead-letter-redrive.error.js';
 import { runAsRedrive } from './helpers/redrive-scope.js';
 import type {
@@ -12,6 +12,10 @@ import type {
 /**
  * Sends a rebuilt request back for handling. It must settle only when the
  * handling has finished, and reject when it failed.
+ *
+ * It runs in the context of the caller of `redrive`, not in the context of the
+ * failed request. When the handling reads the tenant, restore
+ * `record.tenantId` here before the handling starts.
  *
  * For an event, run only the handler that failed (`record.handlerName`):
  * publishing the event again would also rerun the handlers that succeeded.
@@ -37,7 +41,21 @@ export interface DeadLetterRedriverOptions {
    * the redacted values.
    */
   rebuild?: (record: DeadLetterRecord, requestType: Constructor) => unknown;
+  /**
+   * How long one redrive holds its record, in milliseconds. Default five
+   * minutes. A second redrive of the record is refused during this time. Set
+   * it longer than the slowest handling: after it, the record of a process
+   * that stopped during the handling can be redriven again.
+   */
+  leaseMs?: number;
+  /**
+   * Receives the store error when a failed attempt cannot be recorded; the
+   * handling error is still the one `redrive` throws. Default `console`.
+   */
+  logger?: PipelineLogger;
 }
+
+const DEFAULT_LEASE_MS = 5 * 60_000;
 
 /** Outcome of a successful {@link DeadLetterRedriver.redrive}. */
 export interface DeadLetterRedriveResult {
@@ -48,7 +66,8 @@ export interface DeadLetterRedriveResult {
 
 /**
  * Redrives dead letters kept by a {@link DeadLetterStore}: rebuilds the
- * request, dispatches it, then marks the record resolved — or, when the
+ * request, claims the record so that no second redrive runs it at the same
+ * time, dispatches it, then marks the record resolved — or, when the
  * handling fails again, counts the attempt, keeps its error, and rethrows it.
  * During a redrive, `DeadLetterBehavior` neither captures the failure again
  * nor swallows it.
@@ -83,6 +102,8 @@ export class DeadLetterRedriver {
    *
    * @throws DeadLetterRedriveError when it cannot be redriven; nothing is dispatched.
    * @throws The handling error when the redrive fails; the attempt is counted.
+   *   When the store cannot count it, the logger gets the store error and the
+   *   claim holds until `leaseMs` ends.
    */
   async redrive(id: string): Promise<DeadLetterRedriveResult> {
     const record = await this.store.get(id);
@@ -96,20 +117,40 @@ export class DeadLetterRedriver {
           record.payload as object,
         );
 
+    const leaseMs = this.options.leaseMs ?? DEFAULT_LEASE_MS;
+    if (!(await this.store.claim(id, leaseMs))) {
+      throw new DeadLetterRedriveError(
+        id,
+        'another redrive holds it, or it is resolved',
+      );
+    }
+
     let response: unknown;
     try {
       response = await runAsRedrive(id, () => dispatch(request, record));
     } catch (error) {
-      await this.store.recordAttempt(id, {
-        name: error instanceof Error ? error.name : 'unknown',
-        message: error instanceof Error ? error.message : String(error),
-      });
+      await this.recordFailure(id, error);
       throw error;
     }
 
     await this.store.markResolved(id);
 
     return { id, response };
+  }
+
+  /** Counts the failed attempt; a store failure here must not replace `error`. */
+  private async recordFailure(id: string, error: unknown): Promise<void> {
+    try {
+      await this.store.recordAttempt(id, {
+        name: error instanceof Error ? error.name : 'unknown',
+        message: error instanceof Error ? error.message : String(error),
+      });
+    } catch (storeError) {
+      (this.options.logger ?? console).error(
+        `Failed to record the redrive attempt of dead letter ${id}`,
+        storeError,
+      );
+    }
   }
 
   /**

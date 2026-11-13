@@ -32,9 +32,7 @@ export type {
   RateLimiterResLike,
 } from './interfaces/rate-limiter.interface.js';
 export {
-  RATE_LIMIT_ITEM,
   RATE_LIMIT_ITEM_TOKEN,
-  RATE_LIMIT_KEY_ITEM,
   RATE_LIMIT_KEY_ITEM_TOKEN,
   RateLimitBehavior,
 } from './rate-limit.behavior.js';

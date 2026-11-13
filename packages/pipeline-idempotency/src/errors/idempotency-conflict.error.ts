@@ -43,17 +43,12 @@ function conflictMessage(params: {
  * `toHttpResponse` of `@cqrs-ddd/pipeline-idempotency/http` maps it to its HTTP status.
  */
 export class IdempotencyConflictError extends Error {
-  /** The idempotency key in conflict. */
+  /** The stored key in conflict. It holds the tenant and the principal: log it, do not send it. */
   readonly key: string;
   /** The request that was rejected, e.g. `CreateUserCommand`. */
   readonly requestName: string;
   /** Why the request was rejected. */
   readonly reason: IdempotencyConflictReason;
-  /**
-   * Suggested HTTP status: `409` for `in_progress` and `replay_scope`, `422` for
-   * `key_reuse`.
-   */
-  readonly statusCode: number;
 
   constructor(params: {
     key: string;
@@ -65,6 +60,5 @@ export class IdempotencyConflictError extends Error {
     this.key = params.key;
     this.requestName = params.requestName;
     this.reason = params.reason;
-    this.statusCode = params.reason === 'key_reuse' ? 422 : 409;
   }
 }

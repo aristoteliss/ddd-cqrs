@@ -104,9 +104,20 @@ export interface FeatureFlagBehaviorOptions {
   context?: EvaluationContextFactory;
 
   /**
+   * Fixed attributes of every evaluation, such as the environment. The result of
+   * `context` is merged over them. Set it in the constructor defaults.
+   *
+   * @example
+   * ```ts
+   * new FeatureFlagBehavior(client, { baseContext: { environment: 'production' } });
+   * ```
+   */
+  baseContext?: EvaluationContext;
+
+  /**
    * Stable identity used for percentage rollouts / sticky targeting.
    *
-   * Handler-level `targetingKeyFactory` overrides the constructor's resolver.
+   * A handler-level `targetingKeyFactory` overrides the one of the constructor defaults.
    * Correlation IDs are intentionally **not** used automatically because they
    * normally change on every request and can move the same user between rollout
    * cohorts.

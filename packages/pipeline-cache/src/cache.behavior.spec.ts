@@ -1,6 +1,7 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
 import {
+  getPipelineItem,
   type IPipelineContext,
   PIPELINE_BEHAVIOR_CONTRACT,
 } from '@cqrs-ddd/pipeline';
@@ -9,8 +10,8 @@ import { Keyv } from 'keyv';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CacheManagerAdapter } from './adapters/cache-manager.adapter.js';
 import {
-  CACHE_HIT_ITEM,
-  CACHE_KEY_ITEM,
+  CACHE_HIT_ITEM_TOKEN,
+  CACHE_KEY_ITEM_TOKEN,
   CacheBehavior,
 } from './cache.behavior.js';
 import { createPartitionedCacheKeyFactory } from './helpers/cache-key.js';
@@ -240,7 +241,7 @@ describe('CacheBehavior', () => {
     await expect(cacheBehavior.handle(context, next)).resolves.toBe(
       'database result',
     );
-    expect(context.items.get(CACHE_HIT_ITEM)).toBe(false);
+    expect(getPipelineItem(context, CACHE_HIT_ITEM_TOKEN)).toBe(false);
     expect(next).toHaveBeenCalledOnce();
     expect(set).not.toHaveBeenCalled();
     expect(logger.warn).toHaveBeenCalledWith(
@@ -381,12 +382,14 @@ describe('CacheBehavior', () => {
 
     const missCtx = makeCtx();
     await behavior.handle(missCtx, next);
-    expect(missCtx.items.get(CACHE_HIT_ITEM)).toBe(false);
-    expect(missCtx.items.get(CACHE_KEY_ITEM)).toBe(TEST_KEY(missCtx));
+    expect(getPipelineItem(missCtx, CACHE_HIT_ITEM_TOKEN)).toBe(false);
+    expect(getPipelineItem(missCtx, CACHE_KEY_ITEM_TOKEN)).toBe(
+      TEST_KEY(missCtx),
+    );
 
     const hitCtx = makeCtx();
     await behavior.handle(hitCtx, next);
-    expect(hitCtx.items.get(CACHE_HIT_ITEM)).toBe(true);
+    expect(getPipelineItem(hitCtx, CACHE_HIT_ITEM_TOKEN)).toBe(true);
   });
 
   it('returns the value from the confirmed lookup without re-entering downstream behaviors', async () => {
@@ -430,7 +433,7 @@ describe('CacheBehavior', () => {
     const ctx = makeCtx(options);
     await behavior.handle(ctx, next);
 
-    expect(ctx.items.get(CACHE_KEY_ITEM)).toBe('fixed-key');
+    expect(getPipelineItem(ctx, CACHE_KEY_ITEM_TOKEN)).toBe('fixed-key');
     expect(await cache.get('fixed-key')).toBe('value');
   });
 
@@ -498,7 +501,9 @@ describe('CacheBehavior', () => {
     await behavior.handle(ctxB, next);
 
     expect(next).toHaveBeenCalledTimes(1);
-    expect(ctxA.items.get(CACHE_KEY_ITEM)).toBe(ctxB.items.get(CACHE_KEY_ITEM));
+    expect(getPipelineItem(ctxA, CACHE_KEY_ITEM_TOKEN)).toBe(
+      getPipelineItem(ctxB, CACHE_KEY_ITEM_TOKEN),
+    );
   });
 
   it('merges module defaults under per-handler options', async () => {

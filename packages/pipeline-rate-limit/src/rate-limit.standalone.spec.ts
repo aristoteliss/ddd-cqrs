@@ -36,6 +36,9 @@ describe('RateLimitBehavior on wrapped functions', () => {
       statusCode: 429,
       error: 'Too Many Requests',
     });
+    expect(JSON.stringify(response.body)).not.toContain(
+      (error as RateLimitExceededError).key,
+    );
   });
 
   it('cannot be built without a limiter', () => {

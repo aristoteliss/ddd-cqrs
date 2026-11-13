@@ -4,8 +4,9 @@
  * Thrown by {@link RateLimitBehavior} when a request exceeds its allotted
  * points for the current window.
  *
- * Map it to HTTP `429 Too Many Requests` with {@link RateLimitExceededFilter},
- * which also emits a `Retry-After` header from {@link retryAfterSeconds}.
+ * Map it to HTTP `429 Too Many Requests` with `toHttpResponse` of
+ * `@cqrs-ddd/pipeline-rate-limit/http`, which also gives a `Retry-After` header
+ * from {@link retryAfterSeconds}.
  */
 export class RateLimitExceededError extends Error {
   /** The rate-limit bucket key that was exhausted. */

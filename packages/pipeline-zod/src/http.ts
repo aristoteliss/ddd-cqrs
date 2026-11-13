@@ -1,13 +1,9 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
+import type { HttpResponse } from '@cqrs-ddd/pipeline';
 import type { ZodValidationError } from './errors/zod-validation.error.js';
 
-/** An HTTP answer for an error: status, JSON body and headers. */
-export interface HttpResponse {
-  status: number;
-  body: Record<string, unknown>;
-  headers: Record<string, string>;
-}
+export type { HttpResponse };
 
 /**
  * The HTTP answer for a {@link ZodValidationError}: `400 Bad Request` with the issue

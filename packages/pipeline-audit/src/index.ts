@@ -1,7 +1,6 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
 export {
-  AUDIT_RECORD_ITEM,
   AUDIT_RECORD_ITEM_TOKEN,
   AUDIT_START_RECORD_ITEM_TOKEN,
   AuditBehavior,

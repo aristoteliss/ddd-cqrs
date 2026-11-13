@@ -1,34 +1,26 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
-import { LoggingBehavior } from './behaviors/logging.behavior.js';
 import type { PipelineBehaviorEntry } from './entries.js';
-import {
-  behaviorEntryType,
-  normalizeBehaviorEntries,
-} from './helpers/behavior-entries.js';
-import { type BehaviorId, getBehaviorId } from './helpers/behavior-id.js';
+import { normalizeBehaviorEntries } from './helpers/behavior-entries.js';
 import type { ContextSources } from './interfaces/context-source.interface.js';
 import type { IPipelineBehavior } from './interfaces/pipeline.behavior.interface.js';
-import {
-  type PipelineBehaviorDiagnostic,
-  PipelineConfigurationError,
-} from './interfaces/pipeline-behavior-contract.interface.js';
+import type { PipelineBehaviorDiagnostic } from './interfaces/pipeline-behavior-contract.interface.js';
 import type { PipelineLogger } from './logger.js';
 import type { GlobalBehaviorsOptions } from './options/global-behaviors.options.js';
-import { validateBehaviorContracts } from './services/pipeline-contracts.js';
-import {
-  compilePipelinePlan,
-  type RequestKind,
-  toGlobalConfigs,
-} from './services/pipeline-plan.js';
+import { compilePipelinePlan } from './services/pipeline-plan.js';
 import {
   createPipelineRunner,
   type PipelineRunner,
 } from './services/pipeline-runner.js';
-import type { Constructor } from './types.js';
-
-/** The kinds a wrapped function or a request declares. */
-export type DeclaredKind = Exclude<RequestKind, 'unknown'>;
+import {
+  type BehaviorResolver,
+  behaviorOptionsOf,
+  createBehaviorResolver,
+  type DiagnosticsMode,
+  reportDiagnostics,
+  validatePlan,
+} from './services/pipeline-setup.js';
+import type { Constructor, DeclaredKind } from './types.js';
 
 const KINDS: readonly DeclaredKind[] = ['command', 'query', 'event'];
 
@@ -70,7 +62,7 @@ export interface PipelineOptions {
    * (`'off'`).
    * @default 'strict'
    */
-  diagnostics?: 'strict' | 'warn' | 'off';
+  diagnostics?: DiagnosticsMode;
   /**
    * Receives the `'warn'` diagnostics, and is the logger of a `LoggingBehavior` the pipeline
    * constructs itself (one placed without an instance in `behaviors`).
@@ -167,16 +159,13 @@ export function createPipeline(options: PipelineOptions = {}): Pipeline {
     sources,
     diagnostics,
     logger,
-    instances: indexBehaviors(options.behaviors ?? []),
+    behavior: createBehaviorResolver({
+      owner: 'createPipeline',
+      given: options.behaviors ?? [],
+      globalBehaviors,
+      logger,
+    }),
   };
-  for (const config of toGlobalConfigs(globalBehaviors)) {
-    for (const entry of [...(config.before ?? []), ...(config.after ?? [])]) {
-      instanceOf(
-        setup,
-        behaviorEntryType(entry, 'createPipeline globalBehaviors'),
-      );
-    }
-  }
 
   function wrap(...input: Array<WrapOptions | PipelineBehaviorEntry>): Wrap {
     return wrapperOf(toDeclaration(setup, input));
@@ -189,10 +178,10 @@ export function createPipeline(options: PipelineOptions = {}): Pipeline {
 interface PipelineSetup {
   globalBehaviors: PipelineOptions['globalBehaviors'];
   sources: ContextSources;
-  diagnostics: NonNullable<PipelineOptions['diagnostics']>;
+  diagnostics: DiagnosticsMode;
   logger: PipelineLogger;
   /** One instance per behavior identity, shared by every wrapped operation. */
-  instances: Map<BehaviorId, IPipelineBehavior>;
+  behavior: BehaviorResolver;
 }
 
 /** One {@link Pipeline.wrap} call: its pipeline, its options and its entries. */
@@ -207,37 +196,6 @@ interface Operation extends WrapDeclaration {
   fn: AnyFunction;
   label: string;
   handlerType: Constructor;
-}
-
-function indexBehaviors(
-  behaviors: readonly IPipelineBehavior[],
-): Map<BehaviorId, IPipelineBehavior> {
-  const instances = new Map<BehaviorId, IPipelineBehavior>();
-  for (const behavior of behaviors) {
-    const type = behavior.constructor as Constructor<IPipelineBehavior>;
-    const id = getBehaviorId(type);
-    if (instances.has(id)) {
-      throw new TypeError(
-        `createPipeline: two instances of ${type.name}; pass one per behavior class.`,
-      );
-    }
-    instances.set(id, behavior);
-  }
-  return instances;
-}
-
-function instanceOf(
-  setup: PipelineSetup,
-  type: Constructor<IPipelineBehavior>,
-): IPipelineBehavior {
-  const id = getBehaviorId(type);
-  let instance = setup.instances.get(id);
-  if (!instance) {
-    instance =
-      id === LOGGING_ID ? new LoggingBehavior(setup.logger) : new type();
-    setup.instances.set(id, instance);
-  }
-  return instance;
 }
 
 function toDeclaration(
@@ -335,8 +293,7 @@ function createRunner(
 ): PipelineRunner {
   const { setup, options, fn, label, handlerType } = operation;
   const { plan, behaviors } = compile(operation, kind);
-  const behaviorOptions =
-    plan.mergedOptions.size > 0 ? plan.mergedOptions : undefined;
+  const behaviorOptions = behaviorOptionsOf(plan);
 
   return createPipelineRunner(
     fn,
@@ -371,32 +328,21 @@ function compile(operation: Operation, requestKind: DeclaredKind) {
       : undefined,
     globalBehaviors: setup.globalBehaviors,
   });
-  const behaviors = plan.behaviorTypes.map((type) => instanceOf(setup, type));
+  const behaviors = plan.behaviorTypes.map(setup.behavior);
 
   if (setup.diagnostics !== 'off') {
     const found: PipelineBehaviorDiagnostic[] = [];
-    validateBehaviorContracts({
-      ...plan,
-      handlerType: Object,
-      handlerName,
-      requestKind,
-      resolvedBehaviors: new Map(behaviors.map((b, i) => [i, b])),
-      diagnostics: found,
-    });
-    if (found.length > 0 && setup.diagnostics === 'strict') {
-      throw new PipelineConfigurationError(found);
-    }
-    for (const d of found) {
-      setup.logger.warn(
-        `[Pipeline Diagnostic] '${d.handlerName}' with behavior '${d.behaviorName}': ${d.message}. Fix: ${d.fix}`,
-      );
-    }
+    validatePlan(
+      plan,
+      { handlerType: Object, handlerName, kind: requestKind },
+      behaviors,
+      found,
+    );
+    reportDiagnostics(found, setup.diagnostics, setup.logger);
   }
 
   return { plan, behaviors };
 }
-
-const LOGGING_ID = getBehaviorId(LoggingBehavior);
 
 function brandOf(request: unknown): DeclaredKind | undefined {
   if (typeof request !== 'object' || request === null) return undefined;

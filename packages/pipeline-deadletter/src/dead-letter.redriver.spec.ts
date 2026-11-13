@@ -39,6 +39,7 @@ function makeRecord(
 
 function memoryStore(record?: DeadLetterRecord) {
   const records = new Map<string, DeadLetterRecord>();
+  const claimed = new Set<string>();
   if (record) records.set(record.id, record);
   const store: DeadLetterStore = {
     send: vi.fn(async (sent: DeadLetterRecord) => {
@@ -46,7 +47,13 @@ function memoryStore(record?: DeadLetterRecord) {
     }),
     get: vi.fn(async (id: string) => records.get(id)),
     list: vi.fn(async () => [...records.values()]),
+    claim: vi.fn(async (id: string) => {
+      if (records.get(id)?.status !== 'open' || claimed.has(id)) return false;
+      claimed.add(id);
+      return true;
+    }),
     recordAttempt: vi.fn(async (id, error) => {
+      claimed.delete(id);
       const current = records.get(id) as DeadLetterRecord;
       records.set(id, {
         ...current,
@@ -55,11 +62,18 @@ function memoryStore(record?: DeadLetterRecord) {
       });
     }),
     markResolved: vi.fn(async (id: string) => {
+      claimed.delete(id);
       const current = records.get(id) as DeadLetterRecord;
       records.set(id, { ...current, status: 'resolved' });
     }),
   };
   return { store, records };
+}
+
+function memoryStoreThatCannotRecord(failure: Error): DeadLetterStore {
+  const { store } = memoryStore(makeRecord());
+  vi.mocked(store.recordAttempt).mockRejectedValue(failure);
+  return store;
 }
 
 describe('DeadLetterRedriver', () => {
@@ -149,6 +163,100 @@ describe('DeadLetterRedriver', () => {
       });
     }
     expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('dispatches one time when two redrives of one record run together', async () => {
+    const { store, records } = memoryStore(makeRecord());
+    const event = vi.fn(async () => 'sent');
+    const redriver = new DeadLetterRedriver(store, {
+      requestTypes: [UserCreatedEvent],
+      dispatch: { event },
+    });
+
+    const outcomes = await Promise.allSettled([
+      redriver.redrive('dl-1'),
+      redriver.redrive('dl-1'),
+    ]);
+
+    expect(event).toHaveBeenCalledTimes(1);
+    expect(outcomes.map((outcome) => outcome.status).sort()).toEqual([
+      'fulfilled',
+      'rejected',
+    ]);
+    const refused = outcomes.find((outcome) => outcome.status === 'rejected');
+    expect(refused?.reason).toBeInstanceOf(DeadLetterRedriveError);
+    expect(refused?.reason).toMatchObject({
+      reason: 'another redrive holds it, or it is resolved',
+    });
+    expect(records.get('dl-1')?.status).toBe('resolved');
+  });
+
+  it('claims the record for five minutes, or for the configured leaseMs', async () => {
+    const first = memoryStore(makeRecord());
+    const second = memoryStore(makeRecord());
+    const options = {
+      requestTypes: [UserCreatedEvent],
+      dispatch: { event: vi.fn() },
+    };
+
+    await new DeadLetterRedriver(first.store, options).redrive('dl-1');
+    await new DeadLetterRedriver(second.store, {
+      ...options,
+      leaseMs: 1_000,
+    }).redrive('dl-1');
+
+    expect(first.store.claim).toHaveBeenCalledWith('dl-1', 300_000);
+    expect(second.store.claim).toHaveBeenCalledWith('dl-1', 1_000);
+  });
+
+  it('frees the record after a failed attempt, so that it can be redriven again', async () => {
+    const { store } = memoryStore(makeRecord());
+    const event = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('still down'))
+      .mockResolvedValueOnce('sent');
+    const redriver = new DeadLetterRedriver(store, {
+      requestTypes: [UserCreatedEvent],
+      dispatch: { event },
+    });
+
+    await expect(redriver.redrive('dl-1')).rejects.toThrow('still down');
+    await expect(redriver.redrive('dl-1')).resolves.toMatchObject({
+      response: 'sent',
+    });
+  });
+
+  it('rethrows the handling error and logs the store error when the attempt cannot be recorded', async () => {
+    const { store } = memoryStore(makeRecord());
+    const failure = new Error('still down');
+    const storeFailure = new Error('store down');
+    vi.mocked(store.recordAttempt).mockRejectedValue(storeFailure);
+    const logger = { log: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const consoleError = vi.spyOn(console, 'error').mockReturnValue();
+    const redriver = new DeadLetterRedriver(store, {
+      requestTypes: [UserCreatedEvent],
+      dispatch: { event: () => Promise.reject(failure) },
+      logger,
+    });
+
+    await expect(redriver.redrive('dl-1')).rejects.toBe(failure);
+
+    expect(logger.error).toHaveBeenCalledExactlyOnceWith(
+      'Failed to record the redrive attempt of dead letter dl-1',
+      storeFailure,
+    );
+
+    await expect(
+      new DeadLetterRedriver(memoryStoreThatCannotRecord(storeFailure), {
+        requestTypes: [UserCreatedEvent],
+        dispatch: { event: () => Promise.reject(failure) },
+      }).redrive('dl-1'),
+    ).rejects.toBe(failure);
+    expect(consoleError).toHaveBeenCalledExactlyOnceWith(
+      'Failed to record the redrive attempt of dead letter dl-1',
+      storeFailure,
+    );
+    consoleError.mockRestore();
   });
 
   it('redrives a redacted record through rebuild, which restores the values', async () => {

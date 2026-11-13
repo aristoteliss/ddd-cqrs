@@ -1,13 +1,14 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
 import {
+  getPipelineItem,
   type IPipelineBehaviorContract,
   type IPipelineContext,
   PIPELINE_BEHAVIOR_CONTRACT,
 } from '@cqrs-ddd/pipeline';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  DEAD_LETTER_ITEM,
+  DEAD_LETTER_ITEM_TOKEN,
   DeadLetterBehavior,
 } from './dead-letter.behavior.js';
 import type { DeadLetterBehaviorOptions } from './interfaces/dead-letter-options.interface.js';
@@ -126,7 +127,7 @@ describe('DeadLetterBehavior', () => {
     });
     expect(record.error.stack).toBeTypeOf('string');
     expect(record.failedAt).toBeTypeOf('string');
-    expect(ctx.items.get(DEAD_LETTER_ITEM)).toBe(true);
+    expect(getPipelineItem(ctx, DEAD_LETTER_ITEM_TOKEN)).toBe(true);
   });
 
   it('swallows the error and resolves to undefined when rethrow=false', async () => {
@@ -182,7 +183,7 @@ describe('DeadLetterBehavior', () => {
     ).rejects.toThrow('nope');
 
     expect(send).not.toHaveBeenCalled();
-    expect(ctx.items.get(DEAD_LETTER_ITEM)).toBeUndefined();
+    expect(getPipelineItem(ctx, DEAD_LETTER_ITEM_TOKEN)).toBeUndefined();
   });
 
   it('does not swallow an excluded request kind when rethrow=false', async () => {
@@ -200,7 +201,7 @@ describe('DeadLetterBehavior', () => {
     ).rejects.toThrow('not captured');
 
     expect(send).not.toHaveBeenCalled();
-    expect(ctx.items.get(DEAD_LETTER_ITEM)).toBeUndefined();
+    expect(getPipelineItem(ctx, DEAD_LETTER_ITEM_TOKEN)).toBeUndefined();
   });
 
   it('skips capture when error matches ignoreErrors class array', async () => {
@@ -218,7 +219,7 @@ describe('DeadLetterBehavior', () => {
     ).rejects.toThrow('invalid');
 
     expect(send).not.toHaveBeenCalled();
-    expect(ctx.items.get(DEAD_LETTER_ITEM)).toBeUndefined();
+    expect(getPipelineItem(ctx, DEAD_LETTER_ITEM_TOKEN)).toBeUndefined();
   });
 
   it('captures error when ignoreErrors class array does not match', async () => {
@@ -236,7 +237,7 @@ describe('DeadLetterBehavior', () => {
     ).rejects.toThrow('system crash');
 
     expect(send).toHaveBeenCalledTimes(1);
-    expect(ctx.items.get(DEAD_LETTER_ITEM)).toBe(true);
+    expect(getPipelineItem(ctx, DEAD_LETTER_ITEM_TOKEN)).toBe(true);
   });
 
   it('skips capture when error matches ignoreErrors predicate', async () => {
@@ -254,7 +255,7 @@ describe('DeadLetterBehavior', () => {
     ).rejects.toThrow('VALIDATION: bad input');
 
     expect(send).not.toHaveBeenCalled();
-    expect(ctx.items.get(DEAD_LETTER_ITEM)).toBeUndefined();
+    expect(getPipelineItem(ctx, DEAD_LETTER_ITEM_TOKEN)).toBeUndefined();
   });
 
   it('does not swallow an ignored error when rethrow=false', async () => {
@@ -273,7 +274,7 @@ describe('DeadLetterBehavior', () => {
     ).rejects.toThrow('skip me');
 
     expect(send).not.toHaveBeenCalled();
-    expect(ctx.items.get(DEAD_LETTER_ITEM)).toBeUndefined();
+    expect(getPipelineItem(ctx, DEAD_LETTER_ITEM_TOKEN)).toBeUndefined();
   });
 
   it('attaches metadata from the factory', async () => {
@@ -328,7 +329,7 @@ describe('DeadLetterBehavior', () => {
     await expect(
       behavior.handle(ctx, vi.fn().mockRejectedValue(original)),
     ).rejects.toBe(original);
-    expect(ctx.items.get(DEAD_LETTER_ITEM)).toBe(false);
+    expect(getPipelineItem(ctx, DEAD_LETTER_ITEM_TOKEN)).toBe(false);
   });
 
   it('merges module defaults under per-handler options (handler wins)', async () => {

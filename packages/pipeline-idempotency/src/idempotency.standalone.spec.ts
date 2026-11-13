@@ -36,14 +36,12 @@ describe('IdempotencyBehavior on wrapped functions', () => {
       (e: unknown) => e,
     );
     expect(error).toBeInstanceOf(IdempotencyConflictError);
-    expect(toHttpResponse(error as IdempotencyConflictError)).toMatchObject({
+    const answer = toHttpResponse(error as IdempotencyConflictError);
+    expect(answer).toMatchObject({
       status: 422,
-      body: {
-        error: 'Unprocessable Entity',
-        reason: 'key_reuse',
-        idempotencyKey: 'order-1',
-      },
+      body: { error: 'Unprocessable Entity', reason: 'key_reuse' },
     });
+    expect(JSON.stringify(answer.body)).not.toContain('order-1');
   });
 
   it('maps an operation in progress to 409', () => {

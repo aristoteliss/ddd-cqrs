@@ -28,21 +28,12 @@ import type {
 import type { AuditSink } from './interfaces/audit-sink.interface.js';
 
 /**
- * Unique symbol key used on `context.items` to store or retrieve the produced {@link AuditRecord}.
+ * The `context.items` entry that holds the produced {@link AuditRecord}.
  *
- * @example
- * ```ts
- * const record = context.items.get(AUDIT_RECORD_ITEM) as AuditRecord | undefined;
- * ```
- */
-export const AUDIT_RECORD_ITEM = Symbol('AUDIT_RECORD_ITEM');
-
-/**
- * Typed token for {@link AUDIT_RECORD_ITEM}: the produced audit record. Reads and writes the same
- * `context.items` entry through `getPipelineItem` / `requirePipelineItem`.
+ * Read it with `getPipelineItem` or `requirePipelineItem`.
  */
 export const AUDIT_RECORD_ITEM_TOKEN: PipelineItemToken<AuditRecord> =
-  createPipelineItem<AuditRecord>('AUDIT_RECORD_ITEM', AUDIT_RECORD_ITEM);
+  createPipelineItem<AuditRecord>('AUDIT_RECORD_ITEM');
 
 /**
  * Typed token for the pending {@link AuditStartRecord}, set before the handler
@@ -186,36 +177,19 @@ export class AuditBehavior
   }
 
   /**
-   * Build the start record, forward it to the sink's `begin`, and stash it on
-   * the context. Throws only when failing closed, before the handler runs.
+   * Builds the start record, stashes it on the context and forwards it to the
+   * sink's `begin`. Throws only when failing closed, before the handler runs.
    */
-  private async begin(
+  private begin(
     begin: (record: AuditStartRecord) => Promise<void> | void,
     input: AuditedRequest,
   ): Promise<void> {
-    const failOpen = input.options.failOpen ?? true;
-    let record: AuditStartRecord;
-    try {
-      record = buildAuditStartRecord(input);
-    } catch (buildError) {
-      const message =
-        `Failed to build audit start record for ${input.context.requestName}: ` +
-        `${buildError instanceof Error ? buildError.message : buildError}`;
-      this.reportFailure(message, failOpen, buildError);
-      return;
-    }
-
-    setPipelineItem(input.context, AUDIT_START_RECORD_ITEM_TOKEN, record);
-
-    try {
-      await begin(record);
-    } catch (sinkError) {
-      const message =
-        `Failed to write audit start record for ${record.requestName} ` +
-        `(correlationId: ${record.correlationId}): ` +
-        `${sinkError instanceof Error ? sinkError.message : sinkError}`;
-      this.reportFailure(message, failOpen, sinkError);
-    }
+    return this.emit(input, {
+      label: 'audit start record',
+      build: () => buildAuditStartRecord(input),
+      token: AUDIT_START_RECORD_ITEM_TOKEN,
+      write: begin,
+    });
   }
 
   /**
@@ -242,7 +216,7 @@ export class AuditBehavior
       } catch (recordError) {
         this.diagnose(
           'error',
-          `Audit recording also failed after request error: ${recordError instanceof Error ? recordError.message : recordError}`,
+          `Audit recording also failed after request error: ${errorMessage(recordError)}`,
         );
       }
       throw error;
@@ -258,39 +232,63 @@ export class AuditBehavior
     return response;
   }
 
-  /** Build the record, forward it to the sink, and stash it on the context. */
-  private async record(input: {
-    context: IPipelineContext;
-    options: AuditBehaviorOptions;
-    id: string;
-    response?: unknown;
-    error?: unknown;
-    failed: boolean;
-    durationMs: number;
-    startedAt: string;
-  }): Promise<void> {
-    const failOpen = input.options.failOpen ?? true;
-    let record: AuditRecord;
+  /** Builds the record, stashes it on the context and forwards it to the sink. */
+  private record(
+    input: AuditedRequest & {
+      response?: unknown;
+      error?: unknown;
+      failed: boolean;
+      durationMs: number;
+    },
+  ): Promise<void> {
+    return this.emit(input, {
+      label: 'audit record',
+      build: () => buildAuditRecord(input),
+      token: AUDIT_RECORD_ITEM_TOKEN,
+      write: (record) => this.sink.write(record),
+    });
+  }
+
+  /**
+   * One audit emission: a build or a write that fails is logged, and rethrown
+   * only when the handler fails closed. Nothing is written after a failed build.
+   */
+  private async emit<
+    TRecord extends { requestName: string; correlationId: string },
+  >(
+    { context, options }: AuditedRequest,
+    emission: {
+      label: string;
+      build: () => TRecord;
+      token: PipelineItemToken<TRecord>;
+      write: (record: TRecord) => Promise<void> | void;
+    },
+  ): Promise<void> {
+    const { label, build, token, write } = emission;
+    const failOpen = options.failOpen ?? true;
+    let record: TRecord;
     try {
-      record = buildAuditRecord(input);
-    } catch (buildError) {
-      const message =
-        `Failed to build audit record for ${input.context.requestName}: ` +
-        `${buildError instanceof Error ? buildError.message : buildError}`;
-      this.reportFailure(message, failOpen, buildError);
+      record = build();
+    } catch (error) {
+      this.reportFailure(
+        `Failed to build ${label} for ${context.requestName}: ${errorMessage(error)}`,
+        failOpen,
+        error,
+      );
       return;
     }
 
-    setPipelineItem(input.context, AUDIT_RECORD_ITEM_TOKEN, record);
+    setPipelineItem(context, token, record);
 
     try {
-      await this.sink.write(record);
-    } catch (sinkError) {
-      const message =
-        `Failed to write audit record for ${record.requestName} ` +
-        `(correlationId: ${record.correlationId}): ` +
-        `${sinkError instanceof Error ? sinkError.message : sinkError}`;
-      this.reportFailure(message, failOpen, sinkError);
+      await write(record);
+    } catch (error) {
+      this.reportFailure(
+        `Failed to write ${label} for ${record.requestName} ` +
+          `(correlationId: ${record.correlationId}): ${errorMessage(error)}`,
+        failOpen,
+        error,
+      );
     }
   }
 
@@ -350,6 +348,10 @@ const FACTORY_OPTIONS = [
   ['metadata', 'metadata factory'],
   ['redact', 'redactor'],
 ] as const;
+
+function errorMessage(error: unknown): unknown {
+  return error instanceof Error ? error.message : error;
+}
 
 function findInvalidFactory(options: AuditBehaviorOptions): string | undefined {
   for (const [option, label] of FACTORY_OPTIONS) {

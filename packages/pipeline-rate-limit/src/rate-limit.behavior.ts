@@ -1,6 +1,7 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
 import {
+  behaviorDiagnostic,
   createPipelineItem,
   type IPipelineBehavior,
   type IPipelineBehaviorContract,
@@ -8,8 +9,6 @@ import {
   type IPipelineContext,
   type NextDelegate,
   PIPELINE_BEHAVIOR_CONTRACT,
-  type PipelineBehaviorDiagnostic,
-  type PipelineBehaviorValidationContext,
   type PipelineItemToken,
   type PipelineLogger,
   setPipelineItem,
@@ -23,38 +22,20 @@ import type {
 } from './interfaces/rate-limiter.interface.js';
 
 /**
- * Unique symbol key set on `context.items` containing the result of a rate-limit check (or rejection payload).
+ * The `context.items` entry containing the result of a rate-limit check (or rejection payload).
  *
- * @example
- * ```ts
- * const result = context.items.get(RATE_LIMIT_ITEM);
- * ```
- */
-export const RATE_LIMIT_ITEM = Symbol('RATE_LIMIT_ITEM');
-
-/**
- * Typed token for {@link RATE_LIMIT_ITEM}: the rate-limit result. Reads and writes the same
- * `context.items` entry through `getPipelineItem` / `requirePipelineItem`.
+ * Read it with `getPipelineItem` or `requirePipelineItem`.
  */
 export const RATE_LIMIT_ITEM_TOKEN: PipelineItemToken<RateLimiterResLike> =
-  createPipelineItem<RateLimiterResLike>('RATE_LIMIT_ITEM', RATE_LIMIT_ITEM);
+  createPipelineItem<RateLimiterResLike>('RATE_LIMIT_ITEM');
 
 /**
- * Unique symbol key set on `context.items` containing the resolved rate limit bucket key string.
+ * The `context.items` entry containing the resolved rate limit bucket key string.
  *
- * @example
- * ```ts
- * const key = context.items.get(RATE_LIMIT_KEY_ITEM) as string | undefined;
- * ```
- */
-export const RATE_LIMIT_KEY_ITEM = Symbol('RATE_LIMIT_KEY_ITEM');
-
-/**
- * Typed token for {@link RATE_LIMIT_KEY_ITEM}: the resolved rate-limit key. Reads and writes the same
- * `context.items` entry through `getPipelineItem` / `requirePipelineItem`.
+ * Read it with `getPipelineItem` or `requirePipelineItem`.
  */
 export const RATE_LIMIT_KEY_ITEM_TOKEN: PipelineItemToken<string> =
-  createPipelineItem<string>('RATE_LIMIT_KEY_ITEM', RATE_LIMIT_KEY_ITEM);
+  createPipelineItem<string>('RATE_LIMIT_KEY_ITEM');
 
 /** One request's rate-limit check: its context, its effective options and its bucket key. */
 interface RateLimitCheck {
@@ -109,54 +90,37 @@ export class RateLimitBehavior
     IPipelineBehaviorOptionsResolver<RateLimitBehaviorOptions>
 {
   static readonly [PIPELINE_BEHAVIOR_CONTRACT]: IPipelineBehaviorContract = {
-    validate: (
-      context: PipelineBehaviorValidationContext,
-    ): PipelineBehaviorDiagnostic[] | undefined => {
+    validate: (context) => {
       const options = context.effectiveOptions as
         | RateLimitBehaviorOptions
         | undefined;
 
       if (!options?.keyFactory) {
-        return [
-          {
-            handlerName: context.handlerName,
-            behaviorName: RateLimitBehavior.name,
-            message:
-              'Active RateLimitBehavior requires an explicit `keyFactory`',
-            fix:
-              'Provide keyFactory in the [RateLimitBehavior, { keyFactory: ... }] entry, ' +
-              'the constructor defaults, or use createPartitionedRateLimitKeyFactory(...).',
-          },
-        ];
+        return behaviorDiagnostic(context, RateLimitBehavior.name, {
+          message: 'Active RateLimitBehavior requires an explicit `keyFactory`',
+          fix:
+            'Provide keyFactory in the [RateLimitBehavior, { keyFactory: ... }] entry, ' +
+            'the constructor defaults, or use createPartitionedRateLimitKeyFactory(...).',
+        });
       }
-
       if (typeof options.keyFactory !== 'function') {
-        return [
-          {
-            handlerName: context.handlerName,
-            behaviorName: RateLimitBehavior.name,
-            message: `RateLimitBehavior keyFactory must be a callable function, received ${typeof options.keyFactory}`,
-            fix: 'Pass a valid function (ctx) => string to the keyFactory option of the [RateLimitBehavior, { keyFactory: ... }] entry.',
-          },
-        ];
+        return behaviorDiagnostic(context, RateLimitBehavior.name, {
+          message: `RateLimitBehavior keyFactory must be a callable function, received ${typeof options.keyFactory}`,
+          fix: 'Pass a valid function (ctx) => string to the keyFactory option of the [RateLimitBehavior, { keyFactory: ... }] entry.',
+        });
       }
 
       const { points } = options;
-      if (
+      const isInvalidPoints =
         points !== undefined &&
         typeof points !== 'function' &&
-        !isValidPoints(points)
-      ) {
-        return [
-          {
-            handlerName: context.handlerName,
-            behaviorName: RateLimitBehavior.name,
-            message: `RateLimitBehavior points must be a non-negative safe integer or a function, received ${String(points)}`,
-            fix: 'Pass an integer from 0 up (0 charges nothing) or a function (ctx) => number as the points option.',
-          },
-        ];
+        !isValidPoints(points);
+      if (isInvalidPoints) {
+        return behaviorDiagnostic(context, RateLimitBehavior.name, {
+          message: `RateLimitBehavior points must be a non-negative safe integer or a function, received ${String(points)}`,
+          fix: 'Pass an integer from 0 up (0 charges nothing) or a function (ctx) => number as the points option.',
+        });
       }
-
       return undefined;
     },
   };
@@ -193,53 +157,40 @@ export class RateLimitBehavior
     const key = buildRateLimitKey(context, options);
     setPipelineItem(context, RATE_LIMIT_KEY_ITEM_TOKEN, key);
 
-    let result: RateLimiterResLike;
     try {
-      result = await limiter.consume(key, points);
+      const result = await limiter.consume(key, points);
+      setPipelineItem(context, RATE_LIMIT_ITEM_TOKEN, result);
     } catch (error) {
-      if (isRateLimiterRes(error)) {
-        setPipelineItem(context, RATE_LIMIT_ITEM_TOKEN, error);
-        throw new RateLimitExceededError({
-          key,
-          requestName: context.requestName,
-          msBeforeNext: error.msBeforeNext,
-          remainingPoints: error.remainingPoints,
-          limit: limiter.points,
-          points,
-        });
+      if (!isRateLimiterRes(error)) {
+        this.reportStoreError(error, { context, options, key });
+        return next();
       }
-      return this.handleStoreError(error, { context, options, key }, next);
+      setPipelineItem(context, RATE_LIMIT_ITEM_TOKEN, error);
+      throw new RateLimitExceededError({
+        key,
+        requestName: context.requestName,
+        msBeforeNext: error.msBeforeNext,
+        remainingPoints: error.remainingPoints,
+        limit: limiter.points,
+        points,
+      });
     }
-
-    setPipelineItem(context, RATE_LIMIT_ITEM_TOKEN, result);
 
     return next();
   }
 
-  /** Fail-open (default) or fail-closed when the backing store itself errors. */
-  private handleStoreError(
-    error: unknown,
-    check: RateLimitCheck,
-    next: NextDelegate,
-  ): Promise<unknown> {
+  /** Logs a failure of the backing store, and rethrows it unless failing open (default). */
+  private reportStoreError(error: unknown, check: RateLimitCheck): void {
     const { context, options, key } = check;
     const message = error instanceof Error ? error.message : String(error);
+    const failOpen = options.failOpen ?? true;
 
-    if (options.failOpen ?? true) {
-      this.logger.warn?.(
-        `Rate limiter store error for ${context.requestName} ` +
-          `(key: ${key}); failing open: ${message}`,
-        RateLimitBehavior.name,
-      );
-      return next();
-    }
-
-    this.logger.error?.(
+    this.logger[failOpen ? 'warn' : 'error']?.(
       `Rate limiter store error for ${context.requestName} ` +
-        `(key: ${key}); failing closed: ${message}`,
+        `(key: ${key}); failing ${failOpen ? 'open' : 'closed'}: ${message}`,
       RateLimitBehavior.name,
     );
-    throw error;
+    if (!failOpen) throw error;
   }
 
   /** Shallow-merges pipeline-level options over the constructor defaults. */

@@ -1,17 +1,19 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
 import {
+  type BehaviorId,
   type Constructor,
   type ContextSources,
-  compilePipelinePlan,
-  createPipelineRunner,
+  compileHandlerPlan,
+  createHandlerRunner,
   type DeclaredKind,
+  type DiagnosticsMode,
   type GlobalBehaviorsOptions,
+  getBehaviorId,
   type IPipelineBehavior,
   type PipelineBehaviorDiagnostic,
-  PipelineConfigurationError,
-  pipelineOf,
-  validateBehaviorContracts,
+  type PipelinePlan,
+  reportDiagnostics,
 } from '@cqrs-ddd/pipeline';
 import {
   Inject,
@@ -23,19 +25,20 @@ import {
 import { DiscoveryService } from '@nestjs/core';
 import { CommandHandler, EventsHandler, QueryHandler } from '@nestjs/cqrs';
 
-/** What every handler's pipeline shares. */
-export interface PipelineOptions {
+/** What every handler's pipeline shares; the options of `PipelineModule.forRoot()`. */
+export interface PipelineModuleOptions {
   readonly globalBehaviors?: GlobalBehaviorsOptions | GlobalBehaviorsOptions[];
   readonly sources?: ContextSources;
   /** `'strict'` (default) fails startup on a contract violation, `'warn'` logs it. */
-  readonly diagnostics?: 'strict' | 'warn' | 'off';
+  readonly diagnostics?: DiagnosticsMode;
 }
 
 export const PIPELINE_OPTIONS = Symbol('PIPELINE_OPTIONS');
 
-type Provider = ReturnType<DiscoveryService['getProviders']>[number];
+// The pipeline methods installed on handler instances, by any PipelineBootstrap.
+const installed = new WeakSet<object>();
 
-type PipelinePlan = ReturnType<typeof compilePipelinePlan>;
+type Provider = ReturnType<DiscoveryService['getProviders']>[number];
 
 /** A `@nestjs/cqrs` handler provider, its class and the kind its decorator declares. */
 interface DiscoveredHandler {
@@ -90,7 +93,7 @@ export class PipelineBootstrap
 
   constructor(
     private readonly discovery: DiscoveryService,
-    @Inject(PIPELINE_OPTIONS) private readonly options: PipelineOptions,
+    @Inject(PIPELINE_OPTIONS) private readonly options: PipelineModuleOptions,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -110,15 +113,16 @@ export class PipelineBootstrap
     const providers = this.discovery.getProviders();
     const mode = this.options.diagnostics ?? 'strict';
     const found: PipelineBehaviorDiagnostic[] = [];
-    const behaviors = new Map<Constructor, IPipelineBehavior>();
+    const behaviors = new Map<BehaviorId, IPipelineBehavior>();
     const behavior = (
       type: Constructor<IPipelineBehavior>,
       handler: string,
     ) => {
-      let instance = behaviors.get(type);
+      const id = getBehaviorId(type);
+      let instance = behaviors.get(id);
       if (!instance) {
         instance = registeredBehavior(providers, type, handler);
-        behaviors.set(type, instance);
+        behaviors.set(id, instance);
       }
       return instance;
     };
@@ -138,14 +142,7 @@ export class PipelineBootstrap
       }
     }
 
-    if (found.length > 0 && mode === 'strict') {
-      throw new PipelineConfigurationError(found);
-    }
-    for (const d of found) {
-      this.logger.warn(
-        `[Pipeline Diagnostic] Handler '${d.handlerName}' with behavior '${d.behaviorName}': ${d.message}. Fix: ${d.fix}`,
-      );
-    }
+    reportDiagnostics(found, mode, this.logger);
   }
 
   private wrap(
@@ -158,15 +155,7 @@ export class PipelineBootstrap
   ): void {
     const { provider, type, kind } = handler;
     const handlerName = type.name;
-    const declared = pipelineOf(type);
-    const plan = compilePipelinePlan({
-      handlerName,
-      requestKind: kind,
-      handlerBehaviorTypes: declared.types,
-      handlerOptions: declared.options,
-      skippedBehaviorTypes: declared.skipped,
-      globalBehaviors: this.options.globalBehaviors,
-    });
+    const plan = compileHandlerPlan(type, kind, this.options.globalBehaviors);
 
     if (!plan.hasPipeline) return;
     if (!provider.isDependencyTreeStatic()) {
@@ -178,54 +167,44 @@ export class PipelineBootstrap
     }
 
     const resolved = plan.behaviorTypes.map((t) => behavior(t, handlerName));
-    if (diagnostics) {
-      validateBehaviorContracts({
-        ...plan,
-        handlerType: type,
-        handlerName,
-        requestKind: kind,
-        resolvedBehaviors: new Map(resolved.map((b, i) => [i, b])),
-        diagnostics,
-      });
-    }
-    this.install(handler, plan, resolved);
+    this.install(handler, { plan, behaviors: resolved, diagnostics });
   }
 
   /** Replaces the handler instance's method with its pipeline, restored on close. */
   private install(
     handler: DiscoveredHandler,
-    plan: PipelinePlan,
-    behaviors: IPipelineBehavior[],
+    pipeline: {
+      plan: PipelinePlan;
+      behaviors: IPipelineBehavior[];
+      diagnostics: PipelineBehaviorDiagnostic[] | undefined;
+    },
   ): void {
     const { provider, type, kind } = handler;
     const method = kind === 'event' ? 'handle' : 'execute';
     const instance = provider.instance as Record<string, unknown>;
-    const original = instance[method] as (
-      this: unknown,
-      ...args: unknown[]
-    ) => unknown;
-    this.logger.debug(
-      `Wrapping ${type.name}.${method}() [${kind}] with pipeline: [${plan.behaviorTypes.map((t) => t.name).join(' → ')}]`,
-    );
-
-    const run = createPipelineRunner(
-      original,
-      {
-        handlerType: type,
-        handlerName: type.name,
-        requestKind: kind,
-        behaviorOptions:
-          plan.mergedOptions.size > 0 ? plan.mergedOptions : undefined,
-      },
-      behaviors,
-      true,
-      this.options.sources,
-    );
+    if (installed.has(instance[method] as object)) {
+      throw new Error(
+        `${type.name}.${method} already runs through a pipeline; import PipelineModule.forRoot() once.`,
+      );
+    }
+    const run = createHandlerRunner({
+      ...pipeline,
+      handlerType: type,
+      kind,
+      method: instance[method] as (
+        this: unknown,
+        ...args: unknown[]
+      ) => unknown,
+      sources: this.options.sources,
+      log: (message) => this.logger.debug(message),
+    });
     const own = Object.getOwnPropertyDescriptor(instance, method);
+    const piped = (request: unknown) => run(instance, request);
+    installed.add(piped);
     Object.defineProperty(instance, method, {
       configurable: true,
       writable: true,
-      value: (request: unknown) => run(instance, request),
+      value: piped,
     });
     this.restores.push(() => {
       if (own) Object.defineProperty(instance, method, own);
@@ -247,7 +226,13 @@ function registeredBehavior(
   type: Constructor<IPipelineBehavior>,
   handler: string,
 ): IPipelineBehavior {
-  const registered = providers.filter((provider) => provider.token === type);
+  const id = getBehaviorId(type);
+  const registered = providers.filter(
+    ({ token }) =>
+      token === type ||
+      (typeof token === 'function' &&
+        getBehaviorId(token as Constructor<IPipelineBehavior>) === id),
+  );
   if (registered.length === 0) {
     throw new Error(
       `${type.name} runs in the pipeline of ${handler}, but no module provides it. Register it as a ` +

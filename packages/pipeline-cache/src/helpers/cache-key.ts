@@ -3,6 +3,7 @@
 import { createHash } from 'node:crypto';
 import {
   type IPipelineContext,
+  principalSegments,
   type TenantPartitionOptions,
   tenantSegments,
 } from '@cqrs-ddd/pipeline';
@@ -122,7 +123,7 @@ export function createPartitionedCacheKeyFactory(
       'cache',
       KEY_VERSION,
       ...tenant,
-      principal || undefined,
+      principal,
       scope,
       context.requestName,
       digestRequest(context.request),
@@ -130,14 +131,16 @@ export function createPartitionedCacheKeyFactory(
   };
 }
 
-/** The trimmed principal; `''` when it is absent and not required. */
+/** The trimmed principal; `undefined` when it is absent and not required. */
 function principalOf(
   context: IPipelineContext,
   options: PartitionedCacheKeyOptions,
   requirePrincipal: boolean,
-): string {
+): string | undefined {
   const resolved = options.principal(context);
-  const principal = typeof resolved === 'string' ? resolved.trim() : '';
+  const [principal] =
+    principalSegments(typeof resolved === 'string' ? resolved : undefined) ??
+    [];
 
   if (requirePrincipal && !principal) {
     throw new MissingCachePartitionError(

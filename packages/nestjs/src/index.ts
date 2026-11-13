@@ -20,6 +20,6 @@ export {
 export {
   PIPELINE_OPTIONS,
   PipelineBootstrap,
-  type PipelineOptions,
+  type PipelineModuleOptions,
 } from './pipeline/pipeline.bootstrap.js';
 export { PipelineModule } from './pipeline/pipeline.module.js';

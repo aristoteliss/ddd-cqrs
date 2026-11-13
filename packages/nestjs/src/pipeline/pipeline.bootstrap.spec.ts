@@ -5,6 +5,7 @@ import {
   type IPipelineContext,
   type NextDelegate,
   PIPELINE_BEHAVIOR_CONTRACT,
+  PIPELINE_BEHAVIOR_ID,
   PipelineConfigurationError,
   pipelineStore,
   SkipPipeline,
@@ -30,7 +31,7 @@ import {
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   PipelineBootstrap,
-  type PipelineOptions,
+  type PipelineModuleOptions,
 } from './pipeline.bootstrap.js';
 import { PipelineModule } from './pipeline.module.js';
 
@@ -83,7 +84,7 @@ class PlainHandler {
 
 function start(
   providers: Provider[],
-  options?: PipelineOptions,
+  options?: PipelineModuleOptions,
   imports: unknown[] = [],
 ) {
   @Module({
@@ -277,7 +278,7 @@ describe('PipelineBootstrap in a Nest application', () => {
 
       expect(warn).toHaveBeenCalledWith(
         expect.stringContaining(
-          "Handler 'InvalidHandler' with behavior 'InvalidBehavior': invalid. Fix: configure",
+          "'InvalidHandler' with behavior 'InvalidBehavior': invalid. Fix: configure",
         ),
       );
     });
@@ -286,6 +287,50 @@ describe('PipelineBootstrap in a Nest application', () => {
       const app = await start(providers, { diagnostics: 'off' });
       await app.close();
     });
+  });
+});
+
+describe('a behavior with a stable id', () => {
+  it('is resolved from the provider of another copy of its class', async () => {
+    const id = 'test:StableBehavior';
+
+    @Injectable()
+    class Provided implements IPipelineBehavior {
+      static readonly [PIPELINE_BEHAVIOR_ID] = id;
+      async handle(_context: IPipelineContext, next: NextDelegate) {
+        return ['stable', await next()];
+      }
+    }
+    class Declared implements IPipelineBehavior {
+      static readonly [PIPELINE_BEHAVIOR_ID] = id;
+      handle(_context: IPipelineContext, next: NextDelegate) {
+        return next();
+      }
+    }
+    class StableCommand {}
+    @CommandHandler(StableCommand)
+    @UsePipeline(Declared)
+    class StableHandler {
+      async execute() {
+        return 'done';
+      }
+    }
+
+    const app = await start([Provided, StableHandler]);
+    const result = await app.get(CommandBus).execute(new StableCommand());
+    await app.close();
+
+    expect(result).toEqual(['stable', 'done']);
+  });
+});
+
+describe('PipelineModule registered twice', () => {
+  it('refuses to wrap a handler a second time', async () => {
+    await expect(
+      start([TagBehavior, DoHandler], undefined, [
+        PipelineModule.forRoot({ diagnostics: 'warn' }),
+      ]),
+    ).rejects.toThrow('DoHandler.execute already runs through a pipeline');
   });
 });
 

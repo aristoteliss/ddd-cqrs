@@ -4,8 +4,8 @@
  * Thrown by {@link FeatureFlagBehavior} when a handler is gated behind a flag
  * that resolves to disabled and no `fallback` was configured.
  *
- * Over HTTP, register {@link FeatureDisabledFilter}: it answers `403 Forbidden`
- * with the flag, or a plain `404 Not Found` to hide the feature.
+ * Over HTTP, `toHttpResponse` of `@cqrs-ddd/pipeline-feature-flags/http` answers
+ * `403 Forbidden` with the flag, or a plain `404 Not Found` to hide the feature.
  */
 export class FeatureDisabledError extends Error {
   /** The flag key that gated the request. */

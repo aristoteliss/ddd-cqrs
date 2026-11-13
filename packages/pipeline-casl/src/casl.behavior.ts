@@ -2,8 +2,10 @@
 
 import {
   IPipelineBehavior,
+  type IPipelineBehaviorContract,
   IPipelineContext,
   NextDelegate,
+  PIPELINE_BEHAVIOR_CONTRACT,
   PIPELINE_BEHAVIOR_ID,
 } from '@cqrs-ddd/pipeline';
 import { CASL_ABILITY_KEY, CASL_PRINCIPAL_KEY } from './constants/tokens.js';
@@ -29,10 +31,33 @@ export interface CaslBehaviorOptions {
  * security-scoped keys, and throws `UnauthorizedActionException` unless every
  * requirement passes. An unauthenticated caller (`null` input) is denied.
  * Errors from the source or from malformed rules propagate unchanged.
- * A handler without `rules` runs without loading permissions.
+ * Placed globally, it passes a handler that declares no `rules` without loading
+ * permissions; a handler that places it itself must declare them, which the
+ * pipeline diagnostics check.
  */
 export class CaslBehavior implements IPipelineBehavior {
   static readonly [PIPELINE_BEHAVIOR_ID] = CASL_BEHAVIOR_ID;
+
+  /**
+   * A call-site declaration must name what it requires: without rules the
+   * handler would run unchecked. A global declaration may stay without rules.
+   */
+  static readonly [PIPELINE_BEHAVIOR_CONTRACT]: IPipelineBehaviorContract = {
+    validate: ({ declarationSource, effectiveOptions, handlerName }) => {
+      const rules = (effectiveOptions as Partial<CaslBehaviorOptions>)?.rules;
+      const hasRules = Array.isArray(rules) && rules.length > 0;
+      if (declarationSource === 'global' || hasRules) return undefined;
+      return [
+        {
+          handlerName,
+          behaviorName: CaslBehavior.name,
+          message:
+            'CaslBehavior is declared without rules, so the handler would run with no authorization check',
+          fix: 'Declare it with requires({ action, subject }), or remove it from this handler.',
+        },
+      ];
+    },
+  };
 
   constructor(private readonly source: ICaslPermissionSource) {
     if (typeof source?.load !== 'function') {

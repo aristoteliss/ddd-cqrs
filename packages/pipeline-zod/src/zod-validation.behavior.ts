@@ -118,30 +118,48 @@ export class ZodValidationBehavior implements IPipelineBehavior {
       ZodValidationBehavior,
     )?.schema;
     if (declared) {
-      const parsed = await declared.safeParseAsync(context.request);
-      if (!parsed.success) throw new ZodValidationError(parsed.error);
-      replaceRequest(context, parsed.data);
+      await validateCopy(context, declared);
       return next();
     }
 
-    const schema = context.requestType
+    const attached = context.requestType
       ? (untyped(context.requestType)[ZOD_SCHEMA_KEY] as ZodType | undefined)
       : undefined;
-
-    if (!schema) return next();
-    const request = requireObjectRequest(context);
-    const state = getValidationState(request);
-    if (state?.schema === schema && !hasBeenMutated(request, state.snapshot))
-      return next();
-
-    const result = await schema.safeParseAsync(request);
-    if (!result.success) throw new ZodValidationError(result.error);
-    assertPlainRequestOutput(result.data, 'behavior');
-    applyParsed(request, result.data, state?.snapshot);
-    setValidatedData(request, schema, result.data);
+    if (attached) await validateInPlace(context, attached);
 
     return next();
   }
+}
+
+/** A schema declared at the call site: the handler receives the parsed copy. */
+async function validateCopy(
+  context: IPipelineContext,
+  schema: ZodType,
+): Promise<void> {
+  const parsed = await schema.safeParseAsync(context.request);
+  if (!parsed.success) throw new ZodValidationError(parsed.error);
+  replaceRequest(context, parsed.data);
+}
+
+/**
+ * A schema attached to the request class: the parsed fields are written to the
+ * request itself, unless it is unchanged since this schema last validated it.
+ */
+async function validateInPlace(
+  context: IPipelineContext,
+  schema: ZodType,
+): Promise<void> {
+  const request = requireObjectRequest(context);
+  const state = getValidationState(request);
+  const isValidated =
+    state?.schema === schema && !hasBeenMutated(request, state.snapshot);
+  if (isValidated) return;
+
+  const result = await schema.safeParseAsync(request);
+  if (!result.success) throw new ZodValidationError(result.error);
+  assertPlainRequestOutput(result.data, 'behavior');
+  applyParsed(request, result.data, state?.snapshot);
+  setValidatedData(request, schema, result.data);
 }
 
 function requireObjectRequest(

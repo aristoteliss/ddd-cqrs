@@ -1,6 +1,10 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
-import { toPostgresJson } from '@cqrs-ddd/pipeline';
+import {
+  assertSafeTable,
+  type PostgresQueryableLike,
+  toPostgresJson,
+} from '@cqrs-ddd/pipeline';
 import type {
   DeadLetterError,
   DeadLetterListFilter,
@@ -8,14 +12,7 @@ import type {
   DeadLetterStore,
 } from '../interfaces/dead-letter-transport.interface.js';
 
-/**
- * Minimal structural shape of a `pg` `Pool` / `Client`. Declared locally so this
- * package does not hard-depend on `pg` — a real `Pool` or `Client` satisfies it.
- * Add it in your app: `pnpm add pg`.
- */
-export interface PostgresQueryableLike {
-  query(text: string, values?: unknown[]): Promise<unknown>;
-}
+export type { PostgresQueryableLike };
 
 /** Options for {@link PostgresDeadLetterTransport}. */
 export interface PostgresDeadLetterTransportOptions {
@@ -26,26 +23,18 @@ export interface PostgresDeadLetterTransportOptions {
   table?: string;
 }
 
-/** Allows `table` or `schema.table` made of unquoted SQL identifiers only. */
-const SAFE_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$/;
-
-function assertSafeTable(table: string): string {
-  if (!SAFE_IDENTIFIER.test(table)) {
-    throw new Error(
-      `Invalid dead-letter table name "${table}". ` +
-        'Use an unquoted identifier like "dead_letters" or "schema.dead_letters".',
-    );
-  }
-  return table;
-}
+const safeTable = (table: string) =>
+  assertSafeTable(table, 'dead-letter', 'dead_letters');
 
 /**
- * SQL to create the dead-letter table. Run once in a migration.
+ * SQL to create the dead-letter table. Run it in a migration. It is safe to
+ * run again: it also adds the `claimed_until` and `tenant_id` columns to a
+ * table that does not have them.
  *
  * @param table - Table name (validated). Default `'dead_letters'`.
  */
 export function createDeadLetterTableSql(table = 'dead_letters'): string {
-  const name = assertSafeTable(table);
+  const name = safeTable(table);
   return `CREATE TABLE IF NOT EXISTS ${name} (
   id              UUID        PRIMARY KEY,
   correlation_id  TEXT        NOT NULL,
@@ -60,8 +49,12 @@ export function createDeadLetterTableSql(table = 'dead_letters'): string {
   status          TEXT        NOT NULL DEFAULT 'open',
   payload_redacted BOOLEAN    NOT NULL DEFAULT false,
   last_error      JSONB,
-  resolved_at     TIMESTAMPTZ
-);`;
+  resolved_at     TIMESTAMPTZ,
+  claimed_until   TIMESTAMPTZ,
+  tenant_id       TEXT
+);
+ALTER TABLE ${name} ADD COLUMN IF NOT EXISTS claimed_until TIMESTAMPTZ;
+ALTER TABLE ${name} ADD COLUMN IF NOT EXISTS tenant_id TEXT;`;
 }
 
 /**
@@ -87,15 +80,15 @@ export class PostgresDeadLetterTransport implements DeadLetterStore {
     private readonly db: PostgresQueryableLike,
     options: PostgresDeadLetterTransportOptions = {},
   ) {
-    this.table = assertSafeTable(options.table ?? 'dead_letters');
+    this.table = safeTable(options.table ?? 'dead_letters');
   }
 
   async send(record: DeadLetterRecord): Promise<void> {
     await this.db.query(
       `INSERT INTO ${this.table}
         (id, correlation_id, request_kind, request_name, handler_name, payload,
-         error, metadata, failed_at, attempts, status, payload_redacted)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+         error, metadata, failed_at, attempts, status, payload_redacted, tenant_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
       [
         record.id,
         record.correlationId,
@@ -109,6 +102,7 @@ export class PostgresDeadLetterTransport implements DeadLetterStore {
         record.attempts,
         record.status,
         record.payloadRedacted,
+        record.tenantId ?? null,
       ],
     );
   }
@@ -125,22 +119,40 @@ export class PostgresDeadLetterTransport implements DeadLetterStore {
       `SELECT * FROM ${this.table}
         WHERE ($1::text IS NULL OR status = $1)
           AND ($2::text IS NULL OR request_name = $2)
+          AND ($4::text IS NULL OR tenant_id = $4)
         ORDER BY id
         LIMIT $3`,
-      [filter.status ?? null, filter.requestName ?? null, filter.limit ?? 100],
+      [
+        filter.status ?? null,
+        filter.requestName ?? null,
+        filter.limit ?? 100,
+        filter.tenantId ?? null,
+      ],
     );
+  }
+
+  async claim(id: string, leaseMs: number): Promise<boolean> {
+    const result = (await this.db.query(
+      `UPDATE ${this.table}
+        SET claimed_until = now() + $2 * interval '1 millisecond'
+        WHERE id = $1 AND status = 'open'
+          AND (claimed_until IS NULL OR claimed_until <= now())
+        RETURNING id`,
+      [id, leaseMs],
+    )) as { rows?: unknown[] };
+    return result.rows?.length === 1;
   }
 
   async recordAttempt(id: string, error: DeadLetterError): Promise<void> {
     await this.db.query(
-      `UPDATE ${this.table} SET attempts = attempts + 1, last_error = $2 WHERE id = $1`,
+      `UPDATE ${this.table} SET attempts = attempts + 1, last_error = $2, claimed_until = NULL WHERE id = $1`,
       [id, json(error)],
     );
   }
 
   async markResolved(id: string): Promise<void> {
     await this.db.query(
-      `UPDATE ${this.table} SET status = 'resolved', resolved_at = now() WHERE id = $1`,
+      `UPDATE ${this.table} SET status = 'resolved', resolved_at = now(), claimed_until = NULL WHERE id = $1`,
       [id],
     );
   }
@@ -171,6 +183,7 @@ interface DeadLetterRow {
   payload_redacted: boolean;
   last_error: DeadLetterError | null;
   resolved_at: Date | null;
+  tenant_id?: string | null;
 }
 
 function json(value: unknown): string {
@@ -178,7 +191,7 @@ function json(value: unknown): string {
 }
 
 function toRecord(row: DeadLetterRow): DeadLetterRecord {
-  const tenantId = row.metadata?.tenantId;
+  const tenantId = row.tenant_id ?? row.metadata?.tenantId;
   return {
     id: row.id,
     correlationId: row.correlation_id,

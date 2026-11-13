@@ -1,16 +1,14 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
 import {
+  type BehaviorResolver,
   type Constructor,
   type ContextSources,
-  compilePipelinePlan,
-  createPipelineRunner,
+  compileHandlerPlan,
+  createHandlerRunner,
   type DeclaredKind,
   type GlobalBehaviorsOptions,
-  type IPipelineBehavior,
   type PipelineBehaviorDiagnostic,
-  pipelineOf,
-  validateBehaviorContracts,
 } from '@cqrs-ddd/pipeline';
 import type { RequestType } from './decorators.js';
 import {
@@ -27,9 +25,7 @@ export interface PipelineSettings {
   readonly globalBehaviors?: GlobalBehaviorsOptions | GlobalBehaviorsOptions[];
   readonly sources?: ContextSources;
   /** Returns the one instance of a behavior class. */
-  readonly behavior: (
-    type: Constructor<IPipelineBehavior>,
-  ) => IPipelineBehavior;
+  readonly behavior: BehaviorResolver;
   /** Receives contract violations; absent, contracts are not validated. */
   readonly diagnostics?: PipelineBehaviorDiagnostic[];
   /** Receives a line per handler that runs behaviors, naming them in order. */
@@ -67,59 +63,19 @@ export function toDispatch(
   const name = kind === 'event' ? 'handle' : 'execute';
   const method = Reflect.get(handlerType.prototype, name);
   if (typeof method !== 'function') throw new INVALID[kind]();
-  const handlerName = handlerType.name;
-
-  const plan = planOf(handlerType, kind, settings);
-  const behaviors = plan.behaviorTypes.map(settings.behavior);
-  if (plan.hasPipeline) {
-    settings.log?.(
-      `Wrapping ${handlerName}.${name}() [${kind}] with pipeline: [${plan.behaviorTypes.map((type) => type.name).join(' → ')}]`,
-    );
-  }
-
-  if (settings.diagnostics) {
-    validateBehaviorContracts({
-      ...plan,
-      handlerType,
-      handlerName,
-      requestKind: kind,
-      resolvedBehaviors: new Map(behaviors.map((b, i) => [i, b])),
-      diagnostics: settings.diagnostics,
-    });
-  }
-
-  const run = createPipelineRunner(
+  const plan = compileHandlerPlan(handlerType, kind, settings.globalBehaviors);
+  const run = createHandlerRunner({
+    handlerType,
+    kind,
+    plan,
     method,
-    {
-      handlerType,
-      handlerName,
-      requestKind: kind,
-      behaviorOptions:
-        plan.mergedOptions.size > 0 ? plan.mergedOptions : undefined,
-    },
-    behaviors,
-    plan.hasPipeline,
-    settings.sources,
-  );
+    behaviors: plan.behaviorTypes.map(settings.behavior),
+    sources: settings.sources,
+    diagnostics: settings.diagnostics,
+    log: settings.log,
+  });
 
   return (request) => run(resolve(), request);
-}
-
-/** The handler's pipeline, compiled from its decorators and the global behaviors. */
-function planOf(
-  handlerType: Constructor,
-  kind: DeclaredKind,
-  settings: PipelineSettings,
-) {
-  const declared = pipelineOf(handlerType);
-  return compilePipelinePlan({
-    handlerName: handlerType.name,
-    requestKind: kind,
-    handlerBehaviorTypes: declared.types,
-    handlerOptions: declared.options,
-    skippedBehaviorTypes: declared.skipped,
-    globalBehaviors: settings.globalBehaviors,
-  });
 }
 
 /**

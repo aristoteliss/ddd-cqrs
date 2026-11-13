@@ -89,6 +89,8 @@ export interface DeadLetterTransport {
 export interface DeadLetterListFilter {
   status?: DeadLetterStatus;
   requestName?: string;
+  /** Only the records captured in this tenant. Absent: the records of every tenant. */
+  tenantId?: string;
   /** Most records to return, oldest first. Default `100`. */
   limit?: number;
 }
@@ -103,7 +105,17 @@ export interface DeadLetterStore extends DeadLetterTransport {
   get(id: string): Promise<DeadLetterRecord | undefined>;
   /** Records matching the filter, oldest first. */
   list(filter?: DeadLetterListFilter): Promise<DeadLetterRecord[]>;
-  /** Counts one failed redrive attempt and keeps its error. */
+  /**
+   * Takes the open record for one redrive, in one atomic step, so that two
+   * redrives of one record cannot both dispatch it. The claim ends with
+   * {@link recordAttempt} or {@link markResolved}, or after `leaseMs`, which
+   * frees the record of a process that stopped during the handling.
+   *
+   * @param leaseMs - How long the claim holds, in milliseconds.
+   * @returns `false` when the record is absent, resolved or claimed.
+   */
+  claim(id: string, leaseMs: number): Promise<boolean>;
+  /** Counts one failed redrive attempt, keeps its error and ends the claim. */
   recordAttempt(id: string, error: DeadLetterError): Promise<void>;
   /** Closes the record. */
   markResolved(id: string): Promise<void>;

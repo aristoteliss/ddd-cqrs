@@ -8,10 +8,7 @@ import {
 import { type BehaviorId, getBehaviorId } from '../helpers/behavior-id.js';
 import type { IPipelineBehavior } from '../interfaces/pipeline.behavior.interface.js';
 import type { GlobalBehaviorsOptions } from '../options/global-behaviors.options.js';
-import type { Constructor } from '../types.js';
-
-/** The request kinds a pipeline distinguishes; `unknown` matches only `scope: 'all'`. */
-export type RequestKind = 'command' | 'query' | 'event' | 'unknown';
+import type { Constructor, RequestKind } from '../types.js';
 
 /** What a handler, or a wrapped function, declares for its pipeline. */
 export interface PipelineDeclaration {

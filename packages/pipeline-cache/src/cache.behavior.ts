@@ -1,6 +1,7 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
 import {
+  behaviorDiagnostic,
   createPipelineItem,
   type IPipelineBehavior,
   type IPipelineBehaviorContract,
@@ -8,9 +9,6 @@ import {
   type IPipelineContext,
   type NextDelegate,
   PIPELINE_BEHAVIOR_CONTRACT,
-  type PipelineBehaviorDiagnostic,
-  type PipelineBehaviorOrderRule,
-  type PipelineBehaviorValidationContext,
   type PipelineItemToken,
   type PipelineLogger,
   setPipelineItem,
@@ -23,38 +21,20 @@ import {
 import type { CacheBehaviorOptions } from './interfaces/cache-options.interface.js';
 
 /**
- * Unique symbol key set on `context.items` recording whether the request was served from cache (`true` on hit).
+ * The `context.items` entry recording whether the request was served from cache (`true` on hit).
  *
- * @example
- * ```ts
- * const isHit = context.items.get(CACHE_HIT_ITEM) === true;
- * ```
- */
-export const CACHE_HIT_ITEM = Symbol('CACHE_HIT_ITEM');
-
-/**
- * Typed token for {@link CACHE_HIT_ITEM}: the cache hit flag. Reads and writes the same
- * `context.items` entry through `getPipelineItem` / `requirePipelineItem`.
+ * Read it with `getPipelineItem` or `requirePipelineItem`.
  */
 export const CACHE_HIT_ITEM_TOKEN: PipelineItemToken<boolean> =
-  createPipelineItem<boolean>('CACHE_HIT_ITEM', CACHE_HIT_ITEM);
+  createPipelineItem<boolean>('CACHE_HIT_ITEM');
 
 /**
- * Unique symbol key set on `context.items` recording the resolved cache key string.
+ * The `context.items` entry recording the resolved cache key string.
  *
- * @example
- * ```ts
- * const key = context.items.get(CACHE_KEY_ITEM) as string | undefined;
- * ```
- */
-export const CACHE_KEY_ITEM = Symbol('CACHE_KEY_ITEM');
-
-/**
- * Typed token for {@link CACHE_KEY_ITEM}: the resolved cache key. Reads and writes the same
- * `context.items` entry through `getPipelineItem` / `requirePipelineItem`.
+ * Read it with `getPipelineItem` or `requirePipelineItem`.
  */
 export const CACHE_KEY_ITEM_TOKEN: PipelineItemToken<string> =
-  createPipelineItem<string>('CACHE_KEY_ITEM', CACHE_KEY_ITEM);
+  createPipelineItem<string>('CACHE_KEY_ITEM');
 
 const DEFAULT_KINDS: Array<IPipelineContext['requestKind']> = ['query'];
 
@@ -122,53 +102,30 @@ export class CacheBehavior
     IPipelineBehaviorOptionsResolver<CacheBehaviorOptions>
 {
   static readonly [PIPELINE_BEHAVIOR_CONTRACT]: IPipelineBehaviorContract = {
-    order: (
-      context: PipelineBehaviorValidationContext,
-    ): PipelineBehaviorOrderRule | undefined => {
+    order: ({ effectiveOptions, requestKind }) =>
+      inScope(effectiveOptions as CacheBehaviorOptions | undefined, requestKind)
+        ? { after: ['@cqrs-ddd/pipeline-casl:CaslBehavior', 'CaslBehavior'] }
+        : undefined,
+    validate: (context) => {
       const options = context.effectiveOptions as
         | CacheBehaviorOptions
         | undefined;
-      if (!inScope(options, context.requestKind)) {
-        return undefined;
-      }
-      return {
-        after: ['@cqrs-ddd/pipeline-casl:CaslBehavior', 'CaslBehavior'],
-      };
-    },
-    validate: (
-      context: PipelineBehaviorValidationContext,
-    ): PipelineBehaviorDiagnostic[] | undefined => {
-      const options = context.effectiveOptions as
-        | CacheBehaviorOptions
-        | undefined;
-      if (!inScope(options, context.requestKind)) {
-        return undefined;
-      }
+      if (!inScope(options, context.requestKind)) return undefined;
 
       if (!options?.key) {
-        return [
-          {
-            handlerName: context.handlerName,
-            behaviorName: CacheBehavior.name,
-            message: 'Active CacheBehavior requires an explicit `key` factory',
-            fix:
-              'Provide a key factory via createPartitionedCacheKeyFactory(...) in ' +
-              'the cache({ key }) entry or the CacheBehavior constructor defaults.',
-          },
-        ];
+        return behaviorDiagnostic(context, CacheBehavior.name, {
+          message: 'Active CacheBehavior requires an explicit `key` factory',
+          fix:
+            'Provide a key factory via createPartitionedCacheKeyFactory(...) in ' +
+            'the cache({ key }) entry or the CacheBehavior constructor defaults.',
+        });
       }
-
       if (typeof options.key !== 'function') {
-        return [
-          {
-            handlerName: context.handlerName,
-            behaviorName: CacheBehavior.name,
-            message: `CacheBehavior key factory must be a callable function, received ${typeof options.key}`,
-            fix: 'Pass a valid function (ctx) => string as the key option of the cache({ key }) entry.',
-          },
-        ];
+        return behaviorDiagnostic(context, CacheBehavior.name, {
+          message: `CacheBehavior key factory must be a callable function, received ${typeof options.key}`,
+          fix: 'Pass a valid function (ctx) => string as the key option of the cache({ key }) entry.',
+        });
       }
-
       return undefined;
     },
   };

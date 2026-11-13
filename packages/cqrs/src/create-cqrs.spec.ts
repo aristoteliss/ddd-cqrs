@@ -237,7 +237,7 @@ describe('createCqrs', () => {
       const logger = quiet();
       createCqrs({ diagnostics: 'warn', logger }).register(new Keyless());
       expect(logger.warn).toHaveBeenCalledWith(
-        "[Pipeline Diagnostic] Handler 'Keyless' with behavior 'Keyed': needs a key. Fix: pass one",
+        "[Pipeline Diagnostic] 'Keyless' with behavior 'Keyed': needs a key. Fix: pass one",
       );
       expect(() =>
         createCqrs({ diagnostics: 'off' }).register(new Keyless()),

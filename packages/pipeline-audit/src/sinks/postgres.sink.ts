@@ -1,6 +1,10 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
-import { toPostgresJson } from '@cqrs-ddd/pipeline';
+import {
+  assertSafeTable,
+  type PostgresQueryableLike,
+  toPostgresJson,
+} from '@cqrs-ddd/pipeline';
 import { stringifyAuditValue } from '../helpers/json.js';
 import type {
   AuditRecord,
@@ -8,14 +12,7 @@ import type {
 } from '../interfaces/audit-record.interface.js';
 import type { AuditSink } from '../interfaces/audit-sink.interface.js';
 
-/**
- * Minimal structural shape of a `pg` `Pool` / `Client`. Declared locally so this
- * package does not hard-depend on `pg` — a real `Pool` or `Client` satisfies it.
- * Add it in your app: `pnpm add pg`.
- */
-export interface PostgresQueryableLike {
-  query(text: string, values?: unknown[]): Promise<unknown>;
-}
+export type { PostgresQueryableLike };
 
 /** Options for {@link PostgresAuditSink}. */
 export interface PostgresAuditSinkOptions {
@@ -26,18 +23,8 @@ export interface PostgresAuditSinkOptions {
   table?: string;
 }
 
-/** Allows `table` or `schema.table` made of unquoted SQL identifiers only. */
-const SAFE_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$/;
-
-function assertSafeTable(table: string): string {
-  if (!SAFE_IDENTIFIER.test(table)) {
-    throw new Error(
-      `Invalid audit table name "${table}". ` +
-        'Use an unquoted identifier like "audit_log" or "schema.audit_log".',
-    );
-  }
-  return table;
-}
+const safeTable = (table: string) =>
+  assertSafeTable(table, 'audit', 'audit_log');
 
 /**
  * SQL to create the audit table. Run once in a migration.
@@ -54,7 +41,7 @@ function assertSafeTable(table: string): string {
  * @param table - Table name (validated). Default `'audit_log'`.
  */
 export function createAuditTableSql(table = 'audit_log'): string {
-  const name = assertSafeTable(table);
+  const name = safeTable(table);
   return `CREATE TABLE IF NOT EXISTS ${name} (
   id              UUID        PRIMARY KEY,
   correlation_id  TEXT        NOT NULL,
@@ -104,7 +91,7 @@ export class PostgresAuditSink implements AuditSink {
     private readonly db: PostgresQueryableLike,
     options: PostgresAuditSinkOptions = {},
   ) {
-    const table = assertSafeTable(options.table ?? 'audit_log');
+    const table = safeTable(options.table ?? 'audit_log');
     const columns = `(id, correlation_id, action, severity, outcome, actor, request_kind,
        request_name, handler_name, payload, response, error, duration_ms,
        metadata, occurred_at, completed_at)`;

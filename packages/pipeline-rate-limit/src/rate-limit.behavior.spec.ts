@@ -1,6 +1,8 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
 import {
+  getPipelineItem,
+  hasPipelineItem,
   type IPipelineBehaviorContract,
   type IPipelineContext,
   PIPELINE_BEHAVIOR_CONTRACT,
@@ -14,8 +16,8 @@ import type {
   RateLimiterResLike,
 } from './interfaces/rate-limiter.interface.js';
 import {
-  RATE_LIMIT_ITEM,
-  RATE_LIMIT_KEY_ITEM,
+  RATE_LIMIT_ITEM_TOKEN,
+  RATE_LIMIT_KEY_ITEM_TOKEN,
   RateLimitBehavior,
 } from './rate-limit.behavior.js';
 
@@ -121,8 +123,10 @@ describe('RateLimitBehavior', () => {
     expect(consume).toHaveBeenCalledWith('CreateUserCommand', 1);
     expect(next).toHaveBeenCalledTimes(1);
     expect(result).toBe('handled');
-    expect(ctx.items.get(RATE_LIMIT_KEY_ITEM)).toBe('CreateUserCommand');
-    expect(ctx.items.get(RATE_LIMIT_ITEM)).toMatchObject({
+    expect(getPipelineItem(ctx, RATE_LIMIT_KEY_ITEM_TOKEN)).toBe(
+      'CreateUserCommand',
+    );
+    expect(getPipelineItem(ctx, RATE_LIMIT_ITEM_TOKEN)).toMatchObject({
       remainingPoints: 9,
     });
   });
@@ -188,7 +192,7 @@ describe('RateLimitBehavior', () => {
     for (const points of [0, () => 0]) {
       const ctx = withOptions(makeCtx(), { points, keyFactory });
       await expect(behavior.handle(ctx, next)).resolves.toBe('ok');
-      expect(ctx.items.has(RATE_LIMIT_KEY_ITEM)).toBe(false);
+      expect(hasPipelineItem(ctx, RATE_LIMIT_KEY_ITEM_TOKEN)).toBe(false);
     }
     expect(keyFactory).not.toHaveBeenCalled();
     expect(consume).not.toHaveBeenCalled();

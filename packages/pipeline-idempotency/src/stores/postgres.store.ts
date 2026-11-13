@@ -1,5 +1,9 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
+import {
+  assertSafeTable,
+  type PostgresQueryableLike as Queryable,
+} from '@cqrs-ddd/pipeline';
 import type {
   IdempotencyRecord,
   JsonValue,
@@ -18,13 +22,10 @@ export interface PostgresQueryResultLike {
 }
 
 /**
- * Minimal structural shape of a `pg` `Pool` / `Client`. Declared locally so this
- * package does not hard-depend on `pg` — a real `Pool` or `Client` satisfies it.
- * Add it in your app: `pnpm add pg`.
+ * Minimal structural shape of a `pg` `Pool` / `Client` whose results this store
+ * reads. A real `Pool` or `Client` satisfies it. Add it in your app: `pnpm add pg`.
  */
-export interface PostgresQueryableLike {
-  query(text: string, values?: unknown[]): Promise<PostgresQueryResultLike>;
-}
+export type PostgresQueryableLike = Queryable<PostgresQueryResultLike>;
 
 /** Options for {@link PostgresIdempotencyStore}. */
 export interface PostgresIdempotencyStoreOptions {
@@ -35,18 +36,8 @@ export interface PostgresIdempotencyStoreOptions {
   table?: string;
 }
 
-/** Allows `table` or `schema.table` made of unquoted SQL identifiers only. */
-const SAFE_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$/;
-
-function assertSafeTable(table: string): string {
-  if (!SAFE_IDENTIFIER.test(table)) {
-    throw new Error(
-      `Invalid idempotency table name "${table}". ` +
-        'Use an unquoted identifier like "idempotency_keys" or "schema.idempotency_keys".',
-    );
-  }
-  return table;
-}
+const safeTable = (table: string) =>
+  assertSafeTable(table, 'idempotency', 'idempotency_keys');
 
 /**
  * SQL that creates the idempotency table and its `expires_at` index. Run it
@@ -60,7 +51,7 @@ function assertSafeTable(table: string): string {
  * @returns SQL statements required by {@link PostgresIdempotencyStore}.
  */
 export function createIdempotencyTableSql(table = 'idempotency_keys'): string {
-  const name = assertSafeTable(table);
+  const name = safeTable(table);
   return `CREATE TABLE IF NOT EXISTS ${name} (
   key           TEXT        PRIMARY KEY,
   status        TEXT        NOT NULL,
@@ -146,7 +137,7 @@ export class PostgresIdempotencyStore implements IdempotencyStore {
     private readonly db: PostgresQueryableLike,
     options: PostgresIdempotencyStoreOptions = {},
   ) {
-    this.table = assertSafeTable(options.table ?? 'idempotency_keys');
+    this.table = safeTable(options.table ?? 'idempotency_keys');
   }
 
   async get(key: string): Promise<IdempotencyRecord | undefined> {

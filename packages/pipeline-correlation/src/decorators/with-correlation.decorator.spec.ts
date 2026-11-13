@@ -310,6 +310,22 @@ describe('WithCorrelation — this context & meta', () => {
     );
   });
 
+  it('runs a method that is called without its instance', async () => {
+    let captured: string | undefined;
+
+    class Processor {
+      @WithCorrelation()
+      async handle(_job: any) {
+        captured = getCorrelationId();
+      }
+    }
+
+    const { handle } = new Processor();
+    await handle(fakeJob({ correlationId: 'detached-1' }));
+
+    expect(captured).toBe('detached-1');
+  });
+
   it('preserves original function name', () => {
     class Processor {
       @WithCorrelation()

@@ -2,8 +2,9 @@
 
 /**
  * Raised by `DeadLetterRedriver` when a dead letter cannot be redriven: it does
- * not exist, is already resolved, has no registered request type or
- * dispatcher, or its payload was redacted and no `rebuild` is configured.
+ * not exist, is already resolved, is held by another redrive, has no
+ * registered request type or dispatcher, or its payload was redacted and no
+ * `rebuild` is configured.
  * Nothing is dispatched and the record is unchanged.
  */
 export class DeadLetterRedriveError extends Error {

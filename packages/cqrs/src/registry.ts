@@ -1,19 +1,14 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
 import {
-  type BehaviorId,
-  behaviorEntryType,
   type Constructor,
   type ContextSources,
+  type DiagnosticsMode,
   type GlobalBehaviorsOptions,
-  getBehaviorId,
-  type IPipelineBehavior,
-  LoggingBehavior,
   type LogLevel,
   type PipelineBehaviorDiagnostic,
-  PipelineConfigurationError,
   type PipelineLogger,
-  toGlobalConfigs,
+  reportDiagnostics,
 } from '@cqrs-ddd/pipeline';
 import {
   commandOf,
@@ -39,7 +34,7 @@ export class Handlers {
 export interface RegistrationOptions {
   readonly globalBehaviors?: GlobalBehaviorsOptions | GlobalBehaviorsOptions[];
   readonly sources?: ContextSources;
-  readonly diagnostics?: 'strict' | 'warn' | 'off';
+  readonly diagnostics?: DiagnosticsMode;
   readonly bootstrapLogLevel?: LogLevel | 'none';
 }
 
@@ -55,51 +50,6 @@ export interface Registry {
   readonly behavior: PipelineSettings['behavior'];
   readonly options: RegistrationOptions;
   readonly logger: PipelineLogger;
-}
-
-const LOGGING_ID = getBehaviorId(LoggingBehavior);
-
-/**
- * The one instance of each behavior class: the instance given for that class, else
- * `LoggingBehavior` on the logger, else one built with no arguments. The global behaviors
- * are built here, so one that cannot be built fails at once.
- *
- * @throws TypeError on two given instances of one behavior class.
- */
-export function behaviorResolver(
-  given: readonly IPipelineBehavior[],
-  globalBehaviors: RegistrationOptions['globalBehaviors'],
-  logger: PipelineLogger,
-): PipelineSettings['behavior'] {
-  const instances = new Map<BehaviorId, IPipelineBehavior>();
-  for (const instance of given) {
-    const type = instance.constructor as Constructor<IPipelineBehavior>;
-    const id = getBehaviorId(type);
-    if (instances.has(id)) {
-      throw new TypeError(
-        `createCqrs: two instances of ${type.name}; pass one per behavior class.`,
-      );
-    }
-    instances.set(id, instance);
-  }
-
-  const behavior = (type: Constructor<IPipelineBehavior>) => {
-    const id = getBehaviorId(type);
-    let instance = instances.get(id);
-    if (!instance) {
-      instance = id === LOGGING_ID ? new LoggingBehavior(logger) : new type();
-      instances.set(id, instance);
-    }
-    return instance;
-  };
-
-  for (const config of toGlobalConfigs(globalBehaviors)) {
-    for (const entry of [...(config.before ?? []), ...(config.after ?? [])]) {
-      behavior(behaviorEntryType(entry, 'globalBehaviors'));
-    }
-  }
-
-  return behavior;
 }
 
 /**
@@ -150,7 +100,7 @@ export function registerHandlers(
       subscribe(handlers.events, events, { name: type.name, run });
     }
   }
-  report(found, mode, logger);
+  reportDiagnostics(found, mode, logger);
 }
 
 function subscribe(
@@ -161,22 +111,6 @@ function subscribe(
   for (const event of events) {
     const subscribers = table.get(event) ?? [];
     table.set(event, [...subscribers, subscriber]);
-  }
-}
-
-/** Throws the contract violations in `'strict'` mode, else logs each one. */
-function report(
-  found: PipelineBehaviorDiagnostic[],
-  mode: NonNullable<RegistrationOptions['diagnostics']>,
-  logger: PipelineLogger,
-): void {
-  if (found.length > 0 && mode === 'strict') {
-    throw new PipelineConfigurationError(found);
-  }
-  for (const d of found) {
-    logger.warn(
-      `[Pipeline Diagnostic] Handler '${d.handlerName}' with behavior '${d.behaviorName}': ${d.message}. Fix: ${d.fix}`,
-    );
   }
 }
 

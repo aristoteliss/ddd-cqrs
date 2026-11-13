@@ -2,6 +2,7 @@
 
 import {
   type IPipelineContext,
+  principalSegments,
   type TenantPartitionOptions,
   tenantSegments,
 } from '@cqrs-ddd/pipeline';
@@ -158,16 +159,4 @@ export function createPartitionedIdempotencyKeyFactory(
   };
 
   return keyFor;
-}
-
-/** Normalizes a principal to non-empty trimmed segments, or `undefined`. */
-function principalSegments(
-  value: string | readonly string[] | undefined,
-): string[] | undefined {
-  const segments = (typeof value === 'string' ? [value] : (value ?? [])).map(
-    (segment) => (typeof segment === 'string' ? segment.trim() : ''),
-  );
-  return segments.length > 0 && segments.every((segment) => segment !== '')
-    ? segments
-    : undefined;
 }

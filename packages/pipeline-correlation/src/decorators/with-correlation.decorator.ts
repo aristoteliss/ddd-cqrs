@@ -202,14 +202,15 @@ export function WithCorrelation(
 
   const wrap: Parameters<typeof methodDecorator>[0] = (
     originalMethod,
-    _propertyKey,
+    name,
   ) => {
     return function (this: unknown, ...args: unknown[]) {
       const logger: CorrelationLogger =
         options.logger ??
         (untyped(this)?.logger as CorrelationLogger | undefined) ??
         console;
-      const source = `${untyped(this).constructor?.name}.${String(_propertyKey)}`;
+      const owner = untyped(this)?.constructor?.name ?? 'anonymous';
+      const source = `${owner}.${String(name)}`;
 
       if (!extract && Array.isArray(args[0])) {
         logger.warn(

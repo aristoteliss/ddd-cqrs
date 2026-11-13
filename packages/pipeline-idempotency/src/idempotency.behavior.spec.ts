@@ -1,6 +1,8 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
 import {
+  getPipelineItem,
+  hasPipelineItem,
   type IPipelineBehaviorContract,
   type IPipelineContext,
   PIPELINE_BEHAVIOR_CONTRACT,
@@ -10,9 +12,9 @@ import { IdempotencyCompletionError } from './errors/idempotency-completion.erro
 import { IdempotencyConflictError } from './errors/idempotency-conflict.error.js';
 import { fingerprintValue } from './helpers/fingerprint.js';
 import {
-  IDEMPOTENCY_KEY_ITEM,
-  IDEMPOTENCY_OWNERSHIP_LOST_ITEM,
-  IDEMPOTENCY_REPLAYED_ITEM,
+  IDEMPOTENCY_KEY_ITEM_TOKEN,
+  IDEMPOTENCY_OWNERSHIP_LOST_ITEM_TOKEN,
+  IDEMPOTENCY_REPLAYED_ITEM_TOKEN,
   IdempotencyBehavior,
 } from './idempotency.behavior.js';
 import type { IdempotencyBehaviorOptions } from './interfaces/idempotency-options.interface.js';
@@ -120,7 +122,7 @@ describe('IdempotencyBehavior', () => {
 
     expect(result).toEqual({ id: 'created' });
     expect(second).not.toHaveBeenCalled();
-    expect(ctx.items.get(IDEMPOTENCY_REPLAYED_ITEM)).toBe(true);
+    expect(getPipelineItem(ctx, IDEMPOTENCY_REPLAYED_ITEM_TOKEN)).toBe(true);
   });
 
   it('partitions replay records by principal when the key is scoped', async () => {
@@ -232,7 +234,6 @@ describe('IdempotencyBehavior', () => {
     const refund = vi.fn().mockResolvedValue({ id: 'refunded' });
 
     await expect(behavior.handle(refundContext, refund)).rejects.toMatchObject({
-      statusCode: 422,
       reason: 'key_reuse',
     });
     expect(refund).not.toHaveBeenCalled();
@@ -244,7 +245,7 @@ describe('IdempotencyBehavior', () => {
 
     await behavior.handle(ctx, vi.fn().mockResolvedValue('ok'));
 
-    expect(ctx.items.get(IDEMPOTENCY_KEY_ITEM)).toBe('o1');
+    expect(getPipelineItem(ctx, IDEMPOTENCY_KEY_ITEM_TOKEN)).toBe('o1');
   });
 
   it('rejects a store without completeIfOwned and deleteIfOwned at construction', () => {
@@ -282,7 +283,7 @@ describe('IdempotencyBehavior', () => {
 
     await expect(
       behavior.handle(withOptions(makeCtx(), byKey), next),
-    ).rejects.toMatchObject({ statusCode: 409, reason: 'in_progress' });
+    ).rejects.toMatchObject({ reason: 'in_progress' });
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -307,7 +308,7 @@ describe('IdempotencyBehavior', () => {
 
     await expect(
       behavior.handle(withOptions(context, byKey), vi.fn()),
-    ).rejects.toMatchObject({ statusCode: 422, reason: 'key_reuse' });
+    ).rejects.toMatchObject({ reason: 'key_reuse' });
   });
 
   it('rejects a record without a fingerprint when fingerprinting is enabled', async () => {
@@ -333,7 +334,7 @@ describe('IdempotencyBehavior', () => {
         withOptions(makeCtx(), byKey),
         vi.fn(),
       ),
-    ).rejects.toMatchObject({ statusCode: 422, reason: 'key_reuse' });
+    ).rejects.toMatchObject({ reason: 'key_reuse' });
   });
 
   it('throws a 422 conflict when the key is reused with a different payload', async () => {
@@ -352,7 +353,6 @@ describe('IdempotencyBehavior', () => {
       behavior.handle(ctx, vi.fn().mockResolvedValue('second')),
     ).rejects.toBeInstanceOf(IdempotencyConflictError);
     await expect(behavior.handle(ctx, vi.fn())).rejects.toMatchObject({
-      statusCode: 422,
       reason: 'key_reuse',
     });
   });
@@ -372,7 +372,7 @@ describe('IdempotencyBehavior', () => {
     const result = await behavior.handle(ctx, vi.fn());
 
     expect(result).toBe('first');
-    expect(ctx.items.get(IDEMPOTENCY_REPLAYED_ITEM)).toBe(true);
+    expect(getPipelineItem(ctx, IDEMPOTENCY_REPLAYED_ITEM_TOKEN)).toBe(true);
   });
 
   it('runs the handler normally when no key is produced', async () => {
@@ -386,7 +386,7 @@ describe('IdempotencyBehavior', () => {
 
     expect(result).toBe('ran');
     expect(next).toHaveBeenCalledTimes(1);
-    expect(ctx.items.has(IDEMPOTENCY_KEY_ITEM)).toBe(false);
+    expect(hasPipelineItem(ctx, IDEMPOTENCY_KEY_ITEM_TOKEN)).toBe(false);
   });
 
   it('runs the handler for out-of-scope request kinds', async () => {
@@ -495,7 +495,9 @@ describe('IdempotencyBehavior', () => {
       }),
       expect.any(Number),
     );
-    expect(ctx.items.get(IDEMPOTENCY_OWNERSHIP_LOST_ITEM)).toBe(true);
+    expect(getPipelineItem(ctx, IDEMPOTENCY_OWNERSHIP_LOST_ITEM_TOKEN)).toBe(
+      true,
+    );
     expect(logger.error).toHaveBeenCalledTimes(1);
   });
 
@@ -579,7 +581,7 @@ describe('IdempotencyBehavior', () => {
 
     await expect(
       behavior.handle(withOptions(makeCtx(), byKey), next),
-    ).rejects.toMatchObject({ statusCode: 409, reason: 'in_progress' });
+    ).rejects.toMatchObject({ reason: 'in_progress' });
 
     expect(mockStore.setIfAbsent).toHaveBeenCalledTimes(2);
     expect(mockStore.get).toHaveBeenCalledTimes(2);
@@ -664,7 +666,7 @@ describe('IdempotencyBehavior', () => {
 
     expect(result).toBe('ran');
     expect(next).toHaveBeenCalledTimes(1);
-    expect(ctx.items.has(IDEMPOTENCY_KEY_ITEM)).toBe(false);
+    expect(hasPipelineItem(ctx, IDEMPOTENCY_KEY_ITEM_TOKEN)).toBe(false);
   });
 
   describe('replay scope', () => {
@@ -709,10 +711,9 @@ describe('IdempotencyBehavior', () => {
       const ctx = withOptions(makeCtx(), scoped('scope-b'));
       await expect(behavior.handle(ctx, next)).rejects.toMatchObject({
         reason: 'replay_scope',
-        statusCode: 409,
       });
       expect(next).toHaveBeenCalledTimes(1);
-      expect(ctx.items.has(IDEMPOTENCY_REPLAYED_ITEM)).toBe(false);
+      expect(hasPipelineItem(ctx, IDEMPOTENCY_REPLAYED_ITEM_TOKEN)).toBe(false);
     });
 
     it('keeps the stored record so the operation cannot execute a second time', async () => {
