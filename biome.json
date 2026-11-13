@@ -87,7 +87,12 @@
   "plugins": [
     {
       "path": "./biome/plugins/test-suite.grit",
-      "includes": ["**/*.spec.ts", "**/*.test.ts"]
+      "includes": [
+        "**/*.spec.ts",
+        "**/*.test.ts",
+        "**/*.e2e-spec.ts",
+        "**/*.test.mjs"
+      ]
     },
     {
       "path": "./biome/plugins/framework-independence.grit",
@@ -106,8 +111,7 @@
       "includes": [
         "**/packages/pipeline/**/*.ts",
         "**/packages/pipeline-*/**/*.ts",
-        "**/packages/cqrs/**/*.ts",
-        "**/packages/common/**/*.ts"
+        "**/packages/cqrs/**/*.ts"
       ]
     },
     {

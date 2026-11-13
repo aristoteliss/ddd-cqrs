@@ -80,6 +80,15 @@ describe('Biome Grit test-suite plugin', () => {
       expect(result.diagnostics).toContain('Do not commit focused tests');
     },
   );
+
+  it.each([
+    'api/test/e2e/sample.e2e-spec.ts',
+    'integration/plain-node/sample.test.mjs',
+  ])('rejects a focused test in %s', (path) => {
+    const result = lintFixture(path, `describe.only('focused', () => {});`);
+    expect(result.status).toBe(1);
+    expect(result.diagnostics).toContain('Do not commit focused tests');
+  });
 });
 
 describe('Biome Grit framework-independence plugin', () => {

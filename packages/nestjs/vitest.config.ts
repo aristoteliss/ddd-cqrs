@@ -1,23 +1,8 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
 import { defineConfig } from 'vitest/config';
+import { packageTest } from '../../vitest.shared.js';
 
 export default defineConfig({
-  test: {
-    globals: true,
-    root: '.',
-    include: ['src/**/*.spec.ts'],
-    coverage: {
-      enabled: true,
-      include: ['src/**/*.ts'],
-      thresholds: {
-        perFile: true,
-        statements: 100,
-        branches: 100,
-        functions: 100,
-        lines: 100,
-      },
-    },
-    setupFiles: ['reflect-metadata'],
-  },
+  test: { ...packageTest, setupFiles: ['reflect-metadata'] },
 });

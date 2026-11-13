@@ -1,14 +1,14 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
 import { defineConfig } from 'vitest/config';
+import { packageTest } from '../../vitest.shared.js';
 
 export default defineConfig({
   test: {
-    globals: true,
-    root: '.',
+    ...packageTest,
     include: ['**/*.spec.ts'],
     coverage: {
-      enabled: true,
+      ...packageTest.coverage,
       include: [
         'index.ts',
         'application/**/*.ts',
@@ -17,13 +17,6 @@ export default defineConfig({
         'persistence/**/*.ts',
         'types/**/*.ts',
       ],
-      thresholds: {
-        perFile: true,
-        statements: 100,
-        branches: 100,
-        functions: 100,
-        lines: 100,
-      },
     },
   },
 });
