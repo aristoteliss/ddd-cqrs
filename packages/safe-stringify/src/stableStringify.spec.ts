@@ -139,6 +139,39 @@ describe('stableStringify and toStrictJsonValue', () => {
     );
   });
 
+  it('rejects an object that keeps its state outside its own properties', () => {
+    const opaque = [
+      new URLSearchParams('a=1'),
+      new Headers({ a: '1' }),
+      new Number(1),
+      new Boolean(true),
+      new String('a'),
+      Object(1n),
+      (function* () {})(),
+    ];
+
+    for (const value of opaque) {
+      expect(() => stableStringify({ value })).toThrow(TypeError);
+      expect(() => toStrictJsonValue(value)).toThrow(
+        'is outside the supported JSON domain.',
+      );
+    }
+  });
+
+  it('keeps an iterable object that has a toJSON snapshot', () => {
+    class Tags {
+      constructor(private readonly names: string[]) {}
+      [Symbol.iterator]() {
+        return this.names[Symbol.iterator]();
+      }
+      toJSON() {
+        return this.names;
+      }
+    }
+
+    expect(stableStringify(new Tags(['b', 'a']))).toBe('["b","a"]');
+  });
+
   it('rejects sparse arrays, symbol properties, and undefined values in objects', () => {
     expect(() => stableStringify({ a: 1, optional: undefined })).toThrow(
       /JSON-serializable/,

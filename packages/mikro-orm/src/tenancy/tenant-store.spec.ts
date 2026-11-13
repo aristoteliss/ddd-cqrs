@@ -101,14 +101,41 @@ describe('TenantStore', () => {
     expect(a.em.fork).not.toHaveBeenCalled();
   });
 
-  it('keeps a reused manager with the first tenant that claimed it', () => {
+  it('never reuses a manager without a schema under schema isolation', () => {
     let context: Manager | undefined;
     const shared = fakeOrm(() => context);
     context = shared.manager();
+    const { store } = storeFor({ tenant_a: shared.orm }, 'schema');
+
+    const em = store.em;
+
+    expect(em).not.toBe(context);
+    expect(em).toMatchObject({ schema: 'tenant_a' });
+  });
+
+  it('reuses a contextual manager on the schema of the active tenant only', () => {
+    let context: Manager | undefined;
+    const shared = fakeOrm(() => context);
+    context = shared.manager({ schema: 'tenant_a' });
     const { store, as } = storeFor(
       { tenant_a: shared.orm, tenant_b: shared.orm },
       'schema',
     );
+
+    expect(as('tenant_a', () => store.em)).toBe(context);
+    expect(as('tenant_b', () => store.em)).toMatchObject({
+      schema: 'tenant_b',
+    });
+  });
+
+  it('keeps a reused manager with the first tenant that claimed it', () => {
+    let context: Manager | undefined;
+    const shared = fakeOrm(() => context);
+    context = shared.manager();
+    const { store, as } = storeFor({
+      tenant_a: shared.orm,
+      tenant_b: shared.orm,
+    });
 
     expect(as('tenant_a', () => store.em)).toBe(context);
     expect(as('tenant_b', () => store.em)).not.toBe(context);

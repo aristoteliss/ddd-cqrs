@@ -383,7 +383,7 @@ function setKeyOf<TEntity>(
 /**
  * Writes the save's snapshot under `setKey`: `set` with `isNewer` on an
  * unversioned adapter, a fenced `tryFill` when the key's revision was observed
- * before persistence, and an invalidation otherwise.
+ * before persistence, and an invalidation otherwise or when that fill is rejected.
  */
 async function writeThrough<TEntity>(
   run: CacheMaintenance<TEntity>,
@@ -404,9 +404,15 @@ async function writeThrough<TEntity>(
       // Skip the write-through when the snapshot observed before
       // persistence is already newer; otherwise commit it only if
       // the revision still matches, so a concurrent mutation wins.
-      await cache.tryFill(setKey, observed.revision, snapshot as never, {
-        ttl,
-      });
+      const committed = await cache.tryFill(
+        setKey,
+        observed.revision,
+        snapshot as never,
+        { ttl },
+      );
+      // A rejected fill means the key changed during the write, possibly to
+      // a reader's pre-write snapshot; drop it instead of serving it.
+      if (!committed) await cache.invalidate(setKey);
     }
   } catch (err) {
     safeWarn(

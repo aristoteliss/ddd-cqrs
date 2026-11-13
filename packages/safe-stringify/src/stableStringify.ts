@@ -23,6 +23,9 @@ export type StrictJsonValue =
  * - Object keys are optionally sorted recursively for deterministic serialization.
  * - Unsupported types (non-finite numbers, `Map`, `Set`, `Error`, `RegExp`,
  *   binary buffers, promises, symbols, and sparse arrays) throw a {@link TypeError}.
+ * - A boxed primitive, or an iterable object that is not an array and has no
+ *   `toJSON()` (`URLSearchParams`, `Headers`), throws a {@link TypeError}: its
+ *   state is not in its own properties.
  * - Cyclic references are detected via a `WeakSet` and throw a {@link TypeError}.
  *
  * @param value The value to normalize.
@@ -102,6 +105,12 @@ function normalizeObject(
     }
   }
 
+  if (isOpaqueObject(value)) {
+    throw new TypeError(
+      `${value.constructor?.name || 'Object'} is outside the supported JSON domain.`,
+    );
+  }
+
   if (Object.getOwnPropertySymbols(value).length > 0) {
     throw new TypeError(
       'Symbol-keyed properties are outside the supported JSON domain.',
@@ -165,6 +174,21 @@ function isUnsupportedObject(value: object): boolean {
 }
 
 /**
+ * A boxed primitive or a non-array iterable (`URLSearchParams`, `Headers`, a
+ * generator): its state is not in its own properties, so two different values
+ * would both normalize to `{}`.
+ */
+function isOpaqueObject(value: object): boolean {
+  return (
+    value instanceof Number ||
+    value instanceof Boolean ||
+    value instanceof String ||
+    value instanceof BigInt ||
+    (!Array.isArray(value) && Symbol.iterator in value)
+  );
+}
+
+/**
  * Deterministically serializes a value to a JSON string with lexicographically
  * sorted object keys, for cache keys, idempotency fingerprints and snapshots.
  *
@@ -180,7 +204,8 @@ function isUnsupportedObject(value: object): boolean {
  * - Object keys are sorted recursively.
  * - Unsupported types (`undefined`, `bigint`, symbols, functions, non-finite
  *   numbers, `Map`, `Set`, `Error`, `RegExp`, binary buffers, promises,
- *   symbol-keyed properties and sparse arrays) throw a {@link TypeError}.
+ *   symbol-keyed properties, sparse arrays, boxed primitives and iterable
+ *   objects without `toJSON()`, such as `URLSearchParams`) throw a {@link TypeError}.
  * - Cyclic references are detected via a `WeakSet` and throw a {@link TypeError}.
  *
  * @param value The value to serialize.

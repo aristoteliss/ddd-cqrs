@@ -11,21 +11,21 @@ import { definedFields, defineHidden } from './request-fields.helper.js';
  * payload. They are stored as non-enumerable properties so Zod validation and
  * cache-key serialization operate only on the query payload.
  *
- * @typeParam TSessionUser - Application-specific principal/session metadata type.
+ * @typeParam TSessionPrincipal - Application-specific principal/session metadata type.
  *
  * @example
  * ```ts
- * export class GetUserQuery extends BaseQuery<SessionUser> {
+ * export class GetUserQuery extends BaseQuery<SessionPrincipal> {
  *   constructor(
  *     public readonly id: string,
  *     options?: Partial<IQueryOptions>,
- *     sessionUser?: SessionUser,
+ *     sessionPrincipal?: SessionPrincipal,
  *   ) {
- *     super(options, sessionUser);
+ *     super(options, sessionPrincipal);
  *   }
  * }
  *
- * const query = new GetUserQuery(userId, { hydrate: true }, sessionUser);
+ * const query = new GetUserQuery(userId, { hydrate: true }, sessionPrincipal);
  * ```
  */
 export abstract class BaseQuery<TSessionPrincipal = unknown>
@@ -34,7 +34,6 @@ export abstract class BaseQuery<TSessionPrincipal = unknown>
   declare public readonly hydrate?: boolean;
   declare public readonly refresh?: boolean;
   declare public readonly sessionPrincipal?: TSessionPrincipal;
-  declare public readonly sessionUser?: TSessionPrincipal;
 
   /** The kind a pipeline reads from this request: `'query'`. */
   get [REQUEST_KIND](): 'query' {
@@ -49,14 +48,13 @@ export abstract class BaseQuery<TSessionPrincipal = unknown>
     defineHidden(this, 'refresh', options?.refresh ?? false);
     if (sessionPrincipal !== undefined) {
       defineHidden(this, 'sessionPrincipal', sessionPrincipal);
-      defineHidden(this, 'sessionUser', sessionPrincipal);
     }
   }
 
   /**
    * Serializes enumerable query payload fields to a plain object.
    *
-   * `hydrate`, `refresh`, `sessionPrincipal` and `sessionUser` are non-enumerable metadata and stay
+   * `hydrate`, `refresh` and `sessionPrincipal` are non-enumerable metadata and stay
    * out of the payload.
    *
    * @returns The query payload with `undefined` fields omitted.

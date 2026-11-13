@@ -26,6 +26,8 @@ export interface TenantStoreOptions {
  * `em` reuses a contextual manager (a MikroORM `RequestContext` or an active
  * transaction) only when it belongs to the tenant's ORM, configuration, driver
  * and schema and no other tenant claimed it first; otherwise it forks one.
+ * Under `'schema'` isolation the contextual manager must be on the tenant's
+ * schema: one without a schema is never reused.
  * `transactional()` always runs on a fresh fork. Every manager it hands out is
  * recorded to its tenant outside the manager (a `WeakMap`), so a later request
  * for another tenant cannot reuse it; MikroORM objects are never modified.
@@ -95,10 +97,13 @@ export class TenantStore<TManager extends EntityManager = EntityManager>
     tenant: string,
   ): boolean {
     const owner = this.owners.get(context);
+    // Under schema isolation a manager without a schema reads the default
+    // schema, which belongs to no tenant.
+    const schema = this.options.isolation === 'schema' ? tenant : undefined;
     return (
       context !== orm.em &&
       (owner === undefined || owner === tenant) &&
-      (context.schema === undefined || context.schema === tenant) &&
+      (context.schema === schema || context.schema === tenant) &&
       context.config === orm.config &&
       context.getDriver() === orm.em.getDriver()
     );

@@ -5,10 +5,7 @@ import type {
   IWriteSideAggregateRepository,
 } from '@cqrs-ddd/core/application';
 import type { RootEntity, RootEntitySnapshot } from '@cqrs-ddd/core/domain';
-import {
-  CommandRepository,
-  MapPersistenceErrors,
-} from '@cqrs-ddd/core/persistence';
+import { CommandRepository } from '@cqrs-ddd/core/persistence';
 import type { EntityName, FilterQuery } from '@mikro-orm/core';
 import { mapPersistenceError } from '../errors/transient-error.js';
 import type { IEntityManagerSource } from '../interfaces/entity-manager-source.js';
@@ -80,30 +77,16 @@ export abstract class AggregateRepository<
    * @returns Rehydrated aggregate instance, or `null` if not found.
    * @throws {TransientOperationError} If a retryable database connection or driver error occurs.
    */
-  @MapPersistenceErrors<
-    [string],
-    string,
-    never,
-    AggregateRepository<RootEntitySnapshot, RootEntity, unknown>
-  >({
-    entity: ([id]) => id,
-    otherwise(error, id) {
-      return mapPersistenceError(error, `loading ${this.aggregateName} ${id}`);
-    },
-  })
   async findById(id: string): Promise<TEntity | null> {
-    const entity = await this.store.em.findOne(
-      this.entityClass,
-      { id } as FilterQuery<TEntity>,
-      { refresh: true },
-    );
-
-    if (!entity) {
-      return null;
+    try {
+      const entity = await this.store.em.findOne(
+        this.entityClass,
+        { id } as FilterQuery<TEntity>,
+        { refresh: true },
+      );
+      return entity ? this.hydrateFn(entity.toJSON() as TSnapshot) : null;
+    } catch (error) {
+      throw mapPersistenceError(error, `loading ${this.aggregateName} ${id}`);
     }
-
-    const snapshot = entity.toJSON() as TSnapshot;
-
-    return this.hydrateFn(snapshot);
   }
 }

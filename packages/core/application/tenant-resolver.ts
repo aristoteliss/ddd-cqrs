@@ -72,24 +72,3 @@ export function requireTenant(purpose: string, source?: TenantSource): string {
   if (!tenantId) throw new MissingTenantContextError(purpose);
   return tenantId;
 }
-
-/**
- * Returns the tenant for a security-sensitive operation, or fails closed; see
- * {@link requireTenant}, which it calls.
- *
- * @deprecated Use {@link requireTenant}, which takes the required `purpose`
- *   first and the optional `source` last.
- *
- * @example
- * ```ts
- * requireTenantId(ctx, 'users.create idempotency key');
- * // becomes
- * requireTenant('users.create idempotency key', ctx);
- * ```
- */
-export function requireTenantId(
-  source: TenantSource | undefined,
-  purpose: string,
-): string {
-  return requireTenant(purpose, source);
-}

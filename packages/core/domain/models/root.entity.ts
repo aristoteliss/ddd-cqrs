@@ -7,6 +7,10 @@ import { UnknownMutableFieldError } from '../exceptions/unknown-mutable-field.er
 import { RootEntitySnapshot } from '../interfaces/root-entity-snapshot.interface.js';
 import { AggregateRoot } from './aggregate-root.js';
 
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
+
 /**
  * Abstract base entity for DDD domain aggregates and entities.
  *
@@ -92,10 +96,7 @@ export abstract class RootEntity<
     const updatedAt = snapshot?.updatedAt;
     const version = snapshot?.version;
 
-    this._version =
-      typeof version === 'number' && Number.isInteger(version) && version > 0
-        ? version
-        : 1;
+    this._version = isPositiveInteger(version) ? version : 1;
     this._persistedVersion = this._version;
 
     if (
@@ -171,26 +172,21 @@ export abstract class RootEntity<
       return null;
     }
     // biome-ignore lint/complexity/noThisInStatic: Polymorphic static rehydration
-    const targetClass = this as unknown as abstract new (...args: never[]) => T;
-    if (typeof targetClass === 'function') {
-      if (candidate instanceof targetClass) {
+    const target = this as unknown;
+    if (candidate instanceof RootEntity) {
+      if (typeof target !== 'function' || candidate instanceof target) {
         return candidate as T;
       }
-      if (candidate instanceof RootEntity) {
-        const expectedName = targetClass.name || 'TargetEntity';
-        const actualName = candidate.constructor?.name || 'RootEntity';
-        throw new TypeError(
-          `Cannot rehydrate entity: expected instance of ${expectedName}, received incompatible aggregate ${actualName}.`,
-        );
-      }
-    } else if (candidate instanceof RootEntity) {
-      return candidate as T;
+      const expectedName = target.name || 'TargetEntity';
+      const actualName = candidate.constructor?.name || 'RootEntity';
+      throw new TypeError(
+        `Cannot rehydrate entity: expected instance of ${expectedName}, received incompatible aggregate ${actualName}.`,
+      );
     }
 
-    // biome-ignore lint/complexity/noThisInStatic: Polymorphic static rehydration
-    const ctor = this as unknown as { fromJSON(snapshot: TSnapshot): T };
-    if (typeof ctor.fromJSON === 'function') {
-      return ctor.fromJSON(candidate as TSnapshot);
+    const { fromJSON } = target as { fromJSON?(snapshot: TSnapshot): T };
+    if (typeof fromJSON === 'function') {
+      return fromJSON.call(target, candidate as TSnapshot);
     }
     throw new Error('Cannot rehydrate entity: missing fromJSON factory.');
   }
@@ -254,7 +250,7 @@ export abstract class RootEntity<
    * positive integer is ignored.
    */
   private set version(value: number) {
-    if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+    if (isPositiveInteger(value)) {
       this._version = value;
       this._persistedVersion = value;
     }
@@ -316,7 +312,7 @@ export abstract class RootEntity<
    */
   acknowledgePersisted(version?: number): void {
     if (typeof version === 'number') {
-      if (!Number.isInteger(version) || version <= 0) {
+      if (!isPositiveInteger(version)) {
         throw new Error('Persisted version must be a positive integer.');
       }
       this._persistedVersion = version;

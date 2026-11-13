@@ -13,7 +13,6 @@ import { definedFields, defineHidden } from './request-fields.helper.js';
 // biome-ignore lint/suspicious/noExplicitAny: generic session principal default
 export abstract class BaseCommand<TSessionPrincipal = any> {
   declare public readonly sessionPrincipal?: TSessionPrincipal;
-  declare public readonly sessionUser?: TSessionPrincipal;
 
   /** The kind a pipeline reads from this request: `'command'`. */
   get [REQUEST_KIND](): 'command' {
@@ -23,14 +22,13 @@ export abstract class BaseCommand<TSessionPrincipal = any> {
   constructor(sessionPrincipal?: TSessionPrincipal) {
     if (sessionPrincipal !== undefined) {
       defineHidden(this, 'sessionPrincipal', sessionPrincipal);
-      defineHidden(this, 'sessionUser', sessionPrincipal);
     }
   }
 
   /**
    * Serializes enumerable command payload fields to a plain object.
    *
-   * Non-enumerable metadata such as `sessionPrincipal` and `sessionUser` is excluded, and fields whose
+   * Non-enumerable metadata such as `sessionPrincipal` is excluded, and fields whose
    * value is `undefined` are omitted. This makes the result suitable for stable
    * cache/idempotency fingerprinting.
    *

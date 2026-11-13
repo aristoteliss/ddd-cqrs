@@ -17,8 +17,6 @@ import type {
   QueryRepositoryHydration,
 } from '../query-repository.abstract.js';
 
-export { isCacheNewer };
-
 const defaultLogger = consoleCacheLogger('FromCacheDecorator');
 
 const warnedUnversionedAdapters = new WeakSet<object>();

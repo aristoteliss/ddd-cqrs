@@ -139,15 +139,12 @@ export abstract class AggregateRoot<EventBase extends IEvent = IEvent>
     event: T,
     optionsOrIsFromHistory: boolean | ApplyEventOptions = {},
   ): void {
-    const isFromHistory =
-      (typeof optionsOrIsFromHistory === 'boolean'
-        ? optionsOrIsFromHistory
-        : optionsOrIsFromHistory.fromHistory) ?? false;
-
-    const skipHandler =
-      (typeof optionsOrIsFromHistory === 'boolean'
-        ? false
-        : optionsOrIsFromHistory.skipHandler) ?? false;
+    const options =
+      typeof optionsOrIsFromHistory === 'boolean'
+        ? { fromHistory: optionsOrIsFromHistory }
+        : optionsOrIsFromHistory;
+    const isFromHistory = options.fromHistory ?? false;
+    const skipHandler = options.skipHandler ?? false;
 
     if (!isFromHistory && !this.autoCommit) {
       this[INTERNAL_EVENTS].push(event);

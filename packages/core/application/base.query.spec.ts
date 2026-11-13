@@ -10,45 +10,45 @@ class TestUserQuery extends BaseQuery<{ id: string; role: string }> {
   constructor(
     payload: { id: string; filter?: string },
     options?: { hydrate?: boolean },
-    sessionUser?: { id: string; role: string },
+    sessionPrincipal?: { id: string; role: string },
   ) {
-    super(options, sessionUser);
+    super(options, sessionPrincipal);
     this.id = payload.id;
     this.filter = payload.filter;
   }
 }
 
 describe('BaseQuery', () => {
-  it('stores hydrate and sessionUser as non-enumerable properties', () => {
-    const sessionUser = { id: 'usr-1', role: 'admin' };
+  it('stores hydrate and sessionPrincipal as non-enumerable properties', () => {
+    const sessionPrincipal = { id: 'usr-1', role: 'admin' };
     const query = new TestUserQuery(
       { id: '123', filter: 'active' },
       { hydrate: true },
-      sessionUser,
+      sessionPrincipal,
     );
 
     expect(query.hydrate).toBe(true);
-    expect(query.sessionUser).toBe(sessionUser);
+    expect(query.sessionPrincipal).toBe(sessionPrincipal);
 
     const keys = Object.keys(query);
     expect(keys).toContain('id');
     expect(keys).toContain('filter');
     expect(keys).not.toContain('hydrate');
-    expect(keys).not.toContain('sessionUser');
+    expect(keys).not.toContain('sessionPrincipal');
   });
 
   it('defaults hydrate to false when options are omitted', () => {
     const query = new TestUserQuery({ id: '123' });
     expect(query.hydrate).toBe(false);
-    expect(query.sessionUser).toBeUndefined();
+    expect(query.sessionPrincipal).toBeUndefined();
   });
 
   it('serializes only defined enumerable payload fields via toJSON()', () => {
-    const sessionUser = { id: 'usr-1', role: 'admin' };
+    const sessionPrincipal = { id: 'usr-1', role: 'admin' };
     const queryWithFilter = new TestUserQuery(
       { id: '123', filter: 'active' },
       { hydrate: true },
-      sessionUser,
+      sessionPrincipal,
     );
 
     expect(queryWithFilter.toJSON()).toEqual({

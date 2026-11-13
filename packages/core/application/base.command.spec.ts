@@ -10,9 +10,9 @@ class TestUpdateCommand extends BaseCommand<{ id: string; tenant: string }> {
 
   constructor(
     payload: { id: string; name?: string; age?: number | null },
-    sessionUser?: { id: string; tenant: string },
+    sessionPrincipal?: { id: string; tenant: string },
   ) {
-    super(sessionUser);
+    super(sessionPrincipal);
     this.id = payload.id;
     this.name = payload.name;
     this.age = payload.age;
@@ -23,14 +23,14 @@ class TestUpdateCommand extends BaseCommand<{ id: string; tenant: string }> {
 const UPDATABLE_FIELDS = ['name', 'age'] as const;
 
 describe('BaseCommand', () => {
-  it('keeps sessionUser non-enumerable', () => {
+  it('keeps sessionPrincipal non-enumerable', () => {
     const cmd = new TestUpdateCommand(
       { id: '1', name: 'Alice' },
       { id: 'actor-1', tenant: 'tenant' },
     );
 
-    expect(Object.keys(cmd)).not.toContain('sessionUser');
-    expect(cmd.sessionUser).toEqual({ id: 'actor-1', tenant: 'tenant' });
+    expect(Object.keys(cmd)).not.toContain('sessionPrincipal');
+    expect(cmd.sessionPrincipal).toEqual({ id: 'actor-1', tenant: 'tenant' });
   });
 
   it('reports the declared fields the command carries', () => {

@@ -2,11 +2,7 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { MissingTenantContextError } from '../domain/exceptions/missing-tenant-context.exception.js';
-import {
-  requireTenant,
-  requireTenantId,
-  setTenantResolver,
-} from './tenant-resolver.js';
+import { requireTenant, setTenantResolver } from './tenant-resolver.js';
 
 afterEach(() => setTenantResolver(undefined));
 
@@ -65,19 +61,6 @@ describe('requireTenant', () => {
   ])('fails closed for %s', (_label, resolve) => {
     expect(resolve).toThrow(MissingTenantContextError);
     expect(resolve).toThrow('idempotency key');
-  });
-});
-
-describe('requireTenantId', () => {
-  it('resolves exactly as requireTenant with the arguments reversed', () => {
-    setTenantResolver(() => 'resolved');
-
-    expect(requireTenantId({ tenantId: 'ctx' }, 'key')).toBe('ctx');
-    expect(requireTenantId(undefined, 'key')).toBe('resolved');
-    setTenantResolver(undefined);
-    expect(() => requireTenantId(undefined, 'cache key')).toThrow(
-      MissingTenantContextError,
-    );
   });
 });
 

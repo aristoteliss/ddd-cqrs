@@ -48,7 +48,7 @@ export interface PersistedAggregate {
  *   @AcknowledgePersisted<[Role]>({ entity: ([role]) => role })
  *   @MapPersistenceErrors<[Role], Role>({
  *     entity: ([role]) => role,
- *     unique: [{ constraint: 'roles_name_unique', columns: 'roles.name', error: (r) => new UniqueRoleNameException(r) }],
+ *     unique: { name: (role) => new UniqueRoleNameException(role) },
  *   })
  *   async save(role: Role): Promise<RoleSnapshot> {
  *     const snapshot = role.toJSON();
@@ -65,7 +65,7 @@ export interface PersistedAggregate {
  *   @AcknowledgePersisted<[Role]>({ entity: ([role]) => role })
  *   @MapPersistenceErrors<[Role], Role>({
  *     entity: ([role]) => role,
- *     unique: [{ constraint: 'roles_name_unique', columns: 'roles.name', error: (r) => new UniqueRoleNameException(r) }],
+ *     unique: { name: (role) => new UniqueRoleNameException(role) },
  *   })
  *   async save(role: Role): Promise<RoleSnapshot> {
  *     const created = this.store.em.create(Role, role);

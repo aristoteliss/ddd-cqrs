@@ -130,17 +130,36 @@ export abstract class CommandBaseHandler<
     const commandResult = await this.handle(command);
 
     const aggregate = aggregateOf(commandResult);
-
-    if (aggregate) {
-      const events = [...aggregate.getUncommittedEvents()];
-      if (events.length > 0) {
-        const published = this.eventBus.publishAll(events, aggregate);
-        aggregate.uncommit();
-        await published;
-      }
-    }
+    if (aggregate) await this.publishEvents(aggregate);
 
     return commandResult;
+  }
+
+  /**
+   * Publishes the uncommitted events of `aggregate` and clears them from it, as
+   * {@link execute} does for the aggregate that {@link handle} returns.
+   *
+   * Call it only for an aggregate that `handle` saved and does not return: one
+   * it saved before it throws. The events are cleared, so `execute` does not
+   * publish them a second time.
+   *
+   * @param aggregate - A persisted aggregate that still buffers its events.
+   * @throws What the publisher throws or rejects with.
+   *
+   * @example
+   * ```ts
+   * const revoked = await this.sessions.revoke(session);
+   * await this.publishEvents(revoked);
+   * throw new RefreshTokenReuseError();
+   * ```
+   */
+  protected async publishEvents(aggregate: IAggregateRoot): Promise<void> {
+    const events = [...aggregate.getUncommittedEvents()];
+    if (events.length === 0) return;
+
+    const published = this.eventBus.publishAll(events, aggregate);
+    aggregate.uncommit();
+    await published;
   }
 }
 

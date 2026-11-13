@@ -700,6 +700,26 @@ describe('@Cache anti-resurrection against a concurrent write-through', () => {
     expect(await cache.get('user:u-1')).toBeUndefined();
   });
 
+  it('does not leave the older snapshot of a reader that filled the key during the write', async () => {
+    const cache = new MemoryCache<VersionedSnapshot>();
+    const updates = new UpdateRepo(cache);
+    let release!: () => void;
+    updates.persistGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const inFlight = updates.save({ id: 'u-1', version: 2 });
+
+    const observed = await cache.readState('user:u-1');
+    await cache.tryFill('user:u-1', observed.revision, {
+      id: 'u-1',
+      version: 1,
+    });
+    release();
+    await inFlight;
+
+    expect(await cache.get('user:u-1')).toBeUndefined();
+  });
+
   it('evicts the key on every deletion and advances its revision', async () => {
     const cache = new MemoryCache<VersionedSnapshot>();
     const deletes = new DeleteRepo(cache);

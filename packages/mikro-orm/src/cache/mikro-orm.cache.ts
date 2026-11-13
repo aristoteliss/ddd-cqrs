@@ -33,6 +33,51 @@ function readCommittedEntry(em: EntityManager, key: string) {
  * steps commit on their own and never join a surrounding unit of work.
  * `em.fork().transactional(work)` satisfies it.
  */
+function revisionOf(entry: CacheEntry): string {
+  return (entry.revision ?? '0').toString();
+}
+
+/** The fields of a cache row that a write replaces. */
+interface EntryContent {
+  readonly value: string;
+  readonly expiresAt: number | null;
+}
+
+/** Inserts the row of `key` at revision 1; a row that exists is left as it is. */
+async function insertFirst(
+  em: EntityManager,
+  key: string,
+  content: EntryContent,
+): Promise<void> {
+  // `onConflictAction: 'ignore'` keeps a lost insert race from aborting
+  // the surrounding transaction, so the caller can re-read and retry.
+  await em.upsert(
+    CacheEntry,
+    { key, ...content, revision: '1' },
+    { onConflictAction: 'ignore' },
+  );
+}
+
+/**
+ * Replaces the content of `existing` and advances its revision, if no other
+ * writer advanced it first.
+ *
+ * @returns The new revision, or `undefined` when the row changed meanwhile.
+ */
+async function advance(
+  em: EntityManager,
+  existing: CacheEntry,
+  content: EntryContent,
+): Promise<string | undefined> {
+  const revision = (BigInt(revisionOf(existing)) + 1n).toString();
+  const affected = await em.nativeUpdate(
+    CacheEntry,
+    { key: existing.key, revision: existing.revision },
+    { ...content, revision },
+  );
+  return affected > 0 ? revision : undefined;
+}
+
 export interface ITransactionalEntityManagerSource
   extends IEntityManagerSource {
   transactional<T>(work: (em: EntityManager) => Promise<T>): Promise<T>;
@@ -110,7 +155,7 @@ export class MikroOrmCache<T> implements IVersionedCache<T> {
       return { status: 'miss', revision: '0' };
     }
 
-    const revision = (entry.revision ?? '0').toString();
+    const revision = revisionOf(entry);
 
     if (!entry.value) {
       return { status: 'miss', revision };
@@ -145,27 +190,16 @@ export class MikroOrmCache<T> implements IVersionedCache<T> {
     value: T,
     options?: CacheFillOptions,
   ): Promise<boolean> {
-    const ttl = options?.ttl ?? this.defaultTtlMs;
-    const expiresAt = ttl > 0 ? Date.now() + ttl : null;
-    const serialized = JSON.stringify(value);
+    const content = this.contentOf(value, options?.ttl);
 
     return this.store.transactional(async (em) => {
-      const nextRevision = (BigInt(observedRevision) + 1n).toString();
-
-      if (observedRevision === '0') {
-        return fillFirstRevision(em, { key, serialized, expiresAt });
-      }
+      if (observedRevision === '0') return fillFirstRevision(em, key, content);
 
       const affected = await em.nativeUpdate(
         CacheEntry,
         { key, revision: observedRevision },
-        {
-          value: serialized,
-          expiresAt,
-          revision: nextRevision,
-        },
+        { ...content, revision: (BigInt(observedRevision) + 1n).toString() },
       );
-
       return affected > 0;
     });
   }
@@ -182,46 +216,24 @@ export class MikroOrmCache<T> implements IVersionedCache<T> {
    * Stores a value in the relational cache table with transactional CAS concurrency safety.
    */
   async set(key: string, value: T, options?: CacheSetOptions): Promise<void> {
-    const ttl = options?.ttl ?? this.defaultTtlMs;
-    const expiresAt = ttl > 0 ? Date.now() + ttl : null;
+    const content = this.contentOf(value, options?.ttl);
     const isNewer = options?.isNewer;
-    const serialized = JSON.stringify(value);
 
-    const writeWithCas = async (em: EntityManager): Promise<void> => {
+    await this.store.transactional(async (em) => {
       for (let attempt = 0; attempt < MAX_CAS_ATTEMPTS; attempt++) {
         const existing = await readCommittedEntry(em, key);
-
         if (!existing) {
-          await em.upsert(
-            CacheEntry,
-            { key, value: serialized, expiresAt, revision: '1' },
-            { onConflictAction: 'ignore' },
-          );
+          await insertFirst(em, key, content);
           continue;
         }
 
         const cached = isNewer ? this.unexpiredValue(existing, key) : undefined;
         if (isNewer && cached !== undefined && isNewer(cached, value)) return;
-
-        const currentRev = (existing.revision ?? '0').toString();
-        const nextRevision = (BigInt(currentRev) + 1n).toString();
-        const affected = await em.nativeUpdate(
-          CacheEntry,
-          { key, revision: existing.revision },
-          {
-            value: serialized,
-            expiresAt,
-            revision: nextRevision,
-          },
-        );
-
-        if (affected > 0) return;
+        if (await advance(em, existing, content)) return;
       }
 
       throw new CacheCasExhaustedError('set', key);
-    };
-
-    await this.store.transactional(writeWithCas);
+    });
   }
 
   /**
@@ -230,6 +242,13 @@ export class MikroOrmCache<T> implements IVersionedCache<T> {
    */
   async delete(key: string): Promise<void> {
     await this.invalidate(key);
+  }
+
+  private contentOf(value: T, ttl = this.defaultTtlMs): EntryContent {
+    return {
+      value: JSON.stringify(value),
+      expiresAt: ttl > 0 ? Date.now() + ttl : null,
+    };
   }
 
   /**
@@ -262,49 +281,22 @@ async function invalidateEntry(
   em: EntityManager,
   key: string,
 ): Promise<string> {
+  const cleared: EntryContent = { value: '', expiresAt: null };
   for (let attempt = 0; attempt < MAX_CAS_ATTEMPTS; attempt++) {
     const existing = await readCommittedEntry(em, key);
 
     if (!existing) {
-      // `onConflictAction: 'ignore'` keeps a lost insert race from aborting
-      // the surrounding transaction, so the loop can re-read and retry.
-      await em.upsert(
-        CacheEntry,
-        { key, value: '', expiresAt: null, revision: '1' },
-        { onConflictAction: 'ignore' },
-      );
+      await insertFirst(em, key, cleared);
       const inserted = await readCommittedEntry(em, key);
-      if (inserted && (inserted.revision ?? '0').toString() === '1') {
-        return '1';
-      }
+      if (inserted && revisionOf(inserted) === '1') return '1';
       continue;
     }
 
-    const currentRev = (existing.revision ?? '0').toString();
-    const nextRevision = (BigInt(currentRev) + 1n).toString();
-    const affected = await em.nativeUpdate(
-      CacheEntry,
-      { key, revision: existing.revision },
-      {
-        value: '',
-        expiresAt: null,
-        revision: nextRevision,
-      },
-    );
-
-    if (affected > 0) {
-      return nextRevision;
-    }
+    const revision = await advance(em, existing, cleared);
+    if (revision) return revision;
   }
 
   throw new CacheCasExhaustedError('invalidate', key);
-}
-
-/** A value serialized for the row of `key`, and its expiry in Unix ms. */
-interface SerializedEntry {
-  readonly key: string;
-  readonly serialized: string;
-  readonly expiresAt: number | null;
 }
 
 /**
@@ -313,34 +305,19 @@ interface SerializedEntry {
  */
 async function fillFirstRevision(
   em: EntityManager,
-  { key, serialized, expiresAt }: SerializedEntry,
+  key: string,
+  content: EntryContent,
 ): Promise<boolean> {
   const existing = await readCommittedEntry(em, key);
 
   if (!existing) {
-    await em.upsert(
-      CacheEntry,
-      { key, value: serialized, expiresAt, revision: '1' },
-      { onConflictAction: 'ignore' },
-    );
+    await insertFirst(em, key, content);
     const inserted = await readCommittedEntry(em, key);
     // A competing writer won the insert; this fill observed revision 0
     // and must not overwrite it.
-    return inserted !== null && inserted.value === serialized;
+    return inserted !== null && inserted.value === content.value;
   }
 
-  if ((existing.revision ?? '0').toString() === '0') {
-    const affected = await em.nativeUpdate(
-      CacheEntry,
-      { key, revision: existing.revision },
-      {
-        value: serialized,
-        expiresAt,
-        revision: '1',
-      },
-    );
-    return affected > 0;
-  }
-
-  return false;
+  if (revisionOf(existing) !== '0') return false;
+  return (await advance(em, existing, content)) !== undefined;
 }

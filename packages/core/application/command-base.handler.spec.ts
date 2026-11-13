@@ -59,6 +59,44 @@ describe('CommandBaseHandler', () => {
     expect(eventBus.publishAll).not.toHaveBeenCalled();
   });
 
+  it('publishes one time the events of an aggregate that handle saved before it throws', async () => {
+    const eventBus = {
+      publishAll: vi.fn(),
+    } as unknown as IDomainEventPublisher;
+
+    class RevokedSession extends RootEntity {
+      afterUpdate(): void {}
+      toJSON() {
+        return this.freezeState({
+          id: this.id,
+          createdAt: this.createdAt,
+          updatedAt: this.updatedAt,
+        });
+      }
+    }
+    const session = new RevokedSession();
+    session.apply(new OrderCreatedEvent('agg-reuse'));
+    const refusal = new Error('reused');
+
+    class RefusingHandler extends TestableHandler<RevokedSession> {
+      async handle(_command: TestCommand): Promise<RevokedSession> {
+        await this.publishEvents(session);
+        await this.publishEvents(session);
+        throw refusal;
+      }
+    }
+
+    await expect(
+      new RefusingHandler(eventBus).execute({} as TestCommand),
+    ).rejects.toBe(refusal);
+
+    expect(eventBus.publishAll).toHaveBeenCalledExactlyOnceWith(
+      [expect.objectContaining({ orderId: 'agg-reuse' })],
+      session,
+    );
+    expect(session.getUncommittedEvents()).toHaveLength(0);
+  });
+
   it('publishes uncommitted events and uncommits when handle returns AggregateRoot', async () => {
     const eventBus = {
       publishAll: vi.fn(),
