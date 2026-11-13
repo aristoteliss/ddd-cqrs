@@ -6,7 +6,6 @@ import type {
   SessionData,
   SessionPrincipal,
 } from '../../common/types/session-principal.js';
-import type { ISessionCookies } from '../application/ports/session-cookies.port.js';
 import type { AuthResult } from '../application/results/auth.result.js';
 
 export const REFRESH_COOKIE = 'refresh_token';
@@ -32,7 +31,7 @@ type CookieResponse =
       clearCookie: ClearCookie;
     };
 
-export class SessionService implements ISessionCookies {
+export class SessionService {
   /**
    * Writes the cookies of a login or refresh on the current HTTP request, taken
    * from `httpExchangeStore`; outside an HTTP request it does nothing.
@@ -50,9 +49,9 @@ export class SessionService implements ISessionCookies {
    *
    * @example
    * ```ts
-   * // StartAuthHandler, through the SESSION_COOKIES port
-   * this.cookies.save(result);
-   * return result;
+   * // the login route, after StartAuthCommand
+   * session.save(result);
+   * return sessionBody(result);
    * ```
    */
   save(result: AuthResult): void {
@@ -89,8 +88,8 @@ export class SessionService implements ISessionCookies {
    *
    * @example
    * ```ts
-   * // RevokeAuthHandler, through the SESSION_COOKIES port
-   * this.cookies.clear();
+   * // the logout route, after RevokeAuthCommand
+   * session.clear();
    * ```
    */
   clear(): void {

@@ -1,11 +1,12 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
 import { setTenantResolver } from '@cqrs-ddd/core/application';
-import { type Cqrs, createCqrs } from '@cqrs-ddd/cqrs';
+import { type Cqrs, createCqrs, type EventBus } from '@cqrs-ddd/cqrs';
 import { MikroOrmCache } from '@cqrs-ddd/mikro-orm';
 import {
   type GlobalBehaviorsOptions,
   logging,
+  type PipelineLogger,
   pinoLogger,
 } from '@cqrs-ddd/pipeline';
 import { AuditBehavior, LogAuditSink } from '@cqrs-ddd/pipeline-audit';
@@ -184,30 +185,14 @@ export interface App {
   close(): Promise<void>;
 }
 
-/**
- * Builds the application: the database store, the queues and their workers, the
- * behaviors, the buses and every handler with its repositories.
- *
- * @example
- * ```ts
- * const app = await createApp();
- * expressApp({ routes: routes(app), context, logger });
- * ```
- */
-export async function createApp(): Promise<App> {
-  setTenantResolver(currentTenantId);
-
+/** What the application opens first and closes last: the store, the queues and the query cache. */
+async function openInfrastructure() {
   const tenants = new TenantSchemaContext();
   const store = new MikroOrmStore(tenants, logger);
   await store.open();
-  const cache = <T>() =>
-    new MikroOrmCache<T>(store, { logger: mikroOrmCacheLogger });
 
   const redis = redisConfig();
   const connection = { host: redis.host, port: redis.port };
-  const welcomeEmails = new Queue(WELCOME_EMAIL_QUEUE, { connection });
-  const userBatches = new Queue(BATCH_UPDATE_USERS_QUEUE, { connection });
-  const deadLetters = new Queue('dead-letters', { connection });
   const queryCache = buildCache({
     store:
       !redis.isConfigured && process.env.NODE_ENV !== 'production'
@@ -216,66 +201,97 @@ export async function createApp(): Promise<App> {
     ttl: 30_000,
   });
 
-  const sessions = new UpdateAuthCommandRepository(cache(), store);
+  return {
+    tenants,
+    store,
+    connection,
+    queryCache,
+    cache: <T>() =>
+      new MikroOrmCache<T>(store, { logger: mikroOrmCacheLogger }),
+    welcomeEmails: new Queue(WELCOME_EMAIL_QUEUE, { connection }),
+    userBatches: new Queue(BATCH_UPDATE_USERS_QUEUE, { connection }),
+    deadLetters: new Queue('dead-letters', { connection }),
+  };
+}
+
+type Infrastructure = Awaited<ReturnType<typeof openInfrastructure>>;
+
+/** The repositories and services that more than one handler, or the workers, share. */
+function sharedServices({ cache, store }: Infrastructure) {
   const permissionRules = new GetUserPermissionRulesQueryRepository(
     cache(),
     store,
   );
-  const authByTokenHash = new GetAuthByTokenHashQueryRepository(cache(), store);
-  const refreshTokens = new NodeRefreshTokens();
-  const cookies = new SessionService();
+  const sessions = new UpdateAuthCommandRepository(cache(), store);
+  const user = new GetUserQueryRepository(cache(), store);
   const policy: AuthTokenPolicy = {
     refreshTokenTtlSeconds: REFRESH_TOKEN_TTL_SECONDS,
     refreshReuseGraceSeconds: REFRESH_REUSE_GRACE_SECONDS,
     embedPermissions: PERMISSIONS_IN_ACCESS_TOKEN,
   };
 
-  const log = pinoLogger(logger);
-  const cqrs = createCqrs({
-    logger: log,
-    sources: { tenantId: tenantSource, correlationId: correlationSource },
-    behaviors: [
-      new CaslBehavior(new CaslPermissionSource(store, permissionRules)),
-      new FeatureFlagBehavior(
-        await createFeatureFlagClient(FEATURE_FLAGS),
-        undefined,
-        { environment: process.env.NODE_ENV ?? 'development' },
-        log,
-      ),
-      new RateLimitBehavior(
-        new RateLimiterMemory(RATE_LIMIT_CAPACITY),
-        undefined,
-        log,
-      ),
-      new MetricsBehavior(log),
-      new IdempotencyBehavior(new MemoryIdempotencyStore(), undefined, log),
-      new CacheBehavior(queryCache, undefined, log),
-      new AuditBehavior(new LogAuditSink({ logger: log }), AUDIT_DEFAULTS, log),
-      new ResilienceBehavior(undefined, log),
-      new DeadLetterBehavior(
-        new BullMqDeadLetterTransport(deadLetters),
-        DEAD_LETTER_DEFAULTS,
-        log,
-      ),
-    ],
-    globalBehaviors: GLOBAL_BEHAVIORS,
-  });
-
-  const authorizer = new CaslAuthorizer();
-  const { eventBus } = cqrs;
-  const user = new GetUserQueryRepository(cache(), store);
-  const roles = new GetRolesQueryRepository(store);
-  const logins = new PrincipalLoginService(
-    user,
-    new SharedDemoLoginCodeVerifier(),
-    new JoseAccessTokenIssuer(
-      logger.child({ context: JoseAccessTokenIssuer.name }),
-    ),
-    policy,
+  return {
     permissionRules,
     sessions,
-  );
-  cqrs.register(
+    user,
+    policy,
+    roles: new GetRolesQueryRepository(store),
+    authByTokenHash: new GetAuthByTokenHashQueryRepository(cache(), store),
+    refreshTokens: new NodeRefreshTokens(),
+    cookies: new SessionService(),
+    authorizer: new CaslAuthorizer(),
+    logins: new PrincipalLoginService(
+      user,
+      new SharedDemoLoginCodeVerifier(),
+      new JoseAccessTokenIssuer(
+        logger.child({ context: JoseAccessTokenIssuer.name }),
+      ),
+      policy,
+      permissionRules,
+      sessions,
+    ),
+  };
+}
+
+type Services = ReturnType<typeof sharedServices>;
+
+/** One instance of each behavior that needs a dependency. */
+async function behaviors(
+  log: PipelineLogger,
+  { store, queryCache, deadLetters }: Infrastructure,
+  { permissionRules }: Services,
+) {
+  return [
+    new CaslBehavior(new CaslPermissionSource(store, permissionRules)),
+    new FeatureFlagBehavior(
+      await createFeatureFlagClient(FEATURE_FLAGS),
+      { baseContext: { environment: process.env.NODE_ENV ?? 'development' } },
+      log,
+    ),
+    new RateLimitBehavior(
+      new RateLimiterMemory(RATE_LIMIT_CAPACITY),
+      undefined,
+      log,
+    ),
+    new MetricsBehavior(log),
+    new IdempotencyBehavior(new MemoryIdempotencyStore(), undefined, log),
+    new CacheBehavior(queryCache, undefined, log),
+    new AuditBehavior(new LogAuditSink({ logger: log }), AUDIT_DEFAULTS, log),
+    new ResilienceBehavior(undefined, log),
+    new DeadLetterBehavior(
+      new BullMqDeadLetterTransport(deadLetters),
+      DEAD_LETTER_DEFAULTS,
+      log,
+    ),
+  ];
+}
+
+function roleHandlers(
+  { cache, store }: Infrastructure,
+  { roles, authorizer }: Services,
+  eventBus: EventBus,
+) {
+  return [
     new GetRoleHandler(new GetRoleQueryRepository(cache(), store), authorizer),
     new GetRolesHandler(roles, authorizer),
     new CreateRoleHandler(
@@ -293,6 +309,15 @@ export async function createApp(): Promise<App> {
       authorizer,
       eventBus,
     ),
+  ];
+}
+
+function userHandlers(
+  { cache, store, welcomeEmails, userBatches }: Infrastructure,
+  { user, roles, authorizer }: Services,
+  eventBus: EventBus,
+) {
+  return [
     new GetUserHandler(user, authorizer),
     new GetUsersHandler(new GetUsersQueryRepository(store), authorizer),
     new GetUserOverviewHandler(
@@ -318,32 +343,40 @@ export async function createApp(): Promise<App> {
     ),
     new UserCreatedHandler(new BullMqWelcomeEmailDispatcher(welcomeEmails)),
     new UserUpdatedHandler(new BullMqUserBatchDispatcher(userBatches)),
+  ];
+}
+
+function authHandlers(
+  { cache, store }: Infrastructure,
+  services: Services,
+  eventBus: EventBus,
+) {
+  const { authByTokenHash, refreshTokens, logins } = services;
+  return [
     new StartAuthHandler(
       eventBus,
       logins,
       new StartAuthCommandRepository(cache(), store),
       refreshTokens,
-      policy,
-      cookies,
+      services.policy,
     ),
     new RefreshAuthHandler(
       eventBus,
       authByTokenHash,
       new GetAuthByConsumedTokenHashQueryRepository(cache(), store),
       refreshTokens,
-      cookies,
       logins,
     ),
-    new RevokeAuthHandler(
-      eventBus,
-      authByTokenHash,
-      refreshTokens,
-      cookies,
-      logins,
-    ),
-    new GetUserPermissionRulesHandler(permissionRules),
-  );
+    new RevokeAuthHandler(eventBus, authByTokenHash, refreshTokens, logins),
+    new GetUserPermissionRulesHandler(services.permissionRules),
+  ];
+}
 
+/** Starts the job workers; the result stops them and unregisters their job context. */
+function startWorkers(
+  { tenants, connection }: Infrastructure,
+  { sessions, user }: Services,
+) {
   const unregisterJobContext = registerJobContext({
     principal: new SessionJobPrincipal(sessions, user),
     tenants: persistenceConfig().tenants,
@@ -366,6 +399,14 @@ export async function createApp(): Promise<App> {
     }),
   ];
 
+  return {
+    unregisterJobContext,
+    stop: () => Promise.all(workers.map((worker) => worker.close())),
+  };
+}
+
+/** Authenticates the caller of every route from a session cookie, a bearer token or an API key. */
+function authentication({ cookies }: Services): Around {
   const resolver = new RequestPrincipalResolver(
     new JwtAuthenticator(logger.child({ context: JwtAuthenticator.name })),
     new ApiClientAuthenticator(
@@ -373,18 +414,52 @@ export async function createApp(): Promise<App> {
     ),
     cookies,
   );
+  return authenticate(resolver);
+}
+
+/**
+ * Builds the application: the database store, the queues and their workers, the
+ * behaviors, the buses and every handler with its repositories.
+ *
+ * @example
+ * ```ts
+ * const app = await createApp();
+ * expressApp({ routes: routes(app), context, logger });
+ * ```
+ */
+export async function createApp(): Promise<App> {
+  setTenantResolver(currentTenantId);
+
+  const infrastructure = await openInfrastructure();
+  const services = sharedServices(infrastructure);
+  const log = pinoLogger(logger);
+  const cqrs = createCqrs({
+    logger: log,
+    sources: { tenantId: tenantSource, correlationId: correlationSource },
+    behaviors: await behaviors(log, infrastructure, services),
+    globalBehaviors: GLOBAL_BEHAVIORS,
+  });
+  cqrs.register(
+    ...roleHandlers(infrastructure, services, cqrs.eventBus),
+    ...userHandlers(infrastructure, services, cqrs.eventBus),
+    ...authHandlers(infrastructure, services, cqrs.eventBus),
+  );
+  const workers = startWorkers(infrastructure, services);
+
+  const { store, queryCache, welcomeEmails, userBatches, deadLetters } =
+    infrastructure;
 
   return {
     cqrs,
-    tenants,
-    around: authenticate(resolver),
+    tenants: infrastructure.tenants,
+    around: authentication(services),
     close: async () => {
-      await Promise.all(workers.map((worker) => worker.close()));
+      await workers.stop();
       await cqrs.close();
       await Promise.all(
         [welcomeEmails, userBatches, deadLetters].map((queue) => queue.close()),
       );
-      unregisterJobContext();
+      workers.unregisterJobContext();
       await queryCache.disconnect();
       await releaseFeatureFlagProvider(FEATURE_FLAGS);
       await store.close();

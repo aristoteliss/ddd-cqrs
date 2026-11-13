@@ -31,7 +31,7 @@ describe.each(['express', 'fastify'] as const)(
         .set('x-test-user', admin)
         .send({
           email: `denials-${adapter}-${Date.now()}@acme.test`,
-          name: 'Denial Target',
+          username: 'Denial Target',
           department: 'engineering',
         });
       expect(created.status).toBe(201);

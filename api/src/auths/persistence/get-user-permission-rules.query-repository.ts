@@ -7,7 +7,6 @@ import {
   QueryRepository,
 } from '@cqrs-ddd/core/persistence';
 import type { Capability } from '@cqrs-ddd/pipeline-casl';
-import { getSessionPrincipal } from '../../common/context/session-principal.store.js';
 import { cacheReadLogger } from '../../persistence/cache/cache-loggers.js';
 import { UserPermissionRule } from '../../persistence/entities/user-permission-rule.entity.js';
 import { MikroOrmStore } from '../../persistence/mikro-orm.store.js';
@@ -48,12 +47,7 @@ export class GetUserPermissionRulesQueryRepository extends QueryRepository<
    */
   @FromCache<GetUserPermissionRulesQuery, Capability[]>({
     logger: cacheReadLogger,
-    keyFn: (q) =>
-      cacheKey(
-        'user_permission_rules',
-        buildConditions(q),
-        getSessionPrincipal()?.tenant,
-      ),
+    keyFn: (q) => cacheKey('user_permission_rules', buildConditions(q)),
   })
   async find(query: GetUserPermissionRulesQuery): Promise<Capability[]> {
     const rows = await this.store.em.find(

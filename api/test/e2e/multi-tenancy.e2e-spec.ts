@@ -53,7 +53,7 @@ describe.each(ADAPTERS)('multi-tenancy (e2e) on %s', (adapter) => {
       const res = await request(http)
         .post('/users')
         .set('x-test-user', admin)
-        .send({ email: newEmail(), name: 'Missing Tenant' });
+        .send({ email: newEmail(), username: 'Missing Tenant' });
 
       expect(res.status).toBe(403);
       expect(res.body).toMatchObject({
@@ -111,7 +111,7 @@ describe.each(ADAPTERS)('multi-tenancy (e2e) on %s', (adapter) => {
         .post('/users')
         .set('x-tenant-schema', 'tenant_a')
         .set('x-test-user', admin)
-        .send({ email, name: 'Tenant A User', department: 'engineering' });
+        .send({ email, username: 'Tenant A User', department: 'engineering' });
 
       expect(createResA.status).toBe(201);
       const userAId = createResA.body.id;
@@ -126,7 +126,7 @@ describe.each(ADAPTERS)('multi-tenancy (e2e) on %s', (adapter) => {
       expect(getResA.body).toMatchObject({
         id: userAId,
         email,
-        name: 'Tenant A User',
+        username: 'Tenant A User',
       });
 
       // 3. Fetching the same user ID in tenant_b must return 404 (no cache bleed)
@@ -165,11 +165,11 @@ describe.each(ADAPTERS)('multi-tenancy (e2e) on %s', (adapter) => {
         .post('/users')
         .set('x-tenant-schema', 'tenant_b')
         .set('x-test-user', admin)
-        .send({ email, name: 'Tenant B User', department: 'marketing' });
+        .send({ email, username: 'Tenant B User', department: 'marketing' });
 
       expect(createResB.status).toBe(201);
       expect(createResB.body.id).not.toBe(userAId);
-      expect(createResB.body.name).toBe('Tenant B User');
+      expect(createResB.body.username).toBe('Tenant B User');
 
       // 7. Listing in tenant_a should NOT contain userB
       const listResAAfter = await request(http)

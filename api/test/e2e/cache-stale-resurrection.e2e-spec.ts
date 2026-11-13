@@ -53,7 +53,7 @@ describe.each(ADAPTERS)(
           .post('/users')
           .set('x-tenant-schema', 'tenant')
           .set('x-test-user', admin)
-          .send({ email, name: 'To Be Deleted' });
+          .send({ email, username: 'To Be Deleted' });
 
         expect(createRes.status).toBe(201);
         const userId = createRes.body.id;
@@ -131,7 +131,7 @@ describe.each(ADAPTERS)(
           .post('/users')
           .set('x-tenant-schema', 'tenant')
           .set('x-test-user', admin)
-          .send({ email, name: 'Version 1 User' });
+          .send({ email, username: 'Version 1 User' });
 
         expect(createRes.status).toBe(201);
         const userId = createRes.body.id;
@@ -172,7 +172,7 @@ describe.each(ADAPTERS)(
                   .patch(`/users/${userId}`)
                   .set('x-tenant-schema', 'tenant')
                   .set('x-test-user', admin)
-                  .send({ name: 'Version 2 User' });
+                  .send({ username: 'Version 2 User' });
                 expect(updateRes.status).toBe(200);
               }
               return result;
@@ -185,7 +185,7 @@ describe.each(ADAPTERS)(
 
           expect(readRes.status).toBe(200);
           // Reader must have received version 2 (via CAS comparison or retry), never stale version 1!
-          expect(readRes.body.name).toBe('Version 2 User');
+          expect(readRes.body.username).toBe('Version 2 User');
         } finally {
           EntityManager.prototype.findOne = origFindOne;
         }
@@ -204,7 +204,7 @@ describe.each(ADAPTERS)(
           .post('/users')
           .set('x-tenant-schema', 'tenant')
           .set('x-test-user', admin)
-          .send({ email, name: 'Secondary Key User' });
+          .send({ email, username: 'Secondary Key User' });
 
         expect(createRes.status).toBe(201);
         const userId = createRes.body.id;
@@ -277,7 +277,7 @@ describe.each(ADAPTERS)(
           // the concurrent creation and returned 200 with the hydrated user!
           expect(readRes.status).toBe(200);
           expect(readRes.body.id).toBe(syntheticId);
-          expect(readRes.body.name).toBe('Concurrent Created User');
+          expect(readRes.body.username).toBe('Concurrent Created User');
         } finally {
           EntityManager.prototype.findOne = origFindOne;
         }

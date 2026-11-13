@@ -32,7 +32,7 @@ describe.each(ADAPTERS)(
     it('maps an unknown user update to the existing HTTP 404 contract', async () => {
       const response = await authed(
         request(http).patch(`/users/${randomUUID()}`),
-      ).send({ name: 'Missing User' });
+      ).send({ username: 'Missing User' });
 
       expect(response.status).toBe(404);
       expect(response.body).toMatchObject({

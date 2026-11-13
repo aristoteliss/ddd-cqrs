@@ -1,11 +1,7 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
 import { ICache } from '@cqrs-ddd/core/application';
-import {
-  Cache,
-  cacheKey,
-  MapPersistenceErrors,
-} from '@cqrs-ddd/core/persistence';
+import { Cache, MapPersistenceErrors } from '@cqrs-ddd/core/persistence';
 import {
   AggregateRepository,
   mapPersistenceError,
@@ -14,6 +10,7 @@ import {
 import { cacheWriteLogger } from '../../persistence/cache/cache-loggers.js';
 import { MikroOrmStore } from '../../persistence/mikro-orm.store.js';
 import { Role, RoleSnapshot } from '../domain/models/role.entity.js';
+import { roleCacheKeys } from './role.cache-keys.js';
 
 export class DeleteRoleCommandRepository extends AggregateRepository<
   RoleSnapshot,
@@ -26,10 +23,7 @@ export class DeleteRoleCommandRepository extends AggregateRepository<
 
   @Cache<Role, null>({
     logger: cacheWriteLogger,
-    deleteKeys: (role) => [
-      cacheKey(Role.aggregateName, { id: role.id }),
-      cacheKey(Role.aggregateName, { name: role.name }),
-    ],
+    deleteKeys: roleCacheKeys.all,
   })
   @MapPersistenceErrors<[Role], Role>({
     entity: ([role]) => role,

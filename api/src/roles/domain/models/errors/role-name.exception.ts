@@ -3,16 +3,10 @@ import { DomainException, InvalidValueException } from '@cqrs-ddd/core/domain';
 import { Role } from '../role.entity.js';
 
 export class UniqueRoleNameException extends DomainException {
-  readonly role?: Role | string;
+  readonly role: Role;
 
-  constructor(role?: Role | string, message?: string) {
-    const roleName = typeof role === 'string' ? role : role?.name;
-    const msg =
-      message ??
-      (roleName
-        ? `Role with name "${roleName}" already exists`
-        : 'Role name must be unique');
-    super(msg);
+  constructor(role: Role) {
+    super(`Role with name "${role.name}" already exists`);
     this.role = role;
   }
 }

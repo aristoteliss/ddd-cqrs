@@ -8,14 +8,11 @@ import {
 import type { Job } from 'bullmq';
 import type { Logger } from 'pino';
 import type { TenantSchemaContext } from '../../persistence/tenant-schema.context.js';
+import type { WelcomeEmailDispatch } from '../application/ports/user-event-dispatcher.port.js';
 
 export const WELCOME_EMAIL_QUEUE = 'welcome-email';
 
-export type WelcomeEmailJobData = WithJobContext<{
-  userId: string;
-  username: string;
-  email: string;
-}>;
+export type WelcomeEmailJobData = WithJobContext<WelcomeEmailDispatch>;
 
 export interface SimulatedWelcomeEmailResult {
   readonly simulated: true;

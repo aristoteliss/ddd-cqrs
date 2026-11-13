@@ -1,16 +1,17 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
 import type { Cqrs } from '@cqrs-ddd/cqrs';
-import { UnauthorizedActionException } from '@cqrs-ddd/pipeline-casl';
 import { z } from 'zod';
+import type { WriteResult } from '../common/authorization/readable.js';
 import { HEADERS } from '../common/constants/headers.constants.js';
 import { HttpError } from '../http/http-error.js';
+import { readAfterWrite } from '../http/read-after-write.js';
 import { type Route, route } from '../http/route.js';
 import { CreateUserCommand } from './application/cqrs/commands/create-user.command.js';
 import { DeleteUserCommand } from './application/cqrs/commands/delete-user.command.js';
 import {
-  EMPTY_USER_UPDATE_MESSAGE,
   UpdateUserCommand,
+  UserChangesSchema,
 } from './application/cqrs/commands/update-user.command.js';
 import { GetUserQuery } from './application/cqrs/queries/get-user.query.js';
 import { GetUserOverviewQuery } from './application/cqrs/queries/get-user-overview.query.js';
@@ -21,61 +22,25 @@ import type { User } from './domain/models/user.entity.js';
 
 const UserId = z.object({ id: z.uuid() });
 
-const NewUser = z.object({
-  email: CreateUserCommand.schema.shape.email,
-  name: CreateUserCommand.schema.shape.username,
-  department: CreateUserCommand.schema.shape.department,
-});
+const NewUser = CreateUserCommand.schema.omit({ idempotencyKey: true });
 
 const UserBody = z.object({
-  id: z.string().optional(),
-  email: z.string().optional(),
-  name: z.string().optional(),
-  department: z.string().nullable().optional(),
-});
-
-const OverviewBody = z.object({
   id: z.string().optional(),
   username: z.string().optional(),
   email: z.string().optional(),
   department: z.string().nullable().optional(),
+});
+
+const OverviewBody = UserBody.extend({
   roles: z.array(z.string().nullable()).optional(),
   capabilities: z.array(z.string().nullable()).optional(),
 });
 
-const { username, department } = UpdateUserCommand.schema.shape;
-
-const UserChanges = z
-  .object({ name: username, department })
-  .refine(
-    (value) => value.name !== undefined || value.department !== undefined,
-    { message: EMPTY_USER_UPDATE_MESSAGE },
-  );
-
 /**
- * The answer body of a user: its `username` named `name`, and only the fields the
- * caller may read.
- *
- * @example
- * ```ts
- * userBody({ id, username: 'ann' }); // { id, name: 'ann' }
- * ```
- */
-export function userBody(user: UserReadModel) {
-  return {
-    ...(user.id !== undefined ? { id: user.id } : {}),
-    ...(user.email !== undefined ? { email: user.email } : {}),
-    ...(user.username !== undefined ? { name: user.username } : {}),
-    ...(user.department !== undefined
-      ? { department: user.department ?? null }
-      : {}),
-  };
-}
-
-/**
- * The `/users` routes: list, read, overview, create, update and delete, each one command
- * or query on the buses. A write answers with the user as far as the caller may read it
- * afterwards.
+ * The `/users` routes: list, read, overview, create, update and delete. A write answers
+ * with the user as far as the caller may read it: an update from its command result, and
+ * a create from a read after the write, because an idempotent replay must answer the
+ * current user.
  *
  * @example
  * ```ts
@@ -91,28 +56,17 @@ export function userRoutes({
       new GetUserQuery({ userId }, { hydrate }),
     );
 
-  const readAfterWrite = async (userId: string) => {
-    try {
-      const user = await find(userId);
-      return user ? userBody(user) : {};
-    } catch (error) {
-      if (error instanceof UnauthorizedActionException) return {};
-      throw error;
-    }
-  };
-
   return [
     route({
       method: 'GET',
       path: '/users',
       summary: 'The users the caller may read.',
       response: z.object({ users: z.array(UserBody) }),
-      handle: async () => {
-        const users = await queryBus.execute<GetUsersQuery, UserReadModel[]>(
+      handle: async () => ({
+        users: await queryBus.execute<GetUsersQuery, UserReadModel[]>(
           new GetUsersQuery({}),
-        );
-        return { users: users.map(userBody) };
-      },
+        ),
+      }),
     }),
     route({
       method: 'GET',
@@ -124,7 +78,7 @@ export function userRoutes({
         const user = await find(params.id, true);
         if (!user) throw new HttpError(404, 'User not found');
 
-        return userBody(user);
+        return user;
       },
     }),
     route({
@@ -154,36 +108,28 @@ export function userRoutes({
 
         const { id } = await commandBus.execute<CreateUserCommand, User>(
           new CreateUserCommand({
-            username: body.name,
-            email: body.email,
-            ...(body.department !== undefined
-              ? { department: body.department }
-              : {}),
+            ...body,
             ...(typeof idempotencyKey === 'string' ? { idempotencyKey } : {}),
           }),
         );
 
-        return readAfterWrite(id);
+        return readAfterWrite(() => find(id));
       },
     }),
     route({
       method: 'PATCH',
       path: '/users/:id',
       params: UserId,
-      body: UserChanges,
+      body: UserChangesSchema,
       summary: 'Updates a user; answers it as far as the caller may read it.',
       response: UserBody,
       handle: async ({ params, body }) => {
-        await commandBus.execute(
-          new UpdateUserCommand({
-            id: params.id,
-            ...(body.name !== undefined ? { username: body.name } : {}),
-            ...(body.department !== undefined
-              ? { department: body.department }
-              : {}),
-          }),
-        );
-        return readAfterWrite(params.id);
+        const { read } = await commandBus.execute<
+          UpdateUserCommand,
+          WriteResult<User, UserReadModel>
+        >(new UpdateUserCommand({ id: params.id, ...body }));
+
+        return read ?? {};
       },
     }),
     route({

@@ -11,11 +11,16 @@ import { AUDIT_SEVERITY, audit } from '@cqrs-ddd/pipeline-audit';
 import { CaslAuthorizer, requires } from '@cqrs-ddd/pipeline-casl';
 import { targetMetadata } from '../../../../common/audit/audit.options.js';
 import {
+  readable,
+  type WriteResult,
+} from '../../../../common/authorization/readable.js';
+import {
   APP_ACTIONS,
   APP_SUBJECTS,
   AUDIT_ACTIONS,
 } from '../../../../common/constants/index.js';
 import type { User } from '../../../domain/models/user.entity.js';
+import { projectUserRead, type UserReadModel } from '../../user-read-model.js';
 import { UpdateUserCommand } from './update-user.command.js';
 
 @CommandHandler(UpdateUserCommand)
@@ -29,7 +34,7 @@ import { UpdateUserCommand } from './update-user.command.js';
 )
 export class UpdateUserHandler extends CommandBaseHandler<
   UpdateUserCommand,
-  User
+  WriteResult<User, UserReadModel>
 > {
   constructor(
     private readonly commandRepository: IWriteSideAggregateRepository<User>,
@@ -39,7 +44,9 @@ export class UpdateUserHandler extends CommandBaseHandler<
     super(eventBus);
   }
 
-  async handle(command: UpdateUserCommand): Promise<User> {
+  async handle(
+    command: UpdateUserCommand,
+  ): Promise<WriteResult<User, UserReadModel>> {
     const { id, username, department } = command;
 
     const user = await this.commandRepository.findById(id);
@@ -57,6 +64,9 @@ export class UpdateUserHandler extends CommandBaseHandler<
 
     await this.commandRepository.save(user);
 
-    return user;
+    return {
+      aggregate: user,
+      read: readable(() => projectUserRead(this.authorizer, user)),
+    };
   }
 }

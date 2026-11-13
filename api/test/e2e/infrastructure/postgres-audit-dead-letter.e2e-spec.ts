@@ -230,6 +230,64 @@ describe('PostgresDeadLetterTransport against PostgreSQL', () => {
     ).resolves.toEqual([]);
   });
 
+  it('gives the claim of an open record to one of several callers', async () => {
+    const store = new PostgresDeadLetterTransport(pool);
+    const captured = record('dl-claim');
+    await store.send(captured);
+
+    const claims = await Promise.all(
+      Array.from({ length: 8 }, () => store.claim(captured.id, 60_000)),
+    );
+    expect(claims.filter(Boolean)).toHaveLength(1);
+
+    await store.recordAttempt(captured.id, { name: 'Error', message: 'again' });
+    await expect(store.claim(captured.id, 0)).resolves.toBe(true);
+    await expect(store.claim(captured.id, 60_000)).resolves.toBe(true);
+
+    await store.markResolved(captured.id);
+    await expect(store.claim(captured.id, 60_000)).resolves.toBe(false);
+    await expect(store.claim(uuidv7(), 60_000)).resolves.toBe(false);
+  });
+
+  it('adds the claim column to a table created without it', async () => {
+    await pool.query(createDeadLetterTableSql('old_dead_letters'));
+    await pool.query(
+      'ALTER TABLE old_dead_letters DROP COLUMN claimed_until, DROP COLUMN tenant_id',
+    );
+
+    await pool.query(createDeadLetterTableSql('old_dead_letters'));
+
+    const store = new PostgresDeadLetterTransport(pool, {
+      table: 'old_dead_letters',
+    });
+    const captured = record('dl-old-table');
+    await store.send(captured);
+    await expect(store.claim(captured.id, 60_000)).resolves.toBe(true);
+    await expect(store.list({ tenantId: 'tenant-a' })).resolves.toHaveLength(1);
+  });
+
+  it('lists the records of one tenant', async () => {
+    const store = new PostgresDeadLetterTransport(pool);
+    await store.send(
+      record('dl-tenant-b', {
+        requestName: 'TenantListEvent',
+        tenantId: 'tenant-b',
+        metadata: undefined,
+      }),
+    );
+    await store.send(record('dl-tenant-a', { requestName: 'TenantListEvent' }));
+
+    const listed = await store.list({
+      requestName: 'TenantListEvent',
+      tenantId: 'tenant-b',
+    });
+
+    expect(listed.map((found) => found.tenantId)).toEqual(['tenant-b']);
+    await expect(
+      store.list({ requestName: 'TenantListEvent' }),
+    ).resolves.toHaveLength(2);
+  });
+
   const row = async (correlationId: string) =>
     (
       await pool.query('SELECT * FROM dead_letters WHERE correlation_id = $1', [

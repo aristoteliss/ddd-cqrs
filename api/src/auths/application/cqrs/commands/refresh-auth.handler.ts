@@ -6,12 +6,17 @@ import {
 } from '@cqrs-ddd/core/application';
 import { CommandHandler, EventBus } from '@cqrs-ddd/cqrs';
 import { SkipPipeline, UsePipeline } from '@cqrs-ddd/pipeline';
+import { AUDIT_SEVERITY, audit } from '@cqrs-ddd/pipeline-audit';
 import { DeadLetterBehavior } from '@cqrs-ddd/pipeline-deadletter';
 import {
   createPartitionedRateLimitKeyFactory,
   rateLimit,
 } from '@cqrs-ddd/pipeline-rate-limit';
-import { RATE_LIMIT_COST } from '../../../../common/constants/index.js';
+import {
+  AUDIT_ACTIONS,
+  RATE_LIMIT_COST,
+} from '../../../../common/constants/index.js';
+import { retryOnConflict } from '../../../../common/resilience/conflict-retry.js';
 import type { Auth } from '../../../domain/models/auth.entity.js';
 import {
   InvalidRefreshTokenError,
@@ -19,7 +24,6 @@ import {
 } from '../../../domain/models/errors/refresh-token.errors.js';
 import { PrincipalLoginService } from '../../../services/principal-login.service.js';
 import { type IRefreshTokens } from '../../ports/refresh-tokens.port.js';
-import { type ISessionCookies } from '../../ports/session-cookies.port.js';
 import type { AuthResult } from '../../results/auth.result.js';
 import { GetAuthByConsumedTokenHashQuery } from '../queries/get-auth-by-consumed-token-hash.query.js';
 import { GetAuthByTokenHashQuery } from '../queries/get-auth-by-token-hash.query.js';
@@ -29,11 +33,17 @@ import { RefreshAuthCommand } from './refresh-auth.command.js';
 @SkipPipeline(DeadLetterBehavior)
 @UsePipeline(
   rateLimit({
-    keyFactory: createPartitionedRateLimitKeyFactory(
-      (ctx) => (ctx.request as RefreshAuthCommand).clientIp,
+    keyFactory: createPartitionedRateLimitKeyFactory<RefreshAuthCommand>(
+      (ctx) => ctx.request.clientIp,
     ),
     points: RATE_LIMIT_COST.refresh,
   }),
+  audit({
+    action: AUDIT_ACTIONS.AUTH_REFRESH,
+    severity: AUDIT_SEVERITY.LOW,
+    redactKeys: ['refreshToken'],
+  }),
+  retryOnConflict(),
 )
 export class RefreshAuthHandler extends CommandBaseHandler<
   RefreshAuthCommand,
@@ -50,26 +60,33 @@ export class RefreshAuthHandler extends CommandBaseHandler<
       Auth | null
     >,
     private readonly refreshTokens: IRefreshTokens,
-    private readonly cookies: ISessionCookies,
     private readonly principalLoginService: PrincipalLoginService,
   ) {
     super(eventBus);
   }
 
   async handle({ refreshToken }: RefreshAuthCommand): Promise<AuthResult> {
+    try {
+      return await this.rotate(refreshToken);
+    } catch (error) {
+      if (error instanceof RefreshTokenReuseError && error.revoked) {
+        await this.publishEvents(error.revoked);
+      }
+      throw error;
+    }
+  }
+
+  private async rotate(refreshToken: string): Promise<AuthResult> {
     const presentedHash = this.refreshTokens.hash(refreshToken);
     const auth = await this.findSession(presentedHash, Date.now());
 
     const nextToken = this.refreshTokens.generate();
 
-    const result = await this.principalLoginService.refresh(auth, {
+    return this.principalLoginService.refresh(auth, {
       presentedHash,
       nextToken,
       nextHash: this.refreshTokens.hash(nextToken),
     });
-    this.cookies.save(result);
-
-    return result;
   }
 
   private async findSession(presentedHash: string, now: number): Promise<Auth> {
@@ -82,7 +99,8 @@ export class RefreshAuthHandler extends CommandBaseHandler<
       new GetAuthByConsumedTokenHashQuery({ tokenHash: presentedHash }),
     );
     if (!reused) throw new InvalidRefreshTokenError();
-    await this.principalLoginService.revoke(reused, now);
-    throw new RefreshTokenReuseError();
+    throw new RefreshTokenReuseError(
+      await this.principalLoginService.revoke(reused, now),
+    );
   }
 }

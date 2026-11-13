@@ -35,14 +35,14 @@ describe.each(ADAPTERS)(
         .set('x-test-user', admin)
         .send({
           email,
-          name: 'Factory Fiona',
+          username: 'Factory Fiona',
           department: 'Engineering',
         });
 
       expect(created.status).toBe(201);
       expect(created.body).toMatchObject({
         email,
-        name: 'Factory Fiona',
+        username: 'Factory Fiona',
         department: 'Engineering',
       });
 
@@ -55,7 +55,7 @@ describe.each(ADAPTERS)(
       expect(rehydrated.body).toMatchObject({
         id: created.body.id,
         email,
-        name: 'Factory Fiona',
+        username: 'Factory Fiona',
         department: 'Engineering',
       });
     });

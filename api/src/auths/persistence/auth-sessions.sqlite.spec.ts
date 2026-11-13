@@ -5,6 +5,7 @@ import { ConcurrencyConflictError } from '@cqrs-ddd/core/domain';
 import { MemoryCache } from '@cqrs-ddd/core/persistence';
 import { type IPipelineContext, pipelineStore } from '@cqrs-ddd/pipeline';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { pipelineOf } from '../../../test/support/harness.js';
 import {
   type MigratedDb,
   migratedDb,
@@ -132,7 +133,6 @@ describe('Auth session persistence', () => {
       byTokenHash(),
       byConsumedTokenHash(),
       tokens,
-      { save: vi.fn(), clear: vi.fn() },
       service,
     );
     const command = new RefreshAuthCommand({
@@ -190,16 +190,21 @@ describe('Auth session persistence', () => {
       byTokenHash(),
       byConsumedTokenHash(),
       tokens,
-      { save: vi.fn(), clear: vi.fn() },
       service,
     );
     const command = new RefreshAuthCommand({
       refreshToken: 'token-a',
       clientIp: '127.0.0.1',
     });
-    await expect(
-      inTenant(() => handler.execute(command)),
-    ).rejects.toBeInstanceOf(RefreshTokenReuseError);
+    const pipeline = await pipelineOf(
+      'auth-sessions-sqlite',
+      handler,
+      'tenant',
+    );
+    await expect(pipeline.execute(command)).rejects.toBeInstanceOf(
+      RefreshTokenReuseError,
+    );
+    await pipeline.close();
     const persisted = await byTokenHash().find(
       new GetAuthByTokenHashQuery({ tokenHash: tokens.hash('token-d') }),
     );

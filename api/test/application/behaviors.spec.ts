@@ -723,7 +723,7 @@ describe('Users API Pipeline Behaviors Specification', () => {
       expect(command.username).toBe('Ada');
       expect(Object.hasOwn(command, 'department')).toBe(false);
       expect(command.sessionPrincipal).toBe(sessionPrincipal);
-      expect(Object.keys(command)).toEqual(['id', 'username']);
+      expect(Object.keys(command)).toEqual(['username', 'id']);
       expect(
         command.getUpdateFields(UpdateUserCommand.updatableFields),
       ).toEqual(['username']);

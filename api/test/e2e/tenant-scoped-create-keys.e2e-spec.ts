@@ -30,7 +30,7 @@ describe.each(ADAPTERS)('tenant-scoped create keys (e2e) on %s', (adapter) => {
         .post('/users')
         .set('x-tenant-schema', tenant)
         .set('x-test-user', admin)
-        .send({ email, name: 'Tenant Scoped User' });
+        .send({ email, username: 'Tenant Scoped User' });
 
     const tenantA = await create('tenant_a');
     const tenantB = await create('tenant_b');

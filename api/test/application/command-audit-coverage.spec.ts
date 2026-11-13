@@ -3,6 +3,7 @@
 import { getBehaviorId, pipelineOf } from '@cqrs-ddd/pipeline';
 import { AuditBehavior } from '@cqrs-ddd/pipeline-audit';
 import { describe, expect, it } from 'vitest';
+import { RefreshAuthHandler } from '../../src/auths/application/cqrs/commands/refresh-auth.handler.js';
 import { RevokeAuthHandler } from '../../src/auths/application/cqrs/commands/revoke-auth.handler.js';
 import { StartAuthHandler } from '../../src/auths/application/cqrs/commands/start-auth.handler.js';
 import { AUDIT_ACTIONS } from '../../src/common/constants/index.js';
@@ -28,6 +29,7 @@ describe('command handlers declare an audit action', () => {
     ['RenameRoleHandler', RenameRoleHandler, AUDIT_ACTIONS.ROLE_UPDATE],
     ['DeleteRoleHandler', DeleteRoleHandler, AUDIT_ACTIONS.ROLE_DELETE],
     ['StartAuthHandler', StartAuthHandler, AUDIT_ACTIONS.AUTH_LOGIN],
+    ['RefreshAuthHandler', RefreshAuthHandler, AUDIT_ACTIONS.AUTH_REFRESH],
     ['RevokeAuthHandler', RevokeAuthHandler, AUDIT_ACTIONS.AUTH_LOGOUT],
   ])('%s declares an audit action', (_name, handler, action) => {
     expect(auditAction(handler)).toBe(action);

@@ -31,14 +31,14 @@ describe.each(ADAPTERS)('user event dispatch ports (e2e) on %s', (adapter) => {
       .post('/users')
       .set('x-tenant-schema', 'tenant')
       .set('x-test-user', admin)
-      .send({ email, name: 'Event Port User', department: 'engineering' });
+      .send({ email, username: 'Event Port User', department: 'engineering' });
     expect(created.status).toBe(201);
 
     const updated = await request(http)
       .patch(`/users/${created.body.id}`)
       .set('x-tenant-schema', 'tenant')
       .set('x-test-user', admin)
-      .send({ name: 'Event Port User Updated' });
+      .send({ username: 'Event Port User Updated' });
     expect(updated.status).toBe(200);
   });
 });

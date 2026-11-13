@@ -1,11 +1,11 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
 import {
+  type ICommandRepository,
   type IQueryRepository,
-  type IWriteSideAggregateRepository,
   requireTenant,
 } from '@cqrs-ddd/core/application';
-import { ConcurrencyConflictError } from '@cqrs-ddd/core/domain';
+import type { Capability } from '@cqrs-ddd/pipeline-casl';
 import { GetUserQuery } from '../../users/application/cqrs/queries/get-user.query.js';
 import { User } from '../../users/domain/models/user.entity.js';
 import { GetUserPermissionRulesQuery } from '../application/cqrs/queries/get-user-permission-rules.query.js';
@@ -22,7 +22,6 @@ import {
   InvalidRefreshTokenError,
   RefreshTokenReuseError,
 } from '../domain/models/errors/refresh-token.errors.js';
-import { GetUserPermissionRulesQueryRepository } from '../persistence/get-user-permission-rules.query-repository.js';
 
 /** The refresh token a caller presented, as its digest, and the token that replaces it. */
 export interface RefreshTokenRotation {
@@ -33,20 +32,20 @@ export interface RefreshTokenRotation {
 
 export class PrincipalLoginService {
   constructor(
-    private readonly queryRepository: IQueryRepository<
-      GetUserQuery,
-      User | null
-    >,
+    private readonly users: IQueryRepository<GetUserQuery, User | null>,
     private readonly loginCodeVerifier: ILoginCodeVerifier,
     private readonly accessTokenIssuer: IAccessTokenIssuer,
     private readonly policy: AuthTokenPolicy,
-    private readonly permissionRules: GetUserPermissionRulesQueryRepository,
-    private readonly authRepository: IWriteSideAggregateRepository<Auth>,
+    private readonly permissionRules: IQueryRepository<
+      GetUserPermissionRulesQuery,
+      Capability[]
+    >,
+    private readonly sessions: ICommandRepository<Auth, unknown>,
   ) {}
 
   /**
    * Finds the user by email in primary storage and verifies the login code
-   * through `LOGIN_CODE_VERIFIER`.
+   * through the `ILoginCodeVerifier` port.
    *
    * @param email - The claimed email.
    * @param code - The presented login code.
@@ -60,7 +59,7 @@ export class PrincipalLoginService {
    * ```
    */
   async authenticate(email: string, code: string): Promise<User> {
-    const user = await this.queryRepository.find(
+    const user = await this.users.find(
       new GetUserQuery({ email }, { refresh: true }),
     );
 
@@ -108,18 +107,18 @@ export class PrincipalLoginService {
   /**
    * Rotates the refresh token of the session `auth` and issues a new access
    * token, or answers without rotating when the immediately previous token is
-   * presented within the reuse grace window. When a concurrent write wins the
-   * version check, it reloads the session and tries once more; a reloaded
-   * session that no longer knows the presented token is revoked.
+   * presented within the reuse grace window. It makes one attempt: the
+   * `resilience` entry of `RefreshAuthHandler` runs the handler again from its
+   * lookup when a concurrent write wins the version check.
    *
    * @param auth - The session the presented token belongs to.
    * @param rotation - The digest of the presented token and its replacement.
    * @returns The refreshed result; it carries `refreshToken` only after a rotation.
    * @throws {InvalidRefreshTokenError} When the session is revoked or expired,
-   *   expires while the access token is prepared, or its user or row is gone.
+   *   expires while the access token is prepared, or its user is gone.
    * @throws {RefreshTokenReuseError} After revoking the session, when a consumed
    *   token is presented outside the grace window.
-   * @throws {ConcurrencyConflictError} When the second attempt also loses the version check.
+   * @throws {ConcurrencyConflictError} When a concurrent write wins the version check.
    *
    * @example
    * ```ts
@@ -134,68 +133,40 @@ export class PrincipalLoginService {
     auth: Auth,
     rotation: RefreshTokenRotation,
   ): Promise<AuthResult> {
-    let session = auth;
-
-    for (let attempt = 0; ; attempt++) {
-      try {
-        return await this.rotate(session, rotation);
-      } catch (error) {
-        if (error instanceof RefreshTokenReuseError) {
-          await this.revoke(session, Date.now());
-          throw error;
-        }
-        if (!(error instanceof ConcurrencyConflictError) || attempt === 1)
-          throw error;
-        session = await this.reload(session, rotation.presentedHash);
-      }
+    try {
+      return await this.rotate(auth, rotation);
+    } catch (error) {
+      if (!(error instanceof RefreshTokenReuseError)) throw error;
+      throw new RefreshTokenReuseError(await this.revoke(auth, Date.now()));
     }
   }
 
   /**
-   * Persists the revocation of `auth`, reloading it and trying again when a
-   * concurrent write wins the version check, for at most three attempts. A
-   * session whose revocation is already saved is returned without a write, and
-   * the first revocation time is kept.
+   * Persists the revocation of `auth`. A session whose revocation is already
+   * saved is returned without a write, and the first revocation time is kept.
+   * It makes one attempt: the `resilience` entry of the handler runs the handler
+   * again from its lookup when a concurrent write wins the version check.
    *
    * @param auth - The login session to revoke. It may already carry an unsaved
    *   revocation that `Auth.refresh` recorded on token reuse.
    * @param now - Revocation time as a Unix timestamp in milliseconds.
-   * @returns The revoked session, or `null` when it was deleted concurrently.
-   * @throws ConcurrencyConflictError when all three attempts lose the version check.
+   * @returns The revoked session.
+   * @throws ConcurrencyConflictError when a concurrent write wins the version check.
    *
    * @example
    * ```ts
    * const revoked = await this.principalLoginService.revoke(auth, Date.now());
-   * if (!revoked) throw new InvalidRefreshTokenError();
    * ```
    */
-  async revoke(auth: Auth, now: number): Promise<Auth | null> {
-    const maxAttempts = 3;
-    let current: Auth | null = auth;
+  async revoke(auth: Auth, now: number): Promise<Auth> {
+    const isSaved =
+      auth.revokedAt !== null && auth.version === auth.getExpectedVersion();
+    if (isSaved) return auth;
 
-    for (let attempt = 0; ; attempt++) {
-      if (
-        current.revokedAt !== null &&
-        current.version === current.getExpectedVersion()
-      ) {
-        return current;
-      }
-      current.revoke(now);
-      try {
-        await this.authRepository.save(current);
-        return current;
-      } catch (error) {
-        if (
-          !(error instanceof ConcurrencyConflictError) ||
-          attempt === maxAttempts - 1
-        )
-          throw error;
-        current = await this.authRepository.findById(auth.id);
-        if (!current) {
-          return current;
-        }
-      }
-    }
+    auth.revoke(now);
+    await this.sessions.save(auth);
+
+    return auth;
   }
 
   private async rotate(
@@ -205,7 +176,7 @@ export class PrincipalLoginService {
     const graceMs = this.policy.refreshReuseGraceSeconds * 1000;
     const outcome = auth.refresh(presentedHash, nextHash, Date.now(), graceMs);
 
-    const user = await this.queryRepository.find(
+    const user = await this.users.find(
       new GetUserQuery({ userId: auth.userId }, { refresh: true }),
     );
     if (!user) throw new InvalidRefreshTokenError();
@@ -216,7 +187,7 @@ export class PrincipalLoginService {
     if (outcome === 'grace') {
       auth.refresh(presentedHash, nextHash, preparedAt, graceMs);
     } else {
-      await this.authRepository.save(auth);
+      await this.sessions.save(auth);
     }
 
     return {
@@ -231,17 +202,5 @@ export class PrincipalLoginService {
       ...(outcome === 'rotated' ? { refreshToken: nextToken } : {}),
       sessionExpiresAt: auth.expiresAt,
     };
-  }
-
-  private async reload(auth: Auth, presentedHash: string): Promise<Auth> {
-    const reloaded = await this.authRepository.findById(auth.id);
-    if (!reloaded) throw new InvalidRefreshTokenError();
-    const isKnown =
-      presentedHash === reloaded.refreshTokenHash ||
-      presentedHash === reloaded.previousRefreshTokenHash;
-    if (isKnown) return reloaded;
-
-    await this.revoke(reloaded, Date.now());
-    throw new RefreshTokenReuseError();
   }
 }

@@ -43,6 +43,7 @@ import {
   InvalidRoleNameException,
   UniqueRoleNameException,
 } from '../../roles/domain/models/errors/role-name.exception.js';
+import type { Role } from '../../roles/domain/models/role.entity.js';
 import {
   EmptyUserUpdateException,
   InvalidDepartmentException,
@@ -133,7 +134,10 @@ const expectedRejections: Array<[string, Error]> = [
     'duplicate email',
     new UniqueEmailException({ email: 'taken@example.com' } as User),
   ],
-  ['duplicate role name', new UniqueRoleNameException('admin')],
+  [
+    'duplicate role name',
+    new UniqueRoleNameException({ name: 'admin' } as Role),
+  ],
   ['empty user update', new EmptyUserUpdateException()],
   [
     'short username',

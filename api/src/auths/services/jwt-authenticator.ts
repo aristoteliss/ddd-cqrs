@@ -70,7 +70,7 @@ export class JwtAuthenticator {
    *   plus `grants` and `department` when the token carries
    *   permissions and `PERMISSIONS_IN_ACCESS_TOKEN` is on; `undefined` when there
    *   is no Bearer header.
-   * @throws UnauthorizedException for an empty, expired, badly signed or
+   * @throws HttpError 401 for an empty, expired, badly signed or
    *   foreign-tenant token, a missing `sub`, `tenant`, `sid` or `exp` claim, a
    *   non-user `principalType`, malformed `perms`, or when no verification key is
    *   configured.

@@ -30,7 +30,7 @@ describe('delete resilience boundary (e2e)', () => {
       .post('/users')
       .set('x-tenant-schema', 'tenant')
       .set('x-test-user', admin)
-      .send({ email, name: 'Delete Boundary User' });
+      .send({ email, username: 'Delete Boundary User' });
     expect(created.status).toBe(201);
 
     const deleted = await request(http)

@@ -10,7 +10,9 @@ import type { AuthResult } from './application/results/auth.result.js';
 import { InvalidRefreshTokenError } from './domain/models/errors/refresh-token.errors.js';
 import { LoginDtoSchema } from './dtos/login.dto.js';
 import { RefreshTokenDtoSchema } from './dtos/refresh-token.dto.js';
-import { REFRESH_COOKIE } from './services/session.service.js';
+import { REFRESH_COOKIE, SessionService } from './services/session.service.js';
+
+const session = new SessionService();
 
 /**
  * The answer body of a login or refresh: the session and its short-lived access token,
@@ -74,11 +76,10 @@ export function authRoutes(commandBus: CommandBus): Route[] {
       summary:
         'Starts a session: the access token in the body, the refresh token in an HttpOnly cookie.',
       response: SessionBody,
-      handle: async ({ body, ip }) =>
-        sessionBody(
-          await commandBus.execute<StartAuthCommand, AuthResult>(
-            new StartAuthCommand({ ...body, clientIp: ip }),
-          ),
+      handle: ({ body, ip }) =>
+        startSession(
+          commandBus,
+          new StartAuthCommand({ ...body, clientIp: ip }),
         ),
     }),
     route({
@@ -89,14 +90,13 @@ export function authRoutes(commandBus: CommandBus): Route[] {
       summary:
         'Exchanges the refresh cookie for a new access token; a rotation sets a new cookie.',
       response: SessionBody,
-      handle: async ({ cookies, ip }) =>
-        sessionBody(
-          await commandBus.execute<RefreshAuthCommand, AuthResult>(
-            new RefreshAuthCommand({
-              refreshToken: refreshToken(cookies),
-              clientIp: ip,
-            }),
-          ),
+      handle: ({ cookies, ip }) =>
+        startSession(
+          commandBus,
+          new RefreshAuthCommand({
+            refreshToken: refreshToken(cookies),
+            clientIp: ip,
+          }),
         ),
     }),
     route({
@@ -118,6 +118,16 @@ export function authRoutes(commandBus: CommandBus): Route[] {
   ];
 }
 
+async function startSession(
+  commandBus: CommandBus,
+  command: StartAuthCommand | RefreshAuthCommand,
+) {
+  const result = await commandBus.execute<typeof command, AuthResult>(command);
+  session.save(result);
+
+  return sessionBody(result);
+}
+
 async function revokeUnlessUnknown(
   commandBus: CommandBus,
   command: RevokeAuthCommand,
@@ -127,4 +137,5 @@ async function revokeUnlessUnknown(
   } catch (error) {
     if (!(error instanceof InvalidRefreshTokenError)) throw error;
   }
+  session.clear();
 }

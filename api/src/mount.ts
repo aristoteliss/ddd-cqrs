@@ -4,7 +4,7 @@ import type { App } from './app.js';
 import { logger } from './common/logger.js';
 import { domainAnswer } from './domain-answer.js';
 import { requestContext } from './http/context.js';
-import type { MountOptions } from './http/express.js';
+import type { MountOptions } from './http/mount-options.js';
 import { TenantSchemaMiddleware } from './persistence/middlewares/tenant-schema.middleware.js';
 import { persistenceConfig } from './persistence/persistence.config.js';
 import { routes } from './routes.js';

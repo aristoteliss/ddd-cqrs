@@ -6,6 +6,7 @@ import { ConcurrencyConflictError } from '@cqrs-ddd/core/domain';
 import type { EventBus } from '@cqrs-ddd/cqrs';
 import { currentTenantId } from '@cqrs-ddd/pipeline-tenant';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { pipelineOf } from '../../../../../test/support/harness.js';
 import { User } from '../../../../users/domain/models/user.entity.js';
 import { AuthRefreshedEvent } from '../../../domain/events/auth-refreshed.event.js';
 import { AuthRevokedEvent } from '../../../domain/events/auth-revoked.event.js';
@@ -16,6 +17,7 @@ import {
 } from '../../../domain/models/errors/refresh-token.errors.js';
 import { NodeRefreshTokens } from '../../../infrastructure/node-refresh-tokens.js';
 import { PrincipalLoginService } from '../../../services/principal-login.service.js';
+import type { AuthResult } from '../../results/auth.result.js';
 import { GetAuthByConsumedTokenHashQuery } from '../queries/get-auth-by-consumed-token-hash.query.js';
 import { GetAuthByTokenHashQuery } from '../queries/get-auth-by-token-hash.query.js';
 import { RefreshAuthCommand } from './refresh-auth.command.js';
@@ -25,8 +27,19 @@ import { RevokeAuthHandler } from './revoke-auth.handler.js';
 
 const TENANT = 'tenant';
 
+const pipelines: Array<{ close(): Promise<void> }> = [];
+
+async function busOf(handler: object) {
+  const pipeline = await pipelineOf('auth-session-handlers', handler, TENANT);
+  pipelines.push(pipeline);
+  return pipeline.execute;
+}
+
 beforeEach(() => setTenantResolver(() => TENANT));
-afterEach(() => setTenantResolver(currentTenantId));
+afterEach(async () => {
+  setTenantResolver(currentTenantId);
+  await Promise.all(pipelines.splice(0).map((pipeline) => pipeline.close()));
+});
 
 const T0 = Date.UTC(2026, 8, 22, 12, 0, 0);
 const GRACE_SECONDS = 30;
@@ -106,10 +119,9 @@ class SessionStore {
 
 const USER = User.create('alice', 'alice@example.test', 'engineering');
 
-function setup() {
+async function setup() {
   const store = new SessionStore();
   const publishAll = vi.fn();
-  const cookies = { save: vi.fn(), clear: vi.fn() };
   const service = new PrincipalLoginService(
     { find: vi.fn().mockResolvedValue(USER) } as never,
     { verify: vi.fn() } as never,
@@ -132,19 +144,18 @@ function setup() {
     store.byTokenHash,
     store.byConsumedTokenHash,
     tokens,
-    cookies,
     service,
   );
   const sign = vi.spyOn(service, 'sign');
+  const execute = await busOf(handler);
   const refresh = (refreshToken: string) =>
-    handler.execute(
+    execute<AuthResult>(
       new RefreshAuthCommand({ refreshToken, clientIp: '203.0.113.7' }),
     );
-  return { store, service, refresh, publishAll, sign, cookies };
+  return { store, service, refresh, publishAll, sign };
 }
 
-function logoutHandler(store: SessionStore, publishAll = vi.fn()) {
-  const cookies = { save: vi.fn(), clear: vi.fn() };
+async function logoutHandler(store: SessionStore, publishAll = vi.fn()) {
   const service = new PrincipalLoginService(
     { find: vi.fn().mockResolvedValue(USER) } as never,
     { verify: vi.fn() } as never,
@@ -163,15 +174,14 @@ function logoutHandler(store: SessionStore, publishAll = vi.fn()) {
     { publishAll } as unknown as EventBus,
     store.byTokenHash,
     tokens,
-    cookies,
     service,
   );
-  return { handler, cookies };
+  return { handler: { execute: await busOf(handler) } };
 }
 
 describe('RefreshAuthHandler', () => {
   beforeEach(() => {
-    vi.useFakeTimers();
+    vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(T0);
   });
 
@@ -180,7 +190,7 @@ describe('RefreshAuthHandler', () => {
   });
 
   it('persists revocation of the immediately previous token outside grace before token issuance', async () => {
-    const { store, refresh, sign } = setup();
+    const { store, refresh, sign } = await setup();
     const auth = store.start('token-a');
     const current = (await refresh('token-a')).refreshToken as string;
     sign.mockRejectedValue(new Error('issuer unavailable'));
@@ -195,7 +205,7 @@ describe('RefreshAuthHandler', () => {
   });
 
   it('revokes reuse when two rotations move the presented token into history during a conflict', async () => {
-    const { store, refresh } = setup();
+    const { store, refresh } = await setup();
     const auth = store.start('token-a');
     const save = store.repository.save.getMockImplementation()!;
     store.repository.save.mockImplementationOnce(async (stale) => {
@@ -219,7 +229,7 @@ describe('RefreshAuthHandler', () => {
   });
 
   it('reports exhausted historical revocation conflicts instead of claiming reuse was handled', async () => {
-    const { store, refresh } = setup();
+    const { store, refresh } = await setup();
     const auth = store.start('token-a');
     const tokenB = (await refresh('token-a')).refreshToken as string;
     await refresh(tokenB);
@@ -229,7 +239,7 @@ describe('RefreshAuthHandler', () => {
   });
 
   it('does not rotate a session that expires during access-token preparation', async () => {
-    const { store, refresh, sign } = setup();
+    const { store, refresh, sign } = await setup();
     const auth = store.start('token-a', T0 + 1000);
     sign.mockImplementationOnce(async () => {
       vi.setSystemTime(T0 + 2000);
@@ -247,7 +257,7 @@ describe('RefreshAuthHandler', () => {
   });
 
   it('rotates, honours the grace window, detects reuse and ends the session', async () => {
-    const { store, refresh } = setup();
+    const { store, refresh } = await setup();
     const auth = store.start('token-a');
 
     const first = await refresh('token-a');
@@ -277,7 +287,7 @@ describe('RefreshAuthHandler', () => {
   });
 
   it('revokes the session when an older generation is presented', async () => {
-    const { store, refresh } = setup();
+    const { store, refresh } = await setup();
     const auth = store.start('token-a');
     const tokenB = (await refresh('token-a')).refreshToken as string;
     const tokenC = (await refresh(tokenB)).refreshToken as string;
@@ -291,8 +301,40 @@ describe('RefreshAuthHandler', () => {
     );
   });
 
+  it('publishes the revocation event when a reused token ends the session', async () => {
+    const revocationOf = (publishAll: ReturnType<typeof vi.fn>, id: string) =>
+      publishAll.mock.calls.filter(
+        ([events, aggregate]) =>
+          events.length === 1 &&
+          events[0] instanceof AuthRevokedEvent &&
+          aggregate.id === id,
+      );
+
+    const previous = await setup();
+    const first = previous.store.start('token-a');
+    await previous.refresh('token-a');
+    vi.setSystemTime(T0 + 31_000);
+    await expect(previous.refresh('token-a')).rejects.toBeInstanceOf(
+      RefreshTokenReuseError,
+    );
+    expect(revocationOf(previous.publishAll, first.id)).toHaveLength(1);
+
+    const older = await setup();
+    const second = older.store.start('token-a');
+    const tokenB = (await older.refresh('token-a')).refreshToken as string;
+    await older.refresh(tokenB);
+    await expect(older.refresh('token-a')).rejects.toBeInstanceOf(
+      RefreshTokenReuseError,
+    );
+    expect(revocationOf(older.publishAll, second.id)).toHaveLength(1);
+
+    const reuse = await older.refresh('token-a').catch((error) => error);
+    expect(Object.keys(reuse)).not.toContain('revoked');
+    expect(revocationOf(older.publishAll, second.id)).toHaveLength(1);
+  });
+
   it('answers grace without a new cookie after losing the rotation race', async () => {
-    const { store, refresh } = setup();
+    const { store, refresh } = await setup();
     const auth = store.start('token-a');
     const save = store.repository.save.getMockImplementation();
     store.repository.save.mockImplementationOnce(async (auth: Auth) => {
@@ -311,7 +353,7 @@ describe('RefreshAuthHandler', () => {
   });
 
   it('keeps a session current when its history row was written but its save failed', async () => {
-    const { store, refresh } = setup();
+    const { store, refresh } = await setup();
     const auth = store.start('token-a');
     store.recordConsumed(tokens.hash('token-a'), auth.id);
     store.repository.save.mockRejectedValueOnce(new Error('connection lost'));
@@ -324,17 +366,8 @@ describe('RefreshAuthHandler', () => {
     expect(store.current(auth.id).revokedAt).toBeNull();
   });
 
-  it('writes the session cookies of a successful refresh', async () => {
-    const { store, refresh, cookies } = setup();
-    store.start('token-a');
-
-    const result = await refresh('token-a');
-
-    expect(cookies.save).toHaveBeenCalledExactlyOnceWith(result);
-  });
-
   it('rejects an expired session and an unknown token', async () => {
-    const { store, refresh } = setup();
+    const { store, refresh } = await setup();
     store.start('token-a', T0 + 1000);
 
     vi.setSystemTime(T0 + 1000);
@@ -347,7 +380,7 @@ describe('RefreshAuthHandler', () => {
   });
 
   it('publishes the rotation event and nothing on a grace answer', async () => {
-    const { store, refresh, publishAll } = setup();
+    const { store, refresh, publishAll } = await setup();
     store.start('token-a');
 
     await refresh('token-a');
@@ -362,7 +395,7 @@ describe('RefreshAuthHandler', () => {
   });
 
   it('never hands the raw refresh token to persistence', async () => {
-    const { store, refresh } = setup();
+    const { store, refresh } = await setup();
     store.start('token-a');
 
     const { refreshToken } = await refresh('token-a');
@@ -376,7 +409,7 @@ describe('RefreshAuthHandler', () => {
   });
 
   it('retries revocation when historical token reuse loses a version race to a concurrent rotation', async () => {
-    const { store, refresh } = setup();
+    const { store, refresh } = await setup();
     const auth = store.start('token-a');
 
     const resB = await refresh('token-a');
@@ -420,7 +453,7 @@ describe('RefreshAuthHandler', () => {
   });
 
   it('leaves the auth unrotated when token signing fails, allowing clean retry', async () => {
-    const { store, refresh, sign } = setup();
+    const { store, refresh, sign } = await setup();
     const auth = store.start('token-a');
 
     sign.mockRejectedValueOnce(new Error('transient token issuance failure'));
@@ -449,7 +482,7 @@ describe('RevokeAuthHandler', () => {
     const store = new SessionStore();
     const auth = store.start('token-a');
     const publishAll = vi.fn();
-    const { handler, cookies } = logoutHandler(store, publishAll);
+    const { handler } = await logoutHandler(store, publishAll);
 
     await handler.execute(
       new RevokeAuthCommand({
@@ -463,7 +496,6 @@ describe('RevokeAuthHandler', () => {
       [expect.any(AuthRevokedEvent)],
       expect.objectContaining({ id: auth.id }),
     );
-    expect(cookies.clear).toHaveBeenCalledOnce();
   });
 
   it('retries revocation when logout encounters a concurrency conflict', async () => {
@@ -493,9 +525,9 @@ describe('RevokeAuthHandler', () => {
       return originalSave!(auth);
     });
 
-    const { handler } = logoutHandler(store);
+    const { handler } = await logoutHandler(store);
 
-    const revoked = await handler.execute(
+    const revoked = await handler.execute<Auth>(
       new RevokeAuthCommand({
         refreshToken: 'token-a',
         clientIp: '203.0.113.7',
@@ -510,7 +542,7 @@ describe('RevokeAuthHandler', () => {
     const auth = store.start('token-a');
     const conflict = new ConcurrencyConflictError('Auth', auth.id, 1, 2);
     store.repository.save.mockRejectedValue(conflict);
-    const { handler, cookies } = logoutHandler(store);
+    const { handler } = await logoutHandler(store);
 
     await expect(
       handler.execute(
@@ -520,12 +552,11 @@ describe('RevokeAuthHandler', () => {
         }),
       ),
     ).rejects.toBe(conflict);
-    expect(cookies.clear).not.toHaveBeenCalled();
   });
 
-  it('clears the cookies and rejects an unknown refresh token', async () => {
+  it('rejects an unknown refresh token', async () => {
     const store = new SessionStore();
-    const { handler, cookies } = logoutHandler(store);
+    const { handler } = await logoutHandler(store);
 
     await expect(
       handler.execute(
@@ -536,16 +567,14 @@ describe('RevokeAuthHandler', () => {
       ),
     ).rejects.toBeInstanceOf(InvalidRefreshTokenError);
     expect(store.repository.save).not.toHaveBeenCalled();
-    expect(cookies.clear).toHaveBeenCalledOnce();
   });
 
-  it('clears the cookies and rejects a logout without a refresh token', async () => {
+  it('rejects a logout without a refresh token', async () => {
     const store = new SessionStore();
-    const { handler, cookies } = logoutHandler(store);
+    const { handler } = await logoutHandler(store);
 
     await expect(
       handler.execute(new RevokeAuthCommand({ clientIp: '203.0.113.7' })),
     ).rejects.toBeInstanceOf(InvalidRefreshTokenError);
-    expect(cookies.clear).toHaveBeenCalledOnce();
   });
 });

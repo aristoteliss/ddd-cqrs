@@ -40,7 +40,6 @@ describe('StartAuthHandler', () => {
     };
     const save = vi.fn(async (auth: Auth) => auth.toJSON());
     const tokens = new NodeRefreshTokens();
-    const cookies = { save: vi.fn(), clear: vi.fn() };
     const handler = new StartAuthHandler(
       { publishAll } as unknown as EventBus,
       principalLoginService as never,
@@ -51,7 +50,6 @@ describe('StartAuthHandler', () => {
         refreshReuseGraceSeconds: 30,
         embedPermissions: false,
       },
-      cookies,
     );
     return {
       user,
@@ -59,21 +57,13 @@ describe('StartAuthHandler', () => {
       principalLoginService,
       save,
       tokens,
-      cookies,
       handler,
     };
   }
 
   it('starts a auth storing only the refresh-token hash and signs a token for it', async () => {
-    const {
-      user,
-      publishAll,
-      principalLoginService,
-      save,
-      tokens,
-      cookies,
-      handler,
-    } = setup();
+    const { user, publishAll, principalLoginService, save, tokens, handler } =
+      setup();
 
     const result = await handler.execute(
       new StartAuthCommand({
@@ -102,7 +92,6 @@ describe('StartAuthHandler', () => {
       accessTokenExpiresAt: NOW + 300_000,
       sessionExpiresAt: NOW + 3_600_000,
     });
-    expect(cookies.save).toHaveBeenCalledExactlyOnceWith(result);
     expect(publishAll).toHaveBeenCalledExactlyOnceWith(
       [expect.any(AuthStartedEvent)],
       auth,

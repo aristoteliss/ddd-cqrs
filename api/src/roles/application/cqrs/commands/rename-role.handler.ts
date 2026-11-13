@@ -11,12 +11,17 @@ import { AUDIT_SEVERITY, audit } from '@cqrs-ddd/pipeline-audit';
 import { CaslAuthorizer, requires } from '@cqrs-ddd/pipeline-casl';
 import { targetMetadata } from '../../../../common/audit/audit.options.js';
 import {
+  readable,
+  type WriteResult,
+} from '../../../../common/authorization/readable.js';
+import {
   APP_ACTIONS,
   APP_SUBJECTS,
   AUDIT_ACTIONS,
 } from '../../../../common/constants/index.js';
 import { UniqueRoleNameException } from '../../../domain/models/errors/role-name.exception.js';
 import type { Role } from '../../../domain/models/role.entity.js';
+import { projectRoleRead, type RoleReadModel } from '../../role-read-model.js';
 import { RenameRoleCommand } from './rename-role.command.js';
 
 @CommandHandler(RenameRoleCommand)
@@ -33,7 +38,7 @@ import { RenameRoleCommand } from './rename-role.command.js';
 )
 export class RenameRoleHandler extends CommandBaseHandler<
   RenameRoleCommand,
-  Role
+  WriteResult<Role, RoleReadModel>
 > {
   constructor(
     private readonly commandRepository: IWriteSideAggregateRepository<Role>,
@@ -43,7 +48,9 @@ export class RenameRoleHandler extends CommandBaseHandler<
     super(eventBus);
   }
 
-  async handle(command: RenameRoleCommand): Promise<Role> {
+  async handle(
+    command: RenameRoleCommand,
+  ): Promise<WriteResult<Role, RoleReadModel>> {
     const role = await this.commandRepository.findById(command.id);
     if (!role) {
       throw new EntityNotFoundException('Role', command.id);
@@ -59,6 +66,9 @@ export class RenameRoleHandler extends CommandBaseHandler<
 
     await this.commandRepository.save(role);
 
-    return role;
+    return {
+      aggregate: role,
+      read: readable(() => projectRoleRead(this.authorizer, role)),
+    };
   }
 }

@@ -9,7 +9,7 @@ import Fastify, {
 import { TRUST_PROXY } from '../common/environment/auth-token.config.js';
 import { type Answer, notFound } from './answer.js';
 import { dispatch } from './dispatch.js';
-import { failed, type MountOptions } from './express.js';
+import { failed, type MountOptions } from './mount-options.js';
 import type { Route } from './route.js';
 
 /** Options of {@link fastifyApp}: the mount options and the session cookie's key. */

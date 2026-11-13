@@ -57,3 +57,16 @@ export function route<Params = unknown, Query = unknown, Body = unknown>(
 ): Route {
   return definition as Route;
 }
+
+/**
+ * The status of a successful answer: the route's `status`, else 201 for a POST and
+ * 200 for every other method.
+ *
+ * @example
+ * ```ts
+ * successStatus(route({ method: 'POST', path: '/users', handle })); // 201
+ * ```
+ */
+export function successStatus(route: Pick<Route, 'status' | 'method'>): number {
+  return route.status ?? (route.method === 'POST' ? 201 : 200);
+}

@@ -14,7 +14,7 @@ import {
  * Demo credential adapter: one configured login code is accepted for every
  * user in every tenant, so anyone who knows it can sign in as any existing
  * account. It is not user authentication; a deployment with real users binds
- * `LOGIN_CODE_VERIFIER` to an adapter that ties the credential to the user.
+ * the `ILoginCodeVerifier` port to an adapter that ties the credential to the user.
  *
  * In production the shared code is refused unless `AUTH_SHARED_LOGIN_CODE=true`
  * acknowledges it, and only as the `AUTH_LOGIN_CODE_SHA256` digest; plaintext

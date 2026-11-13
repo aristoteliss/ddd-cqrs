@@ -11,7 +11,7 @@ import { RefreshAuthCommand } from './refresh-auth.command.js';
 import { RefreshAuthHandler } from './refresh-auth.handler.js';
 
 const unavailable = new Error('session store unavailable');
-const { cqrs, deadLetters } = await memoryCqrs('refresh-auth-spec');
+const { cqrs, deadLetters, audits } = await memoryCqrs('refresh-auth-spec');
 cqrs.register(
   new RefreshAuthHandler(
     cqrs.eventBus,
@@ -25,7 +25,6 @@ cqrs.register(
     },
     { find: async () => null },
     new NodeRefreshTokens(),
-    { save() {}, clear() {} },
     {} as PrincipalLoginService,
   ),
 );
@@ -57,6 +56,19 @@ describe('RefreshAuthHandler pipeline', () => {
     await expect(
       refresh('secret-token-123', '203.0.113.8'),
     ).rejects.toBeInstanceOf(InvalidRefreshTokenError);
+  });
+
+  it('audits a failed refresh without the refresh token', async () => {
+    await expect(
+      refresh('audit-secret-token', '198.51.100.9'),
+    ).rejects.toBeInstanceOf(InvalidRefreshTokenError);
+
+    const record = audits.find((entry) => entry.action === 'auth.refresh');
+    expect(record).toMatchObject({
+      action: 'auth.refresh',
+      outcome: 'failure',
+    });
+    expect(JSON.stringify(record)).not.toContain('audit-secret-token');
   });
 
   it('leaves a failed refresh out of the dead-letter queue', async () => {

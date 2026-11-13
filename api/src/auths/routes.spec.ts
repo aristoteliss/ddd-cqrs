@@ -76,6 +76,12 @@ beforeEach(() => {
   resolvePrincipal.mockReset().mockResolvedValue(undefined);
 });
 
+function refreshCookie(response: request.Response): string | undefined {
+  return response
+    .get('Set-Cookie')
+    ?.find((cookie) => cookie.startsWith('refresh_token='));
+}
+
 describe('sessionBody', () => {
   it('answers the session without the refresh token, an absent department as null', () => {
     expect(sessionBody(result)).toEqual({
@@ -106,6 +112,9 @@ describe.each([
     expect(execute).toHaveBeenCalledExactlyOnceWith(
       expect.any(StartAuthCommand),
     );
+    expect(refreshCookie(response)).toMatch(
+      /^refresh_token=refresh-token; .*HttpOnly/,
+    );
     expect(execute.mock.calls[0][0]).toMatchObject({
       email: 'ann@example.test',
       clientIp: expect.any(String),
@@ -133,6 +142,7 @@ describe.each([
     expect(execute).toHaveBeenCalledExactlyOnceWith(
       expect.any(RefreshAuthCommand),
     );
+    expect(refreshCookie(response)).toMatch(/^refresh_token=refresh-token; /);
     expect(execute.mock.calls[0][0]).toMatchObject({
       refreshToken: 'presented',
       clientIp: expect.any(String),
@@ -163,6 +173,32 @@ describe.each([
     expect(execute.mock.calls[0][0]).toMatchObject({
       refreshToken: 'unknown',
     });
+    expect(refreshCookie(response)).toMatch(/^refresh_token=; /);
+  });
+
+  it('clears the cookies of a revoked session', async () => {
+    execute.mockResolvedValue(result.aggregate);
+
+    const response = await request(server())
+      .post('/auths/logout')
+      .set('cookie', 'refresh_token=presented');
+
+    expect(response.status).toBe(204);
+    expect(refreshCookie(response)).toMatch(/^refresh_token=; /);
+  });
+
+  it('keeps the cookies when a login, a refresh or a logout fails', async () => {
+    execute.mockRejectedValue(new Error('store down'));
+
+    for (const path of ['/auths/login', '/auths/refresh', '/auths/logout']) {
+      const response = await request(server())
+        .post(path)
+        .set('cookie', 'refresh_token=presented')
+        .send({ email: 'ann@example.test', code: '1234' });
+
+      expect(response.status).toBe(500);
+      expect(refreshCookie(response)).toBeUndefined();
+    }
   });
 
   it('runs a route as the principal of its credential', async () => {

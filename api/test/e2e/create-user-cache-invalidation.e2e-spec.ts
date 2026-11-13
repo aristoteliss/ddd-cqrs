@@ -38,7 +38,7 @@ describe('create-user secondary cache invalidation (e2e)', () => {
         .post('/users')
         .set('x-tenant-schema', 'tenant')
         .set('x-test-user', admin)
-        .send({ email, name: 'Fresh User' });
+        .send({ email, username: 'Fresh User' });
 
       expect(response.status).toBe(201);
       // The write-through invalidation evicts the secondary key outright: the

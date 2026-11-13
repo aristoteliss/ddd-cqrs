@@ -17,11 +17,11 @@ import {
   AUDIT_ACTIONS,
   RATE_LIMIT_COST,
 } from '../../../../common/constants/index.js';
+import { retryOnConflict } from '../../../../common/resilience/conflict-retry.js';
 import type { Auth } from '../../../domain/models/auth.entity.js';
 import { InvalidRefreshTokenError } from '../../../domain/models/errors/refresh-token.errors.js';
 import { PrincipalLoginService } from '../../../services/principal-login.service.js';
 import { type IRefreshTokens } from '../../ports/refresh-tokens.port.js';
-import { type ISessionCookies } from '../../ports/session-cookies.port.js';
 import { GetAuthByTokenHashQuery } from '../queries/get-auth-by-token-hash.query.js';
 import { RevokeAuthCommand } from './revoke-auth.command.js';
 
@@ -29,8 +29,8 @@ import { RevokeAuthCommand } from './revoke-auth.command.js';
 @UsePipeline(
   metrics({ meterName: 'users-api.auth' }),
   rateLimit({
-    keyFactory: createPartitionedRateLimitKeyFactory(
-      (ctx) => (ctx.request as RevokeAuthCommand).clientIp,
+    keyFactory: createPartitionedRateLimitKeyFactory<RevokeAuthCommand>(
+      (ctx) => ctx.request.clientIp,
     ),
     points: RATE_LIMIT_COST.logout,
   }),
@@ -40,6 +40,7 @@ import { RevokeAuthCommand } from './revoke-auth.command.js';
     severity: AUDIT_SEVERITY.LOW,
     redactKeys: ['refreshToken'],
   }),
+  retryOnConflict(),
 )
 export class RevokeAuthHandler extends CommandBaseHandler<
   RevokeAuthCommand,
@@ -52,7 +53,6 @@ export class RevokeAuthHandler extends CommandBaseHandler<
       Auth | null
     >,
     private readonly refreshTokens: IRefreshTokens,
-    private readonly cookies: ISessionCookies,
     private readonly principalLoginService: PrincipalLoginService,
   ) {
     super(eventBus);
@@ -67,13 +67,8 @@ export class RevokeAuthHandler extends CommandBaseHandler<
         )
       : null;
 
-    const revoked = auth
-      ? await this.principalLoginService.revoke(auth, Date.now())
-      : null;
+    if (!auth) throw new InvalidRefreshTokenError();
 
-    this.cookies.clear();
-    if (!revoked) throw new InvalidRefreshTokenError();
-
-    return revoked;
+    return this.principalLoginService.revoke(auth, Date.now());
   }
 }

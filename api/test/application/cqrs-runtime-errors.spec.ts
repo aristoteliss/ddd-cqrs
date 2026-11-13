@@ -678,7 +678,6 @@ describe('CQRS Commands & Queries Runtime Error Taxonomy', () => {
             refreshReuseGraceSeconds: 30,
             embedPermissions: false,
           },
-          { save: vi.fn(), clear: vi.fn() },
         );
 
         const command = new StartAuthCommand({
@@ -710,7 +709,6 @@ describe('CQRS Commands & Queries Runtime Error Taxonomy', () => {
             refreshReuseGraceSeconds: 30,
             embedPermissions: false,
           },
-          { save: vi.fn(), clear: vi.fn() },
         );
 
         const command = new StartAuthCommand({
@@ -733,7 +731,6 @@ describe('CQRS Commands & Queries Runtime Error Taxonomy', () => {
           eventBus,
           { find: vi.fn().mockResolvedValue(null) } as any,
           new NodeRefreshTokens(),
-          { save: vi.fn(), clear: vi.fn() },
           principalLoginService as any,
         );
 

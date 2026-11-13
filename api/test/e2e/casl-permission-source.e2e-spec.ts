@@ -35,7 +35,7 @@ describe.each(ADAPTERS)(
         .post('/users')
         .set('x-tenant-schema', TENANT)
         .set('x-test-user', ADMIN)
-        .send({ email: `${name}-${Date.now()}@acme.test`, name });
+        .send({ email: `${name}-${Date.now()}@acme.test`, username: name });
       expect(created.status).toBe(201);
       return created.body.id;
     }

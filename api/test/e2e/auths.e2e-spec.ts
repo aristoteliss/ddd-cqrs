@@ -47,7 +47,7 @@ describe.each(['express', 'fastify'] as const)('auths (e2e, %s)', (adapter) => {
       .post('/users')
       .set('x-tenant-schema', 'tenant')
       .set('x-test-user', admin)
-      .send({ email, name: 'Login Lena', department: 'engineering' });
+      .send({ email, username: 'Login Lena', department: 'engineering' });
     expect(created.status).toBe(201);
     await execute('insert into user_roles (user_id, role_id) values (?, ?)', [
       created.body.id,

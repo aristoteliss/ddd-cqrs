@@ -3,7 +3,10 @@
 import { type IWriteSideAggregateRepository } from '@cqrs-ddd/core/application';
 import { EntityNotFoundException } from '@cqrs-ddd/core/domain';
 import type { EventBus } from '@cqrs-ddd/cqrs';
-import type { CaslAuthorizer } from '@cqrs-ddd/pipeline-casl';
+import {
+  type CaslAuthorizer,
+  UnauthorizedActionException,
+} from '@cqrs-ddd/pipeline-casl';
 import { describe, expect, it, vi } from 'vitest';
 import { User } from '../../../domain/models/user.entity.js';
 import { DeleteUserCommand } from './delete-user.command.js';
@@ -12,7 +15,11 @@ import { UpdateUserCommand } from './update-user.command.js';
 import { UpdateUserHandler } from './update-user.handler.js';
 
 describe('Users CQRS write-side hydration', () => {
-  const authorizer = { authorize: vi.fn() } as unknown as CaslAuthorizer;
+  const project = vi.fn((_action, _subject, candidate) => candidate);
+  const authorizer = {
+    authorize: vi.fn(),
+    project,
+  } as unknown as CaslAuthorizer;
   const eventBus = { publishAll: vi.fn() } as unknown as EventBus;
 
   it('UpdateUserHandler hydrates from the command repository, not a read-side cache', async () => {
@@ -29,8 +36,30 @@ describe('Users CQRS write-side hydration', () => {
     );
 
     expect(repository.findById).toHaveBeenCalledWith(existing.id);
-    expect(result.username).toBe('Alicia');
-    expect(repository.save).toHaveBeenCalledWith(result);
+    expect(result.aggregate.username).toBe('Alicia');
+    expect(result.read).toMatchObject({ id: existing.id, username: 'Alicia' });
+    expect(repository.save).toHaveBeenCalledWith(result.aggregate);
+
+    project.mockImplementationOnce(() => {
+      throw new UnauthorizedActionException({
+        action: 'read',
+        subject: 'User',
+      });
+    });
+    const unreadable = await handler.execute(
+      new UpdateUserCommand({ id: existing.id, username: 'Alice B' }),
+    );
+    expect(unreadable.read).toBeNull();
+
+    const failure = new TypeError('cyclic snapshot');
+    project.mockImplementationOnce(() => {
+      throw failure;
+    });
+    await expect(
+      handler.execute(
+        new UpdateUserCommand({ id: existing.id, username: 'Alicia' }),
+      ),
+    ).rejects.toBe(failure);
   });
 
   it('UpdateUserHandler reports absence without leaking HTTP exceptions', async () => {

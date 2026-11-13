@@ -46,7 +46,7 @@ describe.each(ADAPTERS)(
         .set('x-correlation-id', correlationId)
         .set('x-api-id', 'api-admin-client')
         .set('x-api-key', 'admin-secret-key-12345')
-        .send({ email, name: 'BullMQ Worker User' });
+        .send({ email, username: 'BullMQ Worker User' });
 
       expect(res.status).toBe(201);
 
@@ -92,7 +92,7 @@ describe.each(ADAPTERS)(
         .set('x-tenant-schema', 'tenant')
         .set('x-correlation-id', correlationId)
         .set('x-test-user', admin)
-        .send({ email, name: 'DeadLetter Fail User' });
+        .send({ email, username: 'DeadLetter Fail User' });
 
       // Since UserCreatedHandler has rethrow: false, HTTP response is not interrupted
       expect(res.status).toBe(201);

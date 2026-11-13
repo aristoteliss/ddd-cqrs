@@ -29,15 +29,12 @@ import { CreateRoleCommand } from './create-role.command.js';
   logging({
     mapLogLevel: new Map([[UniqueRoleNameException, 'warn']]),
   }),
-  requires(
-    { action: APP_ACTIONS.CREATE, subject: APP_SUBJECTS.ROLE },
-    { action: APP_ACTIONS.READ, subject: APP_SUBJECTS.USER },
-  ),
+  requires({ action: APP_ACTIONS.CREATE, subject: APP_SUBJECTS.ROLE }),
   featureFlag({ flag: 'role-creation' }),
   idempotent({
-    keyFactory: operationIdempotencyKeyFactory(
+    keyFactory: operationIdempotencyKeyFactory<CreateRoleCommand>(
       'role.create',
-      (ctx) => (ctx.request as CreateRoleCommand).idempotencyKey,
+      (ctx) => ctx.request.idempotencyKey,
     ),
     replayScopeFactory: requireAbilityDigest,
   }),

@@ -42,9 +42,9 @@ import { CreateUserCommand } from './create-user.command.js';
     points: RATE_LIMIT_COST.createUser,
   }),
   idempotent({
-    keyFactory: operationIdempotencyKeyFactory(
+    keyFactory: operationIdempotencyKeyFactory<CreateUserCommand>(
       'user.create',
-      (ctx) => (ctx.request as CreateUserCommand).idempotencyKey,
+      (ctx) => ctx.request.idempotencyKey,
     ),
     replayScopeFactory: requireAbilityDigest,
   }),

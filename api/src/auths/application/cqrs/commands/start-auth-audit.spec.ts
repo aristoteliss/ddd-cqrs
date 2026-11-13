@@ -26,7 +26,6 @@ cqrs.register(
       refreshReuseGraceSeconds: 5,
       embedPermissions: false,
     },
-    { save() {}, clear() {} },
   ),
 );
 

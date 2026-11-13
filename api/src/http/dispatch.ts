@@ -4,7 +4,7 @@ import type { IncomingHttpHeaders } from 'node:http';
 import { context } from '@opentelemetry/api';
 import { getRPCMetadata, RPCType } from '@opentelemetry/core';
 import { type Answer, parse } from './answer.js';
-import type { Route } from './route.js';
+import { type Route, successStatus } from './route.js';
 
 /** A request as either framework hands it over, before the route's schemas parse it. */
 export interface RawRequest {
@@ -64,7 +64,7 @@ async function run(route: Route, request: RawRequest): Promise<Answer> {
   });
 
   return {
-    status: route.status ?? (route.method === 'POST' ? 201 : 200),
+    status: successStatus(route),
     body: result,
   };
 }

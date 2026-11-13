@@ -58,7 +58,6 @@ describe('Login audit actor', () => {
           refreshReuseGraceSeconds: 30,
           embedPermissions: false,
         },
-        { save: vi.fn(), clear: vi.fn() },
       ),
     );
     commandBus = cqrs.commandBus;

@@ -36,7 +36,7 @@ describe.each(ADAPTERS)(
         .set('x-tenant-schema', 'tenant')
         .set('x-correlation-id', correlationId)
         .set('x-test-user', admin)
-        .send({ email, name: 'Crosscutting Event User' });
+        .send({ email, username: 'Crosscutting Event User' });
       expect(created.status).toBe(201);
 
       const updated = await request(http)
@@ -44,7 +44,7 @@ describe.each(ADAPTERS)(
         .set('x-tenant-schema', 'tenant')
         .set('x-correlation-id', correlationId)
         .set('x-test-user', admin)
-        .send({ name: 'Crosscutting Event User Updated' });
+        .send({ username: 'Crosscutting Event User Updated' });
 
       expect(updated.status).toBe(200);
     });

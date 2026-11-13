@@ -146,60 +146,15 @@ describe('PrincipalLoginService', () => {
       expect(save).toHaveBeenCalledWith(auth);
     });
 
-    it('retries on concurrency conflict reloading the current aggregate', async () => {
-      const auth = Auth.start('user-1', 'hash-1', Date.now() + 10_000);
-      auth.acknowledgePersisted();
-      const reloaded = Auth.start('user-1', 'hash-2', Date.now() + 10_000);
-      reloaded.acknowledgePersisted();
-      const save = vi
-        .fn()
-        .mockRejectedValueOnce(
-          new ConcurrencyConflictError('Auth', auth.id, 1, 2),
-        )
-        .mockResolvedValueOnce(undefined);
-      const findById = vi.fn().mockResolvedValue(reloaded);
-      const service = createService({ authRepository: { save, findById } });
-      const now = Date.now();
-
-      const result = await service.revoke(auth, now);
-
-      expect(result).toBe(reloaded);
-      expect(reloaded.revokedAt).toBe(now);
-      expect(findById).toHaveBeenCalledWith(auth.id);
-      expect(save).toHaveBeenCalledTimes(2);
-    });
-
-    it('propagates error when max retry attempts are exhausted', async () => {
+    it('makes one save and leaves a version conflict to its caller', async () => {
       const auth = Auth.start('user-1', 'hash-1', Date.now() + 10_000);
       auth.acknowledgePersisted();
       const conflict = new ConcurrencyConflictError('Auth', auth.id, 1, 2);
       const save = vi.fn().mockRejectedValue(conflict);
-      const findById = vi.fn().mockImplementation(async () => {
-        const reloaded = Auth.start('user-1', 'hash-1', Date.now() + 10_000);
-        reloaded.acknowledgePersisted();
-        return reloaded;
-      });
-      const service = createService({ authRepository: { save, findById } });
+      const service = createService({ authRepository: { save } });
 
       await expect(service.revoke(auth, Date.now())).rejects.toBe(conflict);
-      expect(save).toHaveBeenCalledTimes(3);
-    });
-
-    it('returns null when concurrently deleted', async () => {
-      const auth = Auth.start('user-1', 'hash-1', Date.now() + 10_000);
-      auth.acknowledgePersisted();
-      const save = vi
-        .fn()
-        .mockRejectedValueOnce(
-          new ConcurrencyConflictError('Auth', auth.id, 1, 2),
-        );
-      const findById = vi.fn().mockResolvedValue(null);
-      const service = createService({ authRepository: { save, findById } });
-
-      const result = await service.revoke(auth, Date.now());
-
-      expect(result).toBeNull();
-      expect(findById).toHaveBeenCalledWith(auth.id);
+      expect(save).toHaveBeenCalledOnce();
     });
   });
 });

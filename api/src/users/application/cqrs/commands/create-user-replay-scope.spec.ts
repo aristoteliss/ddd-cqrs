@@ -1,7 +1,11 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
 import type { EventBus } from '@cqrs-ddd/cqrs';
-import { PipelineContext, SET_TENANT_ID } from '@cqrs-ddd/pipeline';
+import {
+  getPipelineItem,
+  PipelineContext,
+  SET_TENANT_ID,
+} from '@cqrs-ddd/pipeline';
 import {
   buildAbility,
   CASL_ABILITY_KEY,
@@ -11,7 +15,7 @@ import {
   MissingAbilityError,
 } from '@cqrs-ddd/pipeline-casl';
 import {
-  IDEMPOTENCY_REPLAYED_ITEM,
+  IDEMPOTENCY_REPLAYED_ITEM_TOKEN,
   IdempotencyBehavior,
   type IdempotencyBehaviorOptions,
   IdempotencyConflictError,
@@ -116,7 +120,9 @@ describe('Create user replay scope', () => {
     expect(second.result).toEqual(
       JSON.parse(JSON.stringify(first.result as object)),
     );
-    expect(second.context.items.get(IDEMPOTENCY_REPLAYED_ITEM)).toBe(true);
+    expect(
+      getPipelineItem(second.context, IDEMPOTENCY_REPLAYED_ITEM_TOKEN),
+    ).toBe(true);
     expect(save).toHaveBeenCalledTimes(1);
   });
 
@@ -144,10 +150,12 @@ describe('Create user replay scope', () => {
     ]);
     await expect(
       behavior().handle(changed, () => handler.execute(changed.request)),
-    ).rejects.toMatchObject({ reason: 'replay_scope', statusCode: 409 });
+    ).rejects.toMatchObject({ reason: 'replay_scope' });
 
     expect(save).toHaveBeenCalledTimes(1);
-    expect(changed.items.get(IDEMPOTENCY_REPLAYED_ITEM)).toBeUndefined();
+    expect(
+      getPipelineItem(changed, IDEMPOTENCY_REPLAYED_ITEM_TOKEN),
+    ).toBeUndefined();
   });
 
   it('separates two principals sharing an id by their classification', async () => {

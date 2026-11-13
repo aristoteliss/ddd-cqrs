@@ -53,7 +53,7 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
 
   const createUser = (
     user: string,
-    body: { email: string; name: string; department?: string | null },
+    body: { email: string; username: string; department?: string | null },
     idempotencyKey?: string,
   ) => {
     const post = as(user).post('/users');
@@ -75,10 +75,10 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
     it('creates a user and returns the mapped response (201)', async () => {
       const email = newEmail();
 
-      const res = await createUser(admin, { email, name: 'Ada Lovelace' });
+      const res = await createUser(admin, { email, username: 'Ada Lovelace' });
 
       expect(res.status).toBe(201);
-      expect(res.body).toMatchObject({ email, name: 'Ada Lovelace' });
+      expect(res.body).toMatchObject({ email, username: 'Ada Lovelace' });
       expect(typeof res.body.id).toBe('string');
       expect(res.body.id.length).toBeGreaterThan(0);
     });
@@ -89,7 +89,7 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
 
       const res = await createUser(admin, {
         email: rawEmail,
-        name: 'Case Sensitive Carl',
+        username: 'Case Sensitive Carl',
       });
 
       expect(res.status).toBe(201);
@@ -99,7 +99,7 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
     it('creates a user without a department (201)', async () => {
       const email = newEmail();
 
-      const res = await createUser(admin, { email, name: 'No Dept Dan' });
+      const res = await createUser(admin, { email, username: 'No Dept Dan' });
 
       expect(res.status).toBe(201);
       expect(res.body.department).toBeNull();
@@ -107,7 +107,7 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
 
     it('rejects duplicate email persistence with UniqueEmailException (409)', async () => {
       const email = newEmail();
-      const first = await createUser(admin, { email, name: 'First User' });
+      const first = await createUser(admin, { email, username: 'First User' });
       expect(first.status).toBe(201);
 
       const secondAdmin = JSON.stringify({
@@ -119,7 +119,7 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
 
       const conflict = await createUser(secondAdmin, {
         email,
-        name: 'Second User',
+        username: 'Second User',
       });
       expect(conflict.status).toBe(409);
       expect(conflict.body).toMatchObject({
@@ -132,21 +132,21 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
     it('rejects an invalid payload at the Zod boundary (400)', async () => {
       const res = await createUser(admin, {
         email: 'not-an-email',
-        name: 'no', // shorter than the 3-char minimum
+        username: 'no', // shorter than the 3-char minimum
       });
 
       expect(res.status).toBe(400);
       expect(res.body).toHaveProperty('fieldErrors');
       expect(res.body.fieldErrors).toMatchObject({
         email: expect.any(Array),
-        name: expect.any(Array),
+        username: expect.any(Array),
       });
     });
 
     it('denies an authenticated principal without capabilities (403)', async () => {
       const res = await createUser(guest, {
         email: newEmail(),
-        name: 'Grace Hopper',
+        username: 'Grace Hopper',
       });
 
       expect(res.status).toBe(403);
@@ -156,7 +156,7 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
       const res = await request(http)
         .post('/users')
         .set('x-tenant-schema', 'tenant')
-        .send({ email: newEmail(), name: 'Anonymous User' });
+        .send({ email: newEmail(), username: 'Anonymous User' });
 
       expect(res.status).toBe(403);
     });
@@ -165,7 +165,7 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
       const res = await request(http)
         .post('/users')
         .set('x-test-user', admin)
-        .send({ email: newEmail(), name: 'Tenantless User' });
+        .send({ email: newEmail(), username: 'Tenantless User' });
 
       expect(res.status).toBe(403);
     });
@@ -173,7 +173,7 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
     it('echoes the chosen department back in the response (201)', async () => {
       const res = await createUser(admin, {
         email: newEmail(),
-        name: 'Department Dana',
+        username: 'Department Dana',
         department: 'engineering',
       });
 
@@ -187,7 +187,7 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
       const email = newEmail();
       const body = {
         email,
-        name: 'Idempotent Isaac',
+        username: 'Idempotent Isaac',
         department: 'engineering',
       };
       const operation = randomUUID();
@@ -200,7 +200,7 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
       expect(replay.body).toMatchObject({
         id: first.body.id,
         email: first.body.email,
-        name: first.body.name,
+        username: first.body.username,
       });
     });
 
@@ -209,12 +209,12 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
       const operation = randomUUID();
       const first = await createUser(
         admin,
-        { email, name: 'Original Name' },
+        { email, username: 'Original Name' },
         operation,
       );
       const conflict = await createUser(
         admin,
-        { email, name: 'Different Name' },
+        { email, username: 'Different Name' },
         operation,
       );
 
@@ -228,7 +228,7 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
 
     it('creates the user again under a new operation id after it was deleted', async () => {
       const email = newEmail();
-      const body = { email, name: 'Recreated Rita' };
+      const body = { email, username: 'Recreated Rita' };
 
       const first = await createUser(admin, body, randomUUID());
       const deleted = await as(admin).delete(`/users/${first.body.id}`);
@@ -238,11 +238,14 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
       expect(deleted.status).toBe(204);
       expect(recreated.status).toBe(201);
       expect(recreated.body.id).not.toBe(first.body.id);
-      expect(recreated.body).toMatchObject({ email, name: 'Recreated Rita' });
+      expect(recreated.body).toMatchObject({
+        email,
+        username: 'Recreated Rita',
+      });
     });
 
     it('does not deduplicate without an Idempotency-Key: the unique email answers (409)', async () => {
-      const body = { email: newEmail(), name: 'Keyless Kim' };
+      const body = { email: newEmail(), username: 'Keyless Kim' };
 
       const first = await createUser(admin, body);
       const second = await createUser(admin, body);
@@ -254,11 +257,11 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
     it('creates distinct users independently without idempotency keys', async () => {
       const first = await createUser(admin, {
         email: newEmail(),
-        name: 'Distinct Dora',
+        username: 'Distinct Dora',
       });
       const second = await createUser(admin, {
         email: newEmail(),
-        name: 'Distinct Dora',
+        username: 'Distinct Dora',
       });
 
       expect(first.status).toBe(201);
@@ -277,7 +280,7 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
     it('returns 404 for a well-formed but unknown id on PATCH', async () => {
       const res = await as(admin)
         .patch(`/users/${randomUUID()}`)
-        .send({ name: 'Unknown User Renamed' });
+        .send({ username: 'Unknown User Renamed' });
 
       expect(res.status).toBe(404);
     });
@@ -301,7 +304,7 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
     it('rejects a malformed id on PATCH (400)', async () => {
       const res = await as(admin)
         .patch('/users/not-a-uuid')
-        .send({ name: 'Whatever Walt' });
+        .send({ username: 'Whatever Walt' });
 
       expect(res.status).toBe(400);
     });
@@ -315,12 +318,12 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
     it('rejects an update payload that violates the schema (400)', async () => {
       const created = await createUser(admin, {
         email: newEmail(),
-        name: 'Invalidate Ian',
+        username: 'Invalidate Ian',
       });
 
       const res = await as(admin)
         .patch(`/users/${created.body.id}`)
-        .send({ name: 'no' }); // shorter than the 3-char minimum
+        .send({ username: 'no' }); // shorter than the 3-char minimum
 
       expect(res.status).toBe(400);
     });
@@ -328,7 +331,7 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
     it('rejects an empty update payload with EmptyUserUpdateException (400)', async () => {
       const created = await createUser(admin, {
         email: newEmail(),
-        name: 'Empty Edward',
+        username: 'Empty Edward',
       });
 
       const res = await as(admin).patch(`/users/${created.body.id}`).send({});
@@ -343,7 +346,7 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
   describe('read / update / delete use cases', () => {
     it('lists users (200)', async () => {
       const email = newEmail();
-      await createUser(admin, { email, name: 'Listable Liam' });
+      await createUser(admin, { email, username: 'Listable Liam' });
 
       const res = await as(admin).get('/users');
 
@@ -358,7 +361,7 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
       const email = newEmail();
       const created = await createUser(admin, {
         email,
-        name: 'Fetchable Finn',
+        username: 'Fetchable Finn',
       });
 
       const res = await as(admin).get(`/users/${created.body.id}`);
@@ -370,7 +373,7 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
     it('denies reading a user for an anonymous request (403)', async () => {
       const created = await createUser(admin, {
         email: newEmail(),
-        name: 'Private Pria',
+        username: 'Private Pria',
       });
 
       const res = await request(http)
@@ -383,12 +386,12 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
     it('denies an update for a principal without capabilities (403)', async () => {
       const created = await createUser(admin, {
         email: newEmail(),
-        name: 'Guarded Gary',
+        username: 'Guarded Gary',
       });
 
       const res = await as(guest)
         .patch(`/users/${created.body.id}`)
-        .send({ name: 'Hijacked Hank' });
+        .send({ username: 'Hijacked Hank' });
 
       expect(res.status).toBe(403);
     });
@@ -396,7 +399,7 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
     it('updates a department (200)', async () => {
       const created = await createUser(admin, {
         email: newEmail(),
-        name: 'Mover Mona',
+        username: 'Mover Mona',
         department: 'engineering',
       });
 
@@ -414,7 +417,7 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
     it('clears a department by setting it to null (200)', async () => {
       const created = await createUser(admin, {
         email: newEmail(),
-        name: 'Clear Dept Cora',
+        username: 'Clear Dept Cora',
         department: 'engineering',
       });
 
@@ -432,41 +435,41 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
     it('updates a user (200) and evicts the cache immediately', async () => {
       const created = await createUser(admin, {
         email: newEmail(),
-        name: 'Updatable Uma',
+        username: 'Updatable Uma',
       });
 
       // Populate single-user GET cache
       const cached = await as(admin).get(`/users/${created.body.id}`);
-      expect(cached.body.name).toBe('Updatable Uma');
+      expect(cached.body.username).toBe('Updatable Uma');
 
       // Update name
       const res = await as(admin)
         .patch(`/users/${created.body.id}`)
-        .send({ name: 'Renamed Rachel' });
+        .send({ username: 'Renamed Rachel' });
 
       expect(res.status).toBe(200);
-      expect(res.body.name).toBe('Renamed Rachel');
+      expect(res.body.username).toBe('Renamed Rachel');
 
       // Single-user GET immediately reflects the update due to cache eviction
       const updatedGet = await as(admin).get(`/users/${created.body.id}`);
-      expect(updatedGet.body.name).toBe('Renamed Rachel');
+      expect(updatedGet.body.username).toBe('Renamed Rachel');
     });
 
     it('updates the name and department together (200)', async () => {
       const created = await createUser(admin, {
         email: newEmail(),
-        name: 'Combo Cora',
+        username: 'Combo Cora',
         department: 'engineering',
       });
 
       const res = await as(admin)
         .patch(`/users/${created.body.id}`)
-        .send({ name: 'Combined Cleo', department: 'security' });
+        .send({ username: 'Combined Cleo', department: 'security' });
 
       expect(res.status).toBe(200);
       expect(res.body).toMatchObject({
         id: created.body.id,
-        name: 'Combined Cleo',
+        username: 'Combined Cleo',
         department: 'security',
       });
     });
@@ -474,7 +477,7 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
     it('deletes a user (204) and evicts cache (subsequent GET returns 404)', async () => {
       const created = await createUser(admin, {
         email: newEmail(),
-        name: 'Deletable Dave',
+        username: 'Deletable Dave',
       });
 
       // Populate single-user GET cache
@@ -502,7 +505,7 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
         const email = newEmail();
         const created = await createUser(admin, {
           email,
-          name: 'Revocable Rachel',
+          username: 'Revocable Rachel',
         });
         expect(created.status).toBe(201);
 
@@ -542,7 +545,7 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
         const email = newEmail();
         const created = await createUser(admin, {
           email,
-          name: 'Versioned Victor',
+          username: 'Versioned Victor',
         });
         expect(created.status).toBe(201);
 
@@ -558,7 +561,7 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
 
         const updated = await as(admin)
           .patch(`/users/${created.body.id}`)
-          .send({ name: 'Versioned Victor Two' });
+          .send({ username: 'Versioned Victor Two' });
         expect(updated.status).toBe(200);
 
         const updatedUser = await store.em.findOne(
@@ -603,7 +606,7 @@ describe.each(ADAPTERS)('users (e2e) on %s', (adapter) => {
       const email = newEmail();
       const created = await createUser(admin, {
         email,
-        name: 'Plain Paul',
+        username: 'Plain Paul',
         department: 'finance',
       });
       expect(created.status).toBe(201);

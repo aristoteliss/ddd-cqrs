@@ -33,7 +33,7 @@ describe('login application/infrastructure boundary (e2e)', () => {
       .post('/users')
       .set('x-tenant-schema', 'tenant')
       .set('x-test-user', admin)
-      .send({ email, name: 'Boundary Alice' });
+      .send({ email, username: 'Boundary Alice' });
     expect(created.status).toBe(201);
 
     const login = await request(http)

@@ -39,7 +39,7 @@ async function seedAdminUser(ctx: E2EContext, label: string) {
     .post('/users')
     .set('x-tenant-schema', 'tenant')
     .set('x-test-user', admin)
-    .send({ email, name: `${label} user`, department: 'engineering' });
+    .send({ email, username: `${label} user`, department: 'engineering' });
   expect(created.status).toBe(201);
   await sql(ctx, 'insert into user_roles (user_id, role_id) values (?, ?)', [
     created.body.id,

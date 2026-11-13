@@ -35,23 +35,23 @@ const OPERATION_KEY_VERSION = 'v1';
  * @example
  * ```ts
  * idempotent({
- *   keyFactory: operationIdempotencyKeyFactory(
+ *   keyFactory: operationIdempotencyKeyFactory<CreateUserCommand>(
  *     'user.create',
- *     (ctx) => (ctx.request as CreateUserCommand).idempotencyKey,
+ *     (ctx) => ctx.request.idempotencyKey,
  *   ),
  *   replayScopeFactory: requireAbilityDigest,
  * });
  * ```
  */
-export function operationIdempotencyKeyFactory(
+export function operationIdempotencyKeyFactory<TRequest = unknown>(
   action: string,
-  operationId: (ctx: IPipelineContext) => string | undefined,
+  operationId: (ctx: IPipelineContext<TRequest>) => string | undefined,
 ): IdempotencyKeyFactory {
   return createPartitionedIdempotencyKeyFactory({
     version: OPERATION_KEY_VERSION,
     action,
     principal: () => principalSegments(getSessionPrincipal()),
-    operation: operationId,
+    operation: operationId as (ctx: IPipelineContext) => string | undefined,
     onMissingOperation: 'skip',
   });
 }

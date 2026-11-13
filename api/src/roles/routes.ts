@@ -1,10 +1,11 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
 import type { Cqrs } from '@cqrs-ddd/cqrs';
-import { UnauthorizedActionException } from '@cqrs-ddd/pipeline-casl';
 import { z } from 'zod';
+import type { WriteResult } from '../common/authorization/readable.js';
 import { HEADERS } from '../common/constants/headers.constants.js';
 import { HttpError } from '../http/http-error.js';
+import { readAfterWrite } from '../http/read-after-write.js';
 import { type Route, route } from '../http/route.js';
 import { CreateRoleCommand } from './application/cqrs/commands/create-role.command.js';
 import { DeleteRoleCommand } from './application/cqrs/commands/delete-role.command.js';
@@ -24,9 +25,9 @@ const RoleBody = z.object({
 const RoleName = z.object({ name: CreateRoleCommand.schema.shape.name });
 
 /**
- * The `/roles` routes: list, read, create, rename and delete, each one command or query
- * on the buses. A write answers with the role as far as the caller may read it
- * afterwards.
+ * The `/roles` routes: list, read, create, rename and delete. A write answers with the
+ * role as far as the caller may read it: a rename from its command result, and a create
+ * from a read after the write, because an idempotent replay must answer the current role.
  *
  * @example
  * ```ts
@@ -41,15 +42,6 @@ export function roleRoutes({
     queryBus.execute<GetRoleQuery, RoleReadModel | null>(
       new GetRoleQuery({ roleId }, { hydrate }),
     );
-
-  const readAfterWrite = async (roleId: string) => {
-    try {
-      return (await find(roleId)) ?? {};
-    } catch (error) {
-      if (error instanceof UnauthorizedActionException) return {};
-      throw error;
-    }
-  };
 
   return [
     route({
@@ -92,7 +84,7 @@ export function roleRoutes({
           }),
         );
 
-        return readAfterWrite(id);
+        return readAfterWrite(() => find(id));
       },
     }),
     route({
@@ -103,10 +95,12 @@ export function roleRoutes({
       summary: 'Renames a role; answers it as far as the caller may read it.',
       response: RoleBody,
       handle: async ({ params, body }) => {
-        await commandBus.execute(
-          new RenameRoleCommand({ id: params.id, name: body.name }),
-        );
-        return readAfterWrite(params.id);
+        const { read } = await commandBus.execute<
+          RenameRoleCommand,
+          WriteResult<Role, RoleReadModel>
+        >(new RenameRoleCommand({ id: params.id, name: body.name }));
+
+        return read ?? {};
       },
     }),
     route({

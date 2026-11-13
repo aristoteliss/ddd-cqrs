@@ -42,7 +42,7 @@ export class ApiClientAuthenticator {
    * @param req - Request object containing incoming HTTP headers.
    * @returns The resolved {@link SessionPrincipal} service principal if valid credentials match the active tenant,
    *          or `undefined` if no `x-api-id` header was provided.
-   * @throws {@link UnauthorizedException} If `x-api-id` is present but credentials are invalid,
+   * @throws HttpError 401 if `x-api-id` is present but credentials are invalid,
    *         the API key is incorrect, or the client is not authorized for the active tenant schema.
    *
    * @example

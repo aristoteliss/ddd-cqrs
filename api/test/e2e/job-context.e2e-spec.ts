@@ -59,7 +59,7 @@ describe.each(ADAPTERS)('job execution context (e2e) on %s', (adapter) => {
       .post('/users')
       .set('x-tenant-schema', 'tenant')
       .set('x-test-user', admin)
-      .send({ email, name: 'Job Context User' });
+      .send({ email, username: 'Job Context User' });
 
   const job = (principal: Record<string, unknown>, tenantId = 'tenant') =>
     ({
@@ -94,7 +94,7 @@ describe.each(ADAPTERS)('job execution context (e2e) on %s', (adapter) => {
       .set('x-api-id', 'api-admin-client')
       .set('x-api-key', 'admin-secret-key-12345')
       .set('x-correlation-id', correlationId)
-      .send({ email, name: 'Client Job User' });
+      .send({ email, username: 'Client Job User' });
     expect(created.status).toBe(201);
 
     const { job: finished, state } = await waitForJob(queue, email);

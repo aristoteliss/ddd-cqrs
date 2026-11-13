@@ -15,7 +15,6 @@ import { SessionService } from './session.service.js';
 export type AuthenticatedRequest = {
   headers?: Record<string, string | string[] | undefined>;
   session?: Session<SessionData>;
-  sessionPrincipal?: SessionPrincipal;
 };
 
 export class RequestPrincipalResolver {
@@ -33,12 +32,12 @@ export class RequestPrincipalResolver {
    *
    * @param req - The incoming request.
    * @returns The principal, or `undefined` for a request without credentials.
-   * @throws UnauthorizedException for a credential that is invalid, expired or
+   * @throws HttpError (401) for a credential that is invalid, expired or
    *   issued for another tenant.
    *
    * @example
    * ```ts
-   * req.sessionPrincipal = await this.principalResolver.resolvePrincipal(req);
+   * const principal = await principalResolver.resolvePrincipal(req);
    * ```
    */
   async resolvePrincipal(

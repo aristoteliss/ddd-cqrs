@@ -22,7 +22,6 @@ import { Auth, AuthSnapshot } from '../../../domain/models/auth.entity.js';
 import { PrincipalLoginService } from '../../../services/principal-login.service.js';
 import { type AuthTokenPolicy } from '../../ports/auth-token-policy.port.js';
 import { type IRefreshTokens } from '../../ports/refresh-tokens.port.js';
-import { type ISessionCookies } from '../../ports/session-cookies.port.js';
 import { AuthResult } from '../../results/auth.result.js';
 import { StartAuthCommand } from './start-auth.command.js';
 
@@ -30,8 +29,8 @@ import { StartAuthCommand } from './start-auth.command.js';
 @UsePipeline(
   metrics({ meterName: 'users-api.auth' }),
   rateLimit({
-    keyFactory: createPartitionedRateLimitKeyFactory(
-      (ctx) => (ctx.request as StartAuthCommand).clientIp,
+    keyFactory: createPartitionedRateLimitKeyFactory<StartAuthCommand>(
+      (ctx) => ctx.request.clientIp,
     ),
     points: RATE_LIMIT_COST.login,
   }),
@@ -53,7 +52,6 @@ export class StartAuthHandler extends CommandBaseHandler<
     private readonly commandRepository: ICommandRepository<Auth, AuthSnapshot>,
     private readonly refreshTokens: IRefreshTokens,
     private readonly policy: AuthTokenPolicy,
-    private readonly cookies: ISessionCookies,
   ) {
     super(eventBus);
   }
@@ -75,7 +73,7 @@ export class StartAuthHandler extends CommandBaseHandler<
     await this.commandRepository.save(auth);
     const access = await this.principalLoginService.sign(user, auth.id);
 
-    const result: AuthResult = {
+    return {
       aggregate: auth,
       userId: user.id,
       principalType: 'user',
@@ -87,8 +85,5 @@ export class StartAuthHandler extends CommandBaseHandler<
       refreshToken,
       sessionExpiresAt,
     };
-    this.cookies.save(result);
-
-    return result;
   }
 }

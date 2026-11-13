@@ -134,7 +134,7 @@ describe.each([
   ['Fastify', () => fastify.server],
 ])('the /users routes on %s', (name, server) => {
   const create = (body: object) => request(server()).post('/users').send(body);
-  const ann = { name: 'Ann', email: `ann@${name.toLowerCase()}.test` };
+  const ann = { username: 'Ann', email: `ann@${name.toLowerCase()}.test` };
 
   it('creates a user, answers 201 with it and enqueues the welcome email', async () => {
     const response = await create({ ...ann, department: 'sales' });
@@ -143,7 +143,7 @@ describe.each([
     expect(response.body).toEqual({
       id: expect.any(String),
       email: ann.email,
-      name: 'Ann',
+      username: 'Ann',
       department: 'sales',
     });
     await vi.waitFor(() =>
@@ -175,14 +175,14 @@ describe.each([
     await create(ann);
 
     const taken = await create(ann);
-    const invalid = await create({ name: 'A', email: 'not-an-email' });
+    const invalid = await create({ username: 'A', email: 'not-an-email' });
 
     expect(taken.status).toBe(409);
     expect(taken.body).toMatchObject({ statusCode: 409, error: 'Conflict' });
     expect(invalid.status).toBe(400);
     expect(Object.keys(invalid.body.fieldErrors).sort()).toEqual([
       'email',
-      'name',
+      'username',
     ]);
   });
 
@@ -200,7 +200,7 @@ describe.each([
     expect(read.body).toEqual({
       id,
       email: ann.email,
-      name: 'Ann',
+      username: 'Ann',
       department: null,
     });
     expect(list.body).toEqual({ users: [read.body] });

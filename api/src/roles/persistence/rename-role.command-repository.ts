@@ -1,12 +1,13 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
 import { ICache } from '@cqrs-ddd/core/application';
-import { cacheKey, PersistedWrite } from '@cqrs-ddd/core/persistence';
+import { PersistedWrite } from '@cqrs-ddd/core/persistence';
 import { AggregateRepository, optimisticUpdate } from '@cqrs-ddd/mikro-orm';
 import { cacheWriteLogger } from '../../persistence/cache/cache-loggers.js';
 import { MikroOrmStore } from '../../persistence/mikro-orm.store.js';
 import { UniqueRoleNameException } from '../domain/models/errors/role-name.exception.js';
 import { Role, RoleSnapshot } from '../domain/models/role.entity.js';
+import { roleCacheKeys } from './role.cache-keys.js';
 
 export class RenameRoleCommandRepository extends AggregateRepository<
   RoleSnapshot,
@@ -20,10 +21,8 @@ export class RenameRoleCommandRepository extends AggregateRepository<
   @PersistedWrite<Role>({
     cache: {
       logger: cacheWriteLogger,
-      setKey: (role) => cacheKey(Role.aggregateName, { id: role.id }),
-      invalidateKeys: (role) => [
-        cacheKey(Role.aggregateName, { name: role.name }),
-      ],
+      setKey: roleCacheKeys.byId,
+      invalidateKeys: (role) => [roleCacheKeys.byName(role)],
     },
     unique: { name: (role) => new UniqueRoleNameException(role) },
   })

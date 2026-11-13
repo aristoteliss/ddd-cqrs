@@ -89,7 +89,11 @@ describe.each(ADAPTERS)('pipeline-packages (e2e) on %s', (adapter) => {
         .set('x-tenant-schema', 'tenant')
         .set('x-test-user', admin)
         .set('x-correlation-id', customCorrId)
-        .send({ email, name: 'Correlation Prop User', department: 'platform' });
+        .send({
+          email,
+          username: 'Correlation Prop User',
+          department: 'platform',
+        });
 
       expect(res.status).toBe(201);
       expect(res.headers['x-correlation-id']).toBe(customCorrId);
@@ -125,35 +129,29 @@ describe.each(ADAPTERS)('pipeline-packages (e2e) on %s', (adapter) => {
       // 2. Cannot create a user (403)
       const createRes = await as(userReadOnly)
         .post('/users')
-        .send({ email: newEmail(), name: 'Forbidden User' });
+        .send({ email: newEmail(), username: 'Forbidden User' });
       expect(createRes.status).toBe(403);
     });
 
-    it('enforces dual-rule requirement on CreateRoleHandler (Role|create AND User|read)', async () => {
-      // Caller with ONLY Role|create|* (missing User|read|*)
+    it('creates a role for a caller that holds Role|create only', async () => {
+      const userReadOnly = JSON.stringify({
+        id: 'role-creator-none',
+        email: 'userread@acme.test',
+        grants: ['User|read|*'],
+      });
+      const deniedRes = await as(userReadOnly)
+        .post('/roles')
+        .send({ name: `single-rule-role-${Date.now()}-1` });
+      expect(deniedRes.status).toBe(403);
+
       const roleCreateOnly = JSON.stringify({
-        id: 'role-creator-partial',
+        id: 'role-creator',
         email: 'roleonly@acme.test',
         grants: ['Role|create|*'],
       });
-
-      const roleName1 = `dual-rule-role-${Date.now()}-1`;
-      const deniedRes = await as(roleCreateOnly)
+      const allowedRes = await as(roleCreateOnly)
         .post('/roles')
-        .send({ name: roleName1 });
-      expect(deniedRes.status).toBe(403);
-
-      // Caller with BOTH Role|create|* AND User|read|*
-      const roleCreateWithUserRead = JSON.stringify({
-        id: 'role-creator-full',
-        email: 'rolefull@acme.test',
-        grants: ['Role|create|*', 'User|read|*'],
-      });
-
-      const roleName2 = `dual-rule-role-${Date.now()}-2`;
-      const allowedRes = await as(roleCreateWithUserRead)
-        .post('/roles')
-        .send({ name: roleName2 });
+        .send({ name: `single-rule-role-${Date.now()}-2` });
       expect(allowedRes.status).toBe(201);
       // Without Role|read the caller may not read the role it just created.
       expect(allowedRes.body).toEqual({});
@@ -164,7 +162,7 @@ describe.each(ADAPTERS)('pipeline-packages (e2e) on %s', (adapter) => {
       const engEmail = newEmail();
       const engUser = await as(admin).post('/users').send({
         email: engEmail,
-        name: 'Eng Target User',
+        username: 'Eng Target User',
         department: 'engineering',
       });
       expect(engUser.status).toBe(201);
@@ -173,7 +171,7 @@ describe.each(ADAPTERS)('pipeline-packages (e2e) on %s', (adapter) => {
       const salesEmail = newEmail();
       const salesUser = await as(admin).post('/users').send({
         email: salesEmail,
-        name: 'Sales Target User',
+        username: 'Sales Target User',
         department: 'sales',
       });
       expect(salesUser.status).toBe(201);
@@ -189,17 +187,17 @@ describe.each(ADAPTERS)('pipeline-packages (e2e) on %s', (adapter) => {
       // 1. Updating engineering user should SUCCEED
       const updateEngRes = await as(engManager)
         .patch(`/users/${engUser.body.id}`)
-        .send({ name: 'Renamed Eng User' });
+        .send({ username: 'Renamed Eng User' });
       expect(updateEngRes.status).toBe(200);
       // A write-only caller receives no fields back.
       expect(updateEngRes.body).toEqual({});
       const renamed = await as(admin).get(`/users/${engUser.body.id}`);
-      expect(renamed.body.name).toBe('Renamed Eng User');
+      expect(renamed.body.username).toBe('Renamed Eng User');
 
       // 2. Updating sales user should be DENIED (403) by entity.authorize()
       const updateSalesRes = await as(engManager)
         .patch(`/users/${salesUser.body.id}`)
-        .send({ name: 'Renamed Sales User' });
+        .send({ username: 'Renamed Sales User' });
       expect(updateSalesRes.status).toBe(403);
     });
 
@@ -207,7 +205,7 @@ describe.each(ADAPTERS)('pipeline-packages (e2e) on %s', (adapter) => {
       const email = newEmail();
       const created = await as(admin)
         .post('/users')
-        .send({ email, name: 'Field Target', department: 'engineering' });
+        .send({ email, username: 'Field Target', department: 'engineering' });
       expect(created.status).toBe(201);
 
       // Principal permitted to update ONLY the 'username' field (not department)
@@ -221,10 +219,10 @@ describe.each(ADAPTERS)('pipeline-packages (e2e) on %s', (adapter) => {
       // 1. Updating name ONLY should SUCCEED (200)
       const nameRes = await as(usernameOnlyUser)
         .patch(`/users/${created.body.id}`)
-        .send({ name: 'New Username Only' });
+        .send({ username: 'New Username Only' });
       expect(nameRes.status).toBe(200);
       // The response carries only what the caller may read afterwards.
-      expect(nameRes.body).toEqual({ name: 'New Username Only' });
+      expect(nameRes.body).toEqual({ username: 'New Username Only' });
 
       // 2. Attempting to update 'department' should be DENIED (403)
       const deptRes = await as(usernameOnlyUser)
@@ -249,15 +247,17 @@ describe.each(ADAPTERS)('pipeline-packages (e2e) on %s', (adapter) => {
       // 2. Create is DENIED (403) due to inverted rule
       const createRes = await as(userWithoutCreate)
         .post('/users')
-        .send({ email: newEmail(), name: 'Blocked By Inverted' });
+        .send({ email: newEmail(), username: 'Blocked By Inverted' });
       expect(createRes.status).toBe(403);
     });
 
     it('enforces inverted / denied capabilities on DeleteUserHandler', async () => {
       const email = newEmail();
-      const created = await as(admin)
-        .post('/users')
-        .send({ email, name: 'Protected From Delete', department: 'platform' });
+      const created = await as(admin).post('/users').send({
+        email,
+        username: 'Protected From Delete',
+        department: 'platform',
+      });
       expect(created.status).toBe(201);
 
       // Principal with all|manage|* but explicitly denied User|delete
@@ -287,7 +287,7 @@ describe.each(ADAPTERS)('pipeline-packages (e2e) on %s', (adapter) => {
         const userEmail = newEmail();
         const createRes = await as(admin).post('/users').send({
           email: userEmail,
-          name: 'Db Capability User',
+          username: 'Db Capability User',
           department: 'engineering',
         });
         expect(createRes.status).toBe(201);
@@ -350,7 +350,7 @@ describe.each(ADAPTERS)('pipeline-packages (e2e) on %s', (adapter) => {
       const email = newEmail();
       const body = {
         email,
-        name: 'Idempotency Test User',
+        username: 'Idempotency Test User',
         department: 'engineering',
       };
       const operation = randomUUID();
@@ -367,7 +367,7 @@ describe.each(ADAPTERS)('pipeline-packages (e2e) on %s', (adapter) => {
       expect(first.status).toBe(201);
       expect(second.status).toBe(201);
       expect(second.body.id).toBe(first.body.id);
-      expect(second.body.name).toBe(first.body.name);
+      expect(second.body.username).toBe(first.body.username);
     });
 
     it('rejects key reuse with a modified payload (422)', async () => {
@@ -377,12 +377,12 @@ describe.each(ADAPTERS)('pipeline-packages (e2e) on %s', (adapter) => {
       const first = await as(admin)
         .post('/users')
         .set('idempotency-key', operation)
-        .send({ email, name: 'Original Name', department: 'engineering' });
+        .send({ email, username: 'Original Name', department: 'engineering' });
 
       const conflict = await as(admin)
         .post('/users')
         .set('idempotency-key', operation)
-        .send({ email, name: 'Different Name', department: 'engineering' });
+        .send({ email, username: 'Different Name', department: 'engineering' });
 
       expect(first.status).toBe(201);
       expect(conflict.status).toBe(422);
@@ -403,16 +403,16 @@ describe.each(ADAPTERS)('pipeline-packages (e2e) on %s', (adapter) => {
       for (let i = 0; i < 60; i++) {
         const created = await as(creator)
           .post('/users')
-          .send({ email: newEmail(), name: `Rate User ${i}` });
+          .send({ email: newEmail(), username: `Rate User ${i}` });
         expect(created.status).toBe(201);
       }
 
       const throttled = await as(creator)
         .post('/users')
-        .send({ email: newEmail(), name: 'Rate User 61' });
+        .send({ email: newEmail(), username: 'Rate User 61' });
       const otherPrincipal = await as(admin)
         .post('/users')
-        .send({ email: newEmail(), name: 'Unthrottled Uma' });
+        .send({ email: newEmail(), username: 'Unthrottled Uma' });
 
       expect(otherPrincipal.status).toBe(201);
 
@@ -430,14 +430,14 @@ describe.each(ADAPTERS)('pipeline-packages (e2e) on %s', (adapter) => {
       const email = newEmail();
       const created = await as(admin)
         .post('/users')
-        .send({ email, name: 'Cached User', department: 'engineering' });
+        .send({ email, username: 'Cached User', department: 'engineering' });
       expect(created.status).toBe(201);
       const userId = created.body.id;
 
       // 1st request populates the tenant-aware repository cache.
       const firstGet = await as(admin).get(`/users/${userId}`);
       expect(firstGet.status).toBe(200);
-      expect(firstGet.body.name).toBe('Cached User');
+      expect(firstGet.body.username).toBe('Cached User');
 
       // 2nd request is eligible for the repository read-through cache.
       const secondGet = await as(admin).get(`/users/${userId}`);
@@ -457,7 +457,11 @@ describe.each(ADAPTERS)('pipeline-packages (e2e) on %s', (adapter) => {
         .set('x-tenant-schema', 'tenant')
         .set('x-test-user', admin)
         .set('x-correlation-id', customCorrId)
-        .send({ email, name: 'Email Queue User', department: 'engineering' });
+        .send({
+          email,
+          username: 'Email Queue User',
+          department: 'engineering',
+        });
 
       expect(created.status).toBe(201);
 
@@ -486,7 +490,7 @@ describe.each(ADAPTERS)('pipeline-packages (e2e) on %s', (adapter) => {
 
       const created = await as(admin)
         .post('/users')
-        .send({ email, name: 'Batch User', department: 'engineering' });
+        .send({ email, username: 'Batch User', department: 'engineering' });
       expect(created.status).toBe(201);
 
       const customCorrId = `corr-batch-${Date.now()}`;
@@ -495,7 +499,7 @@ describe.each(ADAPTERS)('pipeline-packages (e2e) on %s', (adapter) => {
         .set('x-tenant-schema', 'tenant')
         .set('x-test-user', admin)
         .set('x-correlation-id', customCorrId)
-        .send({ name: 'Batch User Renamed' });
+        .send({ username: 'Batch User Renamed' });
 
       expect(updateRes.status).toBe(200);
 
@@ -525,9 +529,11 @@ describe.each(ADAPTERS)('pipeline-packages (e2e) on %s', (adapter) => {
   describe('DeleteUserHandler HTTP flow', () => {
     it('deletes a user and removes it from subsequent lists', async () => {
       const email = newEmail();
-      const created = await as(admin)
-        .post('/users')
-        .send({ email, name: 'Audited Delete User', department: 'security' });
+      const created = await as(admin).post('/users').send({
+        email,
+        username: 'Audited Delete User',
+        department: 'security',
+      });
       expect(created.status).toBe(201);
 
       const delRes = await as(admin).delete(`/users/${created.body.id}`);
@@ -644,12 +650,12 @@ describe.each(ADAPTERS)('pipeline-packages (e2e) on %s', (adapter) => {
     it('validates payloads with Zod and returns 400 with fieldErrors', async () => {
       const res = await as(admin)
         .post('/users')
-        .send({ email: 'bad-email-address', name: 'sh' });
+        .send({ email: 'bad-email-address', username: 'sh' });
 
       expect(res.status).toBe(400);
       expect(res.body).toHaveProperty('fieldErrors');
       expect(res.body.fieldErrors).toHaveProperty('email');
-      expect(res.body.fieldErrors).toHaveProperty('name');
+      expect(res.body.fieldErrors).toHaveProperty('username');
     });
 
     it('rejects UUID validation failures at parameter boundary (400)', async () => {

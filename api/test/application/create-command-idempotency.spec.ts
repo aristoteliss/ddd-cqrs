@@ -1,10 +1,14 @@
 /* Copyright (C) 2026-present Aristotelis — see repository license. */
 
 import type { CommandBus, EventBus, QueryBus } from '@cqrs-ddd/cqrs';
-import { PipelineContext, SET_TENANT_ID } from '@cqrs-ddd/pipeline';
+import {
+  getPipelineItem,
+  PipelineContext,
+  SET_TENANT_ID,
+} from '@cqrs-ddd/pipeline';
 import type { CaslAuthorizer } from '@cqrs-ddd/pipeline-casl';
 import {
-  IDEMPOTENCY_REPLAYED_ITEM,
+  IDEMPOTENCY_REPLAYED_ITEM_TOKEN,
   IdempotencyBehavior,
   type IdempotencyBehaviorOptions,
   MemoryIdempotencyStore,
@@ -26,7 +30,7 @@ import {
   User,
   type UserSnapshot,
 } from '../../src/users/domain/models/user.entity.js';
-import { userBody, userRoutes } from '../../src/users/routes.js';
+import { userRoutes } from '../../src/users/routes.js';
 import { declaredOptions, requiredKey } from '../support/declared-options.js';
 
 const { keyFactory: createUserIdempotencyKey } = declaredOptions<
@@ -99,10 +103,9 @@ describe('Create command idempotency composition', () => {
       const replayNext = vi.fn(() => handler.execute(replayContext.request));
       const replay = await behavior.handle(replayContext, replayNext);
       expect(replay).toEqual(record?.response);
-      expect(userBody(replay as UserSnapshot)).toEqual(
-        userBody(first as UserSnapshot),
-      );
-      expect(replayContext.items.get(IDEMPOTENCY_REPLAYED_ITEM)).toBe(true);
+      expect(
+        getPipelineItem(replayContext, IDEMPOTENCY_REPLAYED_ITEM_TOKEN),
+      ).toBe(true);
       expect(replayNext).not.toHaveBeenCalled();
       expect(save).toHaveBeenCalledTimes(1);
       const aggregate = save.mock.calls[0][0];
@@ -152,7 +155,7 @@ describe('Create command idempotency composition', () => {
       create?.handle({
         params: {},
         query: {},
-        body: { name: 'Alice', email: 'alice@example.test' },
+        body: { username: 'Alice', email: 'alice@example.test' },
         headers: { 'idempotency-key': 'op-1' },
         ip: '127.0.0.1',
         cookies: {},
@@ -169,7 +172,7 @@ describe('Create command idempotency composition', () => {
       expect(query).toBeInstanceOf(GetUserQuery);
       expect((query as GetUserQuery).userId).toBe(created.id);
     }
-    expect(first).toEqual({ id: created.id, name: 'Alicia' });
+    expect(first).toEqual({ id: created.id, username: 'Alicia' });
     expect(replay).toEqual(first);
   });
 
@@ -254,7 +257,9 @@ describe('Create command idempotency composition', () => {
       id: (first as RoleSnapshot).id,
       name: (first as RoleSnapshot).name,
     });
-    expect(replayContext.items.get(IDEMPOTENCY_REPLAYED_ITEM)).toBe(true);
+    expect(
+      getPipelineItem(replayContext, IDEMPOTENCY_REPLAYED_ITEM_TOKEN),
+    ).toBe(true);
     expect(replayNext).not.toHaveBeenCalled();
     expect(save).toHaveBeenCalledTimes(1);
     const aggregate = save.mock.calls[0][0];

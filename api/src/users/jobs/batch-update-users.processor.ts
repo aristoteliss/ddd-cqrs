@@ -8,21 +8,16 @@ import {
 import type { Job } from 'bullmq';
 import type { Logger } from 'pino';
 import type { TenantSchemaContext } from '../../persistence/tenant-schema.context.js';
+import type { UserBatchDispatchItem } from '../application/ports/user-event-dispatcher.port.js';
 
 export const BATCH_UPDATE_USERS_QUEUE = 'batch-update-users';
-
-export interface BatchUpdateUserItem {
-  userId: string;
-  username?: string;
-  email?: string;
-}
 
 /**
  * Batch job payload. The items are wrapped in an object so the job context
  * travels beside them; one batch runs in one tenant.
  */
 export type BatchUpdateUsersJobData = WithJobContext<{
-  items: BatchUpdateUserItem[];
+  items: UserBatchDispatchItem[];
 }>;
 
 export interface SimulatedBatchUpdateResult {

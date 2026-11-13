@@ -38,7 +38,7 @@ describe.each(ADAPTERS)(
         .post('/users')
         .set('x-tenant-schema', 'tenant')
         .set('x-test-user', admin)
-        .send({ email, name: 'Boundary User', department: 'engineering' });
+        .send({ email, username: 'Boundary User', department: 'engineering' });
       expect(created.status).toBe(201);
 
       const queryBus = ctx.app.cqrs.queryBus;

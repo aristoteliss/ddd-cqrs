@@ -44,7 +44,7 @@ describe.each(ADAPTERS)(
           .post('/users')
           .set('x-tenant-schema', 'tenant')
           .set('x-test-user', admin)
-          .send({ email, name: 'Initial User' });
+          .send({ email, username: 'Initial User' });
 
         expect(createRes.status).toBe(201);
         const userId = createRes.body.id;
@@ -76,7 +76,7 @@ describe.each(ADAPTERS)(
           .patch(`/users/${userId}`)
           .set('x-tenant-schema', 'tenant')
           .set('x-test-user', admin)
-          .send({ name: 'Updated User v2' });
+          .send({ username: 'Updated User v2' });
 
         expect(updateRes.status).toBe(200);
 
@@ -95,7 +95,7 @@ describe.each(ADAPTERS)(
         .post('/users')
         .set('x-tenant-schema', 'tenant')
         .set('x-test-user', admin)
-        .send({ email, name: 'Read Test User' });
+        .send({ email, username: 'Read Test User' });
 
       expect(createRes.status).toBe(201);
       const userId = createRes.body.id;
@@ -108,7 +108,7 @@ describe.each(ADAPTERS)(
 
       expect(readRes.status).toBe(200);
       expect(readRes.body.id).toBe(userId);
-      expect(readRes.body.name).toBe('Read Test User');
+      expect(readRes.body.username).toBe('Read Test User');
     });
   },
 );

@@ -2,7 +2,7 @@
 
 import { STATUS_CODES } from 'node:http';
 import { z } from 'zod';
-import type { Route } from './route.js';
+import { type Route, successStatus } from './route.js';
 
 /** The parts of an OpenAPI document that do not come from the routes. */
 export interface OpenApiOptions {
@@ -41,7 +41,7 @@ function parameters(type: z.ZodType | undefined, where: 'path' | 'query') {
 }
 
 function operation(route: Route, options: OpenApiOptions) {
-  const status = route.status ?? (route.method === 'POST' ? 201 : 200);
+  const status = successStatus(route);
   return {
     ...(route.summary ? { summary: route.summary } : {}),
     parameters: [

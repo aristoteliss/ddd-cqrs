@@ -85,6 +85,24 @@ export async function memoryCqrs(domain: string) {
 }
 
 /**
+ * The command bus of {@link memoryCqrs} with `handler` registered, so that a command runs
+ * through the handler's pipeline in tenant `tenant`. Close it when the spec ends.
+ */
+export async function pipelineOf(
+  domain: string,
+  handler: object,
+  tenant: string,
+) {
+  const { cqrs } = await memoryCqrs(domain);
+  cqrs.register(handler);
+  return {
+    execute: <TResult>(command: object): Promise<TResult> =>
+      runWithTenant(tenant, () => cqrs.commandBus.execute(command)),
+    close: () => cqrs.close(),
+  };
+}
+
+/**
  * Mount options for `routes` in tenant `tenant_a`, with a session principal holding the
  * grants `grants()` returns at each request, or none when it returns `undefined`.
  */

@@ -11,6 +11,7 @@ import {
   parseCapabilityString,
   serializeCapability,
 } from '@cqrs-ddd/pipeline-casl';
+import { runWithTenant } from '@cqrs-ddd/pipeline-tenant';
 import { stableStringify } from '@cqrs-ddd/safe-stringify';
 import type { EntityManager } from '@mikro-orm/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -243,9 +244,8 @@ describe('Materialized user permission rules', () => {
         { em: db.em() } as never,
       );
 
-      const rules = await sessionPrincipalStore.run(
-        { id: U1, type: 'user', tenant: 'tenant' },
-        () => repo.find(new GetUserPermissionRulesQuery({ userId: U1 })),
+      const rules = await runWithTenant('tenant', () =>
+        repo.find(new GetUserPermissionRulesQuery({ userId: U1 })),
       );
 
       expect(rules.length).toBeGreaterThan(0);
@@ -263,9 +263,8 @@ describe('Materialized user permission rules', () => {
         { em: db.em() } as never,
       );
 
-      const rules = await sessionPrincipalStore.run(
-        { id: U2, type: 'user', tenant: 'tenant' },
-        () => repo.find(new GetUserPermissionRulesQuery({ userId: U2 })),
+      const rules = await runWithTenant('tenant', () =>
+        repo.find(new GetUserPermissionRulesQuery({ userId: U2 })),
       );
 
       expect(rules).toEqual([]);
@@ -278,23 +277,19 @@ describe('Materialized user permission rules', () => {
         { em: db.em() } as never,
       );
 
-      const first = await sessionPrincipalStore.run(
-        { id: U1, type: 'user', tenant: 'tenant' },
-        () => repo.find(new GetUserPermissionRulesQuery({ userId: U1 })),
+      const first = await runWithTenant('tenant', () =>
+        repo.find(new GetUserPermissionRulesQuery({ userId: U1 })),
       );
 
-      const cached = await sessionPrincipalStore.run(
-        { id: U1, type: 'user', tenant: 'tenant' },
-        () => repo.find(new GetUserPermissionRulesQuery({ userId: U1 })),
+      const cached = await runWithTenant('tenant', () =>
+        repo.find(new GetUserPermissionRulesQuery({ userId: U1 })),
       );
       expect(cached).toEqual(first);
 
-      const refreshed = await sessionPrincipalStore.run(
-        { id: U1, type: 'user', tenant: 'tenant' },
-        () =>
-          repo.find(
-            new GetUserPermissionRulesQuery({ userId: U1 }, { refresh: true }),
-          ),
+      const refreshed = await runWithTenant('tenant', () =>
+        repo.find(
+          new GetUserPermissionRulesQuery({ userId: U1 }, { refresh: true }),
+        ),
       );
       expect(refreshed).toEqual(first);
     });

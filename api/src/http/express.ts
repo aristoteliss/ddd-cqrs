@@ -7,22 +7,10 @@ import express, {
   type Request,
   type Response,
 } from 'express';
-import type { Logger } from 'pino';
 import { TRUST_PROXY } from '../common/environment/auth-token.config.js';
-import { type Answer, answer, type DomainAnswer, notFound } from './answer.js';
-import type { Middleware } from './context.js';
-import { type Around, dispatch } from './dispatch.js';
-import type { Route } from './route.js';
-
-/** What both mounts take: the routes, the request context and the error mapping. */
-export interface MountOptions {
-  readonly routes: readonly Route[];
-  readonly context: Middleware;
-  readonly logger: Logger;
-  readonly domain?: DomainAnswer;
-  /** Runs around every route, such as the authentication of its caller. */
-  readonly around?: Around;
-}
+import { type Answer, notFound } from './answer.js';
+import { dispatch } from './dispatch.js';
+import { failed, type MountOptions } from './mount-options.js';
 
 /**
  * The Express application of the API: JSON bodies, cookies, the request context, every
@@ -72,19 +60,6 @@ export function expressApp(options: MountOptions): Express {
   );
 
   return app;
-}
-
-/** The answer for an error, logging the ones that answer 500. */
-export function failed(
-  error: unknown,
-  options: Pick<MountOptions, 'domain' | 'logger'>,
-): Answer {
-  const result = answer(error, options.domain);
-
-  if (result.status >= 500)
-    options.logger.error({ err: error }, 'request failed');
-
-  return result;
 }
 
 function send(res: Response, { status, body, headers }: Answer): void {

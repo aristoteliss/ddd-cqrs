@@ -36,7 +36,7 @@ describe.each(ADAPTERS)(
         const email = `write-side-${Date.now()}@acme.test`;
         const created = await authed(request(http).post('/users')).send({
           email,
-          name: 'Cached Alice',
+          username: 'Cached Alice',
           department: 'engineering',
         });
         expect(created.status).toBe(201);
@@ -56,11 +56,11 @@ describe.each(ADAPTERS)(
 
         const updated = await authed(
           request(http).patch(`/users/${created.body.id}`),
-        ).send({ name: 'Fresh Alice' });
+        ).send({ username: 'Fresh Alice' });
 
         expect(updated.status).toBe(200);
         expect(updated.body).toMatchObject({
-          name: 'Fresh Alice',
+          username: 'Fresh Alice',
           department: 'platform',
         });
       }));
