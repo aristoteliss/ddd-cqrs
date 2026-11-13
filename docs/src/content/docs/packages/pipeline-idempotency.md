@@ -66,7 +66,7 @@ With a store whose claim is atomic, as the three built-in stores are, the behavi
 
 It does not guarantee that the handler runs once. The handler can run again for the same key when:
 
-- **The record expires.** `ttl` bounds the in-progress claim as well as the completed record. A handler that runs longer than `ttl` loses its claim, and the next call with the key runs the handler a second time; the first execution still returns its result, with `IDEMPOTENCY_OWNERSHIP_LOST_ITEM` set on the context. A process that stops during the handler leaves its claim behind: retries are rejected with `in_progress` until the claim expires, and the first retry after that runs the handler again.
+- **The record expires.** `ttl` bounds the in-progress claim as well as the completed record. A handler that runs longer than `ttl` loses its claim, and the next call with the key runs the handler a second time; the first execution still returns its result, with `IDEMPOTENCY_OWNERSHIP_LOST_ITEM_TOKEN` set on the context. A process that stops during the handler leaves its claim behind: retries are rejected with `in_progress` until the claim expires, and the first retry after that runs the handler again.
 - **The handler throws.** With `releaseOnError: true` the claim is deleted and a retry runs the handler again, including whatever the failed attempt did before it threw. With `false` the claim stays until it expires and retries are rejected with `in_progress`.
 - **The response cannot be stored.** When the handler succeeds but its response is not serializable, or the store rejects the write, the call throws `IdempotencyCompletionError` with `executionSucceeded: true` and `phase` `'snapshot'` or `'store'`. The effects have happened and no response is stored: a retry is rejected with `in_progress` while the claim is live and runs the handler again after it expires.
 - **The store loses the record or is not shared.** `MemoryIdempotencyStore` deduplicates inside one process and forgets every record when the process stops. Several instances need a store they all reach, and the guarantees above are as durable as that store.
@@ -268,7 +268,8 @@ If the caller's permissions have changed between the initial execution and the d
 | `replay_scope` | 409 Conflict | The stored response was authorized under a different scope than this caller. |
 | `key_reuse` | 422 Unprocessable Entity | The same key came with a different payload. |
 
-The body is `{ statusCode, error, message, idempotencyKey, reason }`, with the error's message.
+The body is `{ statusCode, error, message, reason }`. The message is fixed for each reason, and the body
+never carries the stored key, which holds the tenant and the principal.
 
 `IdempotencyCompletionError` has no HTTP translation: the handler succeeded and its response was not stored, so the application decides how to answer the caller and whether to reconcile.
 

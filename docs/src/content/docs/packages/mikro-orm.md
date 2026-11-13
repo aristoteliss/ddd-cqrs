@@ -97,7 +97,8 @@ the store, for example with `isSqlIdentifier`.
 - `em` reuses the contextual manager (a MikroORM `RequestContext` or an active
   transaction) only when it belongs to the tenant's ORM, configuration, driver and schema,
   and no other tenant used it first. Otherwise it forks one, with the tenant's schema under
-  `'schema'` isolation.
+  `'schema'` isolation. Under `'schema'` isolation, a contextual manager without a schema
+  is never reused.
 - `transactional()` always runs on a fork of its own; a missing or unknown tenant rejects
   it.
 - The tenant of each manager it hands out is kept in a `WeakMap`: MikroORM objects are

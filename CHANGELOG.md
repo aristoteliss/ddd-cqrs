@@ -1,5 +1,108 @@
 # Changelog
 
+## Unreleased
+
+### Breaking changes
+
+- `@cqrs-ddd/core`: `requireTenantId(source, purpose)` is removed; call
+  `requireTenant(purpose, source)`.
+- `@cqrs-ddd/core`: `BaseCommand` and `BaseQuery` no longer set `sessionUser`, a second
+  name for the same value; read `sessionPrincipal`.
+- `@cqrs-ddd/nestjs`: the options type of `PipelineModule.forRoot()` is
+  `PipelineModuleOptions`; the adapter no longer exports a `PipelineOptions`, which is the
+  name of the `createPipeline` options in `@cqrs-ddd/pipeline`.
+
+- `@cqrs-ddd/pipeline-idempotency`: `IdempotencyConflictError.statusCode` is removed; an
+  error carries no transport semantics. `toHttpResponse` of
+  `@cqrs-ddd/pipeline-idempotency/http` maps `reason` to the status. Its body is
+  `{ statusCode, error, message, reason }`: it no longer has `idempotencyKey`, and
+  `message` is a fixed text for each reason, because the stored key holds the tenant and
+  the principal.
+- `@cqrs-ddd/pipeline-rate-limit/http`: `message` in the body of `toHttpResponse` no longer
+  names the bucket key, for the same reason.
+
+- `@cqrs-ddd/pipeline-feature-flags`: the constructor is
+  `new FeatureFlagBehavior(client, defaults?, logger?)`, as the other behaviors. The
+  evaluation context of every operation moves to the option `baseContext`, and the
+  targeting key factory to `targetingKeyFactory`, both in the defaults.
+
+- `@cqrs-ddd/pipeline-deadletter`: `DeadLetterStore` has a new required method
+  `claim(id, leaseMs)`, and `recordAttempt` and `markResolved` end the claim. A custom
+  store must implement it. `PostgresDeadLetterTransport` needs the columns `claimed_until`
+  and `tenant_id`: run `createDeadLetterTableSql()` again, which adds them to an existing
+  table.
+
+- The pipeline packages no longer export the raw symbol of a context item, such as
+  `CACHE_HIT_ITEM` or `IDEMPOTENCY_REPLAYED_ITEM`. Read each item through its typed token
+  with `getPipelineItem(context, CACHE_HIT_ITEM_TOKEN)`. This removes 12 exports of
+  `pipeline-audit`, `-cache`, `-deadletter`, `-feature-flags`, `-idempotency` and
+  `-rate-limit`.
+
+### Changed
+
+- Example application `api/`: a refresh writes an audit record, action `auth.refresh`, with
+  the refresh token redacted. A failed refresh, such as a reused token, is recorded too.
+- Example application `api/`: `POST /roles` needs the permission to create a role only.
+  Before, it also needed the permission to read users.
+- Example application `api/`: the user bodies of `POST /users`, `PATCH /users/:id`,
+  `GET /users` and `GET /users/:id` name the field `username`, as
+  `GET /users/:id/overview` does. Before, they named it `name`.
+- `@cqrs-ddd/pipeline-casl`: a handler that places `CaslBehavior` itself without `rules`
+  is a contract violation; before, it ran with no check. A global placement without rules
+  still passes through.
+- `@cqrs-ddd/cqrs`, `@cqrs-ddd/nestjs`: a contract violation in `'warn'` mode is logged as
+  `[Pipeline Diagnostic] '<handler>' with behavior ...`, without the word `Handler`.
+
+### Fixed
+
+- `@cqrs-ddd/pipeline-deadletter`: when the store cannot record a failed redrive attempt,
+  `redrive` still throws the handling error. The new option `logger` gets the store error.
+  Before, the store error replaced the handling error.
+- `@cqrs-ddd/mikro-orm`: under `'schema'` isolation, `TenantStore.em` no longer reuses a
+  contextual manager that has no schema. Before, such a manager ran the statements of a
+  tenant on the default schema.
+- `@cqrs-ddd/safe-stringify`: `stableStringify` and `toStrictJsonValue` refuse a boxed
+  primitive and an iterable object without `toJSON()`, such as `URLSearchParams` or
+  `Headers`. Before, each one became `{}`, so two different requests could share a cache
+  key or an idempotency fingerprint.
+- `@cqrs-ddd/pipeline-deadletter`: `DeadLetterRedriver` claims the record before it
+  dispatches. Before, two redrives of one record at the same time both ran the handler.
+  The new option `leaseMs` (default five minutes) sets how long a claim holds when a
+  process stops during the handling.
+- `@cqrs-ddd/core`: `@Cache` write-through invalidates the key when its fenced fill is
+  rejected. Before, a reader that filled the key during the save could leave its older
+  snapshot until the TTL.
+- `@cqrs-ddd/pipeline-correlation`: `@WithCorrelation` runs a method that is called without
+  its instance; before, it threw a `TypeError`.
+- `@cqrs-ddd/nestjs`: a second `PipelineModule.forRoot()` fails at startup instead of
+  wrapping every handler twice; a behavior with `PIPELINE_BEHAVIOR_ID` resolves from the
+  provider of another copy of its class; `ErrorFilter` leaves an error that is only named
+  `ZodValidationError` to Nest.
+
+### Added
+
+- `@cqrs-ddd/core`: `CommandBaseHandler.publishEvents(aggregate)`, protected, publishes and
+  clears the events of an aggregate that `handle` saved before it throws. `execute` uses
+  the same step for the aggregate that `handle` returns.
+- `@cqrs-ddd/pipeline-rate-limit`: `createPartitionedRateLimitKeyFactory<TRequest>` and
+  `RateLimitPartitionFactory<TRequest>` type `context.request`, so a partition factory
+  needs no cast.
+- `@cqrs-ddd/pipeline-deadletter`: `PostgresDeadLetterTransport` stores the tenant in the
+  column `tenant_id`, and `list({ tenantId })` returns the records of one tenant. A row
+  without the column value still reads its tenant from `metadata.tenantId`.
+- `@cqrs-ddd/pipeline`: `assertSafeTable` and the type `PostgresQueryableLike`, which the
+  Postgres stores of the audit, dead-letter and idempotency packages share. Each package
+  still exports its `PostgresQueryableLike`.
+- `@cqrs-ddd/pipeline`: the type `HttpResponse`, which the `http` entry point of each
+  pipeline package returns and exports again.
+- `@cqrs-ddd/pipeline`: `behaviorDiagnostic`, which builds the diagnostic a contract
+  validator returns.
+- `@cqrs-ddd/pipeline`: `principalSegments`, the principal segment rule that the cache,
+  idempotency and rate-limit key factories share.
+- `@cqrs-ddd/pipeline`: `createBehaviorResolver`, `compileHandlerPlan`,
+  `createHandlerRunner` and `reportDiagnostics`, the bootstrap steps that `createPipeline`,
+  `createCqrs` and the NestJS adapter share.
+
 ## 0.5.2
 
 A patch release with a security fix and one opt-in addition in

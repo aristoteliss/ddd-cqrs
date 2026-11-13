@@ -41,7 +41,7 @@ toStrictJsonValue({ b: 2, a: 1 }, true); // { a: 1, b: 2 }, αντικείμεν
 ```
 
 - Strings, booleans, `null` και πεπερασμένοι αριθμοί διατηρούνται. Ημερομηνίες γίνονται ISO-8601 strings. Αντικείμενα με `toJSON()` αντικαθίστανται από την επιστρεφόμενη τιμή.
-- Οτιδήποτε άλλο ρίχνει `TypeError`: `undefined`, συναρτήσεις, `bigint`, symbols, μη πεπερασμένοι αριθμοί, κυκλικές αναφορές, sparse arrays, `Map`, `Set`, `Error`, `RegExp` κ.ά.
+- Οτιδήποτε άλλο ρίχνει `TypeError`: `undefined`, συναρτήσεις, `bigint`, symbols, μη πεπερασμένοι αριθμοί, κυκλικές αναφορές, sparse arrays, `Map`, `Set`, `Error`, `RegExp`, boxed primitives όπως `new Number(1)`, iterable αντικείμενα χωρίς `toJSON()` όπως `URLSearchParams` ή `Headers`, κ.ά.
 - Δομικά ισοδύναμες τιμές παράγουν πανομοιότυπα strings, ανεξαρτήτως της σειράς εισαγωγής των ιδιοτήτων. Τα κλειδιά ταξινομούνται κατά UTF-16 code unit.
 
 ## Safe Serializer

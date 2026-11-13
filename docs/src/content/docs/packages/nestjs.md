@@ -164,7 +164,7 @@ import { tenantSource } from '@cqrs-ddd/pipeline-tenant';
 export class CorePipelineModule {}
 ```
 
-### `PipelineOptions`
+### `PipelineModuleOptions`
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -280,7 +280,7 @@ export class AppModule {}
 | `UnauthorizedActionException` | `@cqrs-ddd/pipeline-casl` | 403 Forbidden | `{ statusCode: 403, error: 'Forbidden', message, action, subject }` | — |
 | `FeatureDisabledError` | `@cqrs-ddd/pipeline-feature-flags` | 403 Forbidden | `{ statusCode: 403, error: 'Forbidden', message, flag }` | — |
 | `RateLimitExceededError` | `@cqrs-ddd/pipeline-rate-limit` | 429 Too Many Requests | `{ statusCode: 429, error: 'Too Many Requests', message, retryAfter }` | `Retry-After: <seconds>` |
-| `IdempotencyConflictError` | `@cqrs-ddd/pipeline-idempotency` | 409 Conflict (`in_progress`, `replay_scope`) / 422 Unprocessable Entity (`key_reuse`) | `{ statusCode, error, message, idempotencyKey, reason }` | — |
+| `IdempotencyConflictError` | `@cqrs-ddd/pipeline-idempotency` | 409 Conflict (`in_progress`, `replay_scope`) / 422 Unprocessable Entity (`key_reuse`) | `{ statusCode, error, message, reason }` | — |
 | `EntityNotFoundException` | `@cqrs-ddd/core` | 404 Not Found | `{ statusCode: 404, error: 'Not Found', message: 'Order not found' }` | — |
 | `ConcurrencyConflictError` | `@cqrs-ddd/core`, thrown by `@cqrs-ddd/mikro-orm` | 409 Conflict | `{ statusCode: 409, error: 'Conflict', message }` | — |
 | `MissingTenantContextError` | `@cqrs-ddd/core` | 500 Internal Server Error | `{ statusCode: 500, error: 'Internal Server Error', message: 'Internal server error' }`: a server misconfiguration, its message kept out of the answer | — |

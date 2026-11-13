@@ -51,8 +51,9 @@ toStrictJsonValue({ b: 2, a: 1 }, true); // { a: 1, b: 2 }, a null-prototype obj
   An object with `toJSON()` is replaced by what that method returns.
 - Everything else throws a `TypeError`: `undefined`, functions, `bigint`, symbols and
   symbol-keyed properties, non-finite numbers, invalid dates, cycles, sparse arrays,
-  `Map`, `Set`, `WeakMap`, `WeakSet`, `Error`, `RegExp`, `Promise`, `ArrayBuffer` and
-  typed arrays.
+  `Map`, `Set`, `WeakMap`, `WeakSet`, `Error`, `RegExp`, `Promise`, `ArrayBuffer`,
+  typed arrays, boxed primitives such as `new Number(1)`, and an iterable object without
+  `toJSON()`, such as `URLSearchParams` or `Headers`.
 - `stableStringify` wraps that failure in a `TypeError` whose `cause` is the original.
 - Structurally equal values produce byte-identical strings, whatever their property
   insertion order. Keys sort by UTF-16 code unit, as `Array.prototype.sort` does.

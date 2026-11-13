@@ -81,6 +81,12 @@ await redriver.redrive(recordId);
 
 Το redriver ανακατασκευάζει το αίτημα από την εγγραφή, αντιστοιχίζοντας το `record.requestName` με τα ονόματα των κλάσεων στο `requestTypes`, το δρομολογεί, και επισημαίνει την εγγραφή ως επιλυμένη.
 
+Πριν από τη δρομολόγηση, το redriver δεσμεύει την εγγραφή στο store. Ένα δεύτερο redrive της ίδιας εγγραφής, από την ίδια ή από άλλη διεργασία, απορρίπτεται με `DeadLetterRedriveError` και δεν δρομολογεί τίποτα. Η δέσμευση λήγει όταν τελειώσει το redrive. Αν η διεργασία σταματήσει κατά την εκτέλεση, η δέσμευση λήγει μετά από `leaseMs` (προεπιλογή: πέντε λεπτά)· ορίστε το `leaseMs` μεγαλύτερο από την πιο αργή εκτέλεση.
+
+Το `PostgresDeadLetterTransport` κρατά τη δέσμευση στη στήλη `claimed_until` και το tenant του αποτυχημένου αιτήματος στη στήλη `tenant_id`. Εκτελέστε ξανά το `createDeadLetterTableSql()` για να προστεθούν οι στήλες σε πίνακα που δεν τις έχει. Το `list({ tenantId })` επιστρέφει τις εγγραφές ενός tenant.
+
+Η συνάρτηση dispatch εκτελείται στο context αυτού που καλεί το `redrive`. Όταν ο handler διαβάζει το tenant, επαναφέρετε το `record.tenantId` μέσα στη συνάρτηση dispatch πριν ξεκινήσει η εκτέλεση.
+
 ## API reference
 
 [API reference](/ddd-cqrs/api/cqrs-ddd/pipeline-deadletter/)

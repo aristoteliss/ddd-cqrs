@@ -97,6 +97,24 @@ handling fails again, it counts the attempt and rethrows. A record whose payload
 redacted needs a `rebuild` function that restores the redacted values. During a redrive,
 the behavior neither captures the failure again nor swallows it.
 
+Before it dispatches, the redriver claims the record in the store. A second redrive of the
+same record, from this process or from another one, is refused with
+`DeadLetterRedriveError` and dispatches nothing. The claim ends when the redrive ends. If
+the process stops during the handling, the claim ends after `leaseMs`, five minutes by
+default; set `leaseMs` longer than the slowest handling.
+
+When the handling fails again and the store cannot record the attempt, `redrive` still
+throws the handling error. The store error goes to the `logger` option, `console` by
+default.
+
+`PostgresDeadLetterTransport` keeps the claim in the column `claimed_until` and the tenant
+of the failed request in the column `tenant_id`. Run `createDeadLetterTableSql()` again to
+add the columns to a table that does not have them. `list({ tenantId })` returns the
+records of one tenant.
+
+A dispatch function runs in the context of the caller of `redrive`. When the handling reads
+the tenant, restore `record.tenantId` in the dispatch function before the handling starts.
+
 ## API reference
 
 [API reference](/ddd-cqrs/api/cqrs-ddd/pipeline-deadletter/)

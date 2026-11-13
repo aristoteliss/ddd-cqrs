@@ -56,7 +56,7 @@ needs.
 | Entry | Holds |
 | --- | --- |
 | `@cqrs-ddd/core/domain` | `AggregateRoot`, `IAggregateRoot`, `ApplyEventOptions`, `RootEntity`, `RootEntitySnapshot`, `@Mutable`, `getMutableFields`, `@ApplyMutation`, `IEvent`, `DomainEvent`, `RootDomainEvent`, `deepCloneAndFreeze`, `textRule`, `numberRule`, `ValueViolation`, and the errors `DomainException`, `InvalidValueException`, `EntityNotFoundException`, `ConcurrencyConflictError`, `TransientOperationError` (with `isTransientOperationError`), `MissingTenantContextError`, `UnknownMutableFieldError` |
-| `@cqrs-ddd/core/application` | `BaseCommand`, `BaseQuery`, `IQueryOptions`, `CommandBaseHandler`, the ports (`IDomainEventPublisher`, `ICommandRepository`, `IQueryRepository`, `IWriteSideAggregateRepository`, `ICache`, `IVersionedCache`, `isVersionedCache`), `requireTenant`, `setTenantResolver`, and the deprecated `requireTenantId` |
+| `@cqrs-ddd/core/application` | `BaseCommand`, `BaseQuery`, `IQueryOptions`, `CommandBaseHandler`, the ports (`IDomainEventPublisher`, `ICommandRepository`, `IQueryRepository`, `IWriteSideAggregateRepository`, `ICache`, `IVersionedCache`, `isVersionedCache`), `requireTenant` and `setTenantResolver` |
 | `@cqrs-ddd/core/persistence` | the lifecycle decorators (`@PersistedWrite`, `@Cache`, `@AcknowledgePersisted`, `@MapPersistenceErrors`, `@FromCache`), `QueryRepository`, `CommandRepository`, `MemoryCache` and its injection token `CACHE_TOKEN`, `cacheKey`, `cacheKeyTemplate`, `isCacheNewer`, `toCacheSnapshot`, the mutation-barrier helpers, `consoleCacheLogger`, `safeWarn`, and the persistence dialect contract (`IPersistenceDialect`, `setPersistenceDialect`, `persistenceDialect`) |
 | `@cqrs-ddd/core/http` | `domainErrorHttpStatus` |
 | `@cqrs-ddd/core` | all of the above, plus the `Method` type |
@@ -294,7 +294,7 @@ handles objects, arrays, `Date`, `Map`, `Set`, `RegExp` and circular references.
 ## Commands and event publication
 
 `BaseCommand` and `BaseQuery` are plain base classes for command and query objects.
-`BaseCommand` keeps an optional `sessionPrincipal` (or `sessionUser`) out of enumeration and `toJSON()`, so it
+`BaseCommand` keeps an optional `sessionPrincipal` out of enumeration and `toJSON()`, so it
 never reaches a fingerprint or a log. `getUpdateFields(fields)` returns the listed
 fields the command carries (`null` counts, `undefined` does not), for field-level
 authorization.
@@ -354,6 +354,9 @@ await handler.execute(new UpdateUserCommand(id, 'bob'));
   Its rejection rejects the command, although the aggregate is already persisted; the
   events are not published a second time.
 - Any object with `publishAll(events)` is an `IDomainEventPublisher`.
+- A handler that saves an aggregate and then throws calls the protected
+  `publishEvents(aggregate)` before the throw. It publishes and clears the events, as
+  `execute()` does for the aggregate that `handle()` returns.
 
 **`AggregateRoot.commit()` publishes nothing by default.** It hands a copy of the
 buffer to the aggregate's own `publishAll` hook (`apply()` calls `publish` while
@@ -611,9 +614,6 @@ import { requireTenant } from '@cqrs-ddd/core/application';
 requireTenant('access token issuance'); // the resolver's tenant
 requireTenant('users.create idempotency key', ctx); // ctx.tenantId, else the resolver's
 ```
-
-`requireTenantId(source, purpose)` is deprecated: it takes the same arguments in the
-reverse order and calls `requireTenant`.
 
 `cacheKey` keys have the form `${tenant}:${resource}:v1:${sha256}`, hashed over a
 key-sorted serialization of `[tenant, resource, conditions]`. The format is frozen, so

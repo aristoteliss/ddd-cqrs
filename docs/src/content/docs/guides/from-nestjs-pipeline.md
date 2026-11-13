@@ -110,7 +110,7 @@ A store or sink that a 0.4.x module chose when none was given is now passed expl
 | `CacheModule.forRoot({ store, ttl, defaults })` | `new CacheBehavior(buildCache({ store, ttl }), defaults)`; `buildCache()` takes the module's other options |
 | `CaslModule.forRoot({ permissionSource })` | `new CaslBehavior(permissionSource)` |
 | `DeadLetterModule.forRoot({ transport, defaults })` | `new DeadLetterBehavior(transport, defaults)` |
-| `FeatureFlagsModule.forRoot({ provider, context, defaults })` | `new FeatureFlagBehavior(await createFeatureFlagClient({ provider }), defaults, context)` |
+| `FeatureFlagsModule.forRoot({ provider, context, defaults })` | `new FeatureFlagBehavior(await createFeatureFlagClient({ provider }), { ...defaults, baseContext: context })` |
 | `IdempotencyModule.forRoot({ store, defaults })` | `new IdempotencyBehavior(store, defaults)` |
 | `RateLimitModule.forRoot({ limiter, defaults })` | `new RateLimitBehavior(limiter, defaults)` |
 | `ResilienceModule.forRoot({ defaults, policies })` | `new ResilienceBehavior(defaults)`, and a provider of `new ResiliencePolicies(policies)` |

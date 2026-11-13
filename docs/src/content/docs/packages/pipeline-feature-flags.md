@@ -46,9 +46,9 @@ client, or registers the provider for the domain and resolves its client, waitin
 provider is ready unless `waitForReady` is `false`. `releaseFeatureFlagProvider(options)`
 unregisters that provider at shutdown.
 
-The behavior's constructor takes the client, optional defaults, an optional evaluation
-context added to every evaluation, an optional logger and an optional targeting key
-factory used when an operation gives none.
+The behavior's constructor takes the client, optional defaults and an optional logger, as
+every behavior with a dependency does. The defaults hold what applies to every operation,
+such as `baseContext` and a `targetingKeyFactory` used when an operation gives none.
 
 ## Options
 
@@ -57,8 +57,9 @@ factory used when an operation gives none.
 | `flag` | the boolean flag that gates the operation; without it, the behavior does nothing | none |
 | `defaultValue` | the value when the flag cannot be resolved | `false` (closed) |
 | `fallback` | a value returned when the flag is off, instead of throwing | none: throws |
-| `targetingKeyFactory` | the stable identity for percentage rollouts, such as the user id | the constructor's |
-| `context` | extra evaluation context for this operation | none |
+| `targetingKeyFactory` | the stable identity for percentage rollouts, such as the user id | the one of the defaults |
+| `baseContext` | fixed attributes of every evaluation, such as the environment; set it in the defaults | none |
+| `context` | extra evaluation context for this operation, merged over `baseContext` | none |
 | `allowedVariants` | run only when the flag resolves to one of these variants | any |
 | `errorPolicy` | `'use-default'` treats a provider error as `defaultValue`; `'throw'` raises `FeatureFlagEvaluationError` | `'use-default'` |
 

@@ -48,7 +48,8 @@ export const checkout = pipeline.wrap(
 | `defaultValue` | τιμή όταν το flag δεν μπορεί να επιλυθεί | `false` (κλειστό) |
 | `fallback` | τιμή που επιστρέφεται όταν το flag είναι κλειστό, αντί να ριχτεί σφάλμα | κανένα (ρίχνει σφάλμα) |
 | `targetingKeyFactory` | σταθερή ταυτότητα για ποσοστιαία rollouts (π.χ. user id) | του constructor |
-| `context` | επιπλέον context αξιολόγησης για τη συγκεκριμένη λειτουργία | κανένα |
+| `baseContext` | σταθερά attributes κάθε αξιολόγησης, π.χ. το environment· ορίζεται στα defaults | κανένα |
+| `context` | επιπλέον context αξιολόγησης για τη συγκεκριμένη λειτουργία, πάνω από το `baseContext` | κανένα |
 | `allowedVariants` | εκτέλεση μόνο όταν το flag επιλύεται σε μία από αυτές τις παραλλαγές | οποιαδήποτε |
 | `errorPolicy` | το `'use-default'` μεταχειρίζεται provider σφάλματα ως `defaultValue`, το `'throw'` ρίχνει `FeatureFlagEvaluationError` | `'use-default'` |
 

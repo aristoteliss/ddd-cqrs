@@ -110,7 +110,7 @@ export class AppModule {}
 | `CacheModule.forRoot({ store, ttl, defaults })` | `new CacheBehavior(buildCache({ store, ttl }), defaults)`· το `buildCache()` δέχεται τις υπόλοιπες επιλογές του module |
 | `CaslModule.forRoot({ permissionSource })` | `new CaslBehavior(permissionSource)` |
 | `DeadLetterModule.forRoot({ transport, defaults })` | `new DeadLetterBehavior(transport, defaults)` |
-| `FeatureFlagsModule.forRoot({ provider, context, defaults })` | `new FeatureFlagBehavior(await createFeatureFlagClient({ provider }), defaults, context)` |
+| `FeatureFlagsModule.forRoot({ provider, context, defaults })` | `new FeatureFlagBehavior(await createFeatureFlagClient({ provider }), { ...defaults, baseContext: context })` |
 | `IdempotencyModule.forRoot({ store, defaults })` | `new IdempotencyBehavior(store, defaults)` |
 | `RateLimitModule.forRoot({ limiter, defaults })` | `new RateLimitBehavior(limiter, defaults)` |
 | `ResilienceModule.forRoot({ defaults, policies })` | `new ResilienceBehavior(defaults)`, και ένας provider του `new ResiliencePolicies(policies)` |
