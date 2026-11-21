@@ -1,7 +1,7 @@
 {
   "name": "ddd-cqrs-monorepo",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Framework-neutral DDD, CQRS and pipeline behavior packages",
   "homepage": "https://aristoteliss.github.io/ddd-cqrs/",
   "license": "SEE LICENSE IN LICENSE",
@@ -28,8 +28,8 @@
     "publish:all": "pnpm copy-licenses && pnpm -r publish --access public"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.6.2",
-    "@types/node": "^26.6.5",
+    "@biomejs/biome": "^2.6.8",
+    "@types/node": "^26.6.6",
     "typescript": "^7.0.2"
   },
   "engines": {

@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.6.1
+
+A patch release. No export, signature, error message or documented behavior changes. Every
+package is released at 0.6.1 on the `latest` dist-tag. The packages take each other at
+`^0.6.1`, as every release moves in lockstep.
+
+### Changed
+
+- The packages are developed and tested against the latest releases of their peers within
+  the declared ranges: NestJS 12.5.1, `@nestjs/cqrs` 12.1.3, MikroORM 7.2.11, zod 4.6.7,
+  `@casl/ability` 7.1.3, `@opentelemetry/api` 1.10.0 and `rate-limiter-flexible` 11.5.0.
+  No peer range changes.
+- Biome 2.6.8 checks the source and Vitest 5.1.1 runs the tests.
+
+### Example application (`api/`, not published)
+
+- Fastify 5.12.8 and `@fastify/secure-session` 8.4.2 are security releases. The
+  application sets neither `handlerTimeout` nor signed session cookies, which the fixed
+  flaws need.
+- The OpenTelemetry SDK 0.301 with the stable packages 3.1.1 replaces 0.300 and 3.0. The
+  default resource detectors of `NodeSDK` add the `os.*` and `service.instance.id`
+  attributes to every span.
+- BullMQ stays on 5.81.5. keyv and `@keyv/redis` stay on 5, because `cache-manager` 7
+  supports keyv 5 only.
+
+### Documentation
+
+- The site builds with Astro 7.4.13, Starlight 0.43.1 and `starlight-typedoc` 0.23.3.
+  TypeScript stays on 6 in `docs/`, because TypeDoc does not support TypeScript 7.
+
 ## 0.6.0
 
 A minor release with breaking changes, defect repairs and simplifications across the

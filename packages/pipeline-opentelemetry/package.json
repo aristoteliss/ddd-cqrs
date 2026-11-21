@@ -1,6 +1,6 @@
 {
   "name": "@cqrs-ddd/pipeline-opentelemetry",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "OpenTelemetry tracing, metrics and span attribute behaviors for @cqrs-ddd/pipeline",
   "author": "Aristotelis",
   "license": "SEE LICENSE IN LICENSE",
@@ -51,8 +51,8 @@
   "devDependencies": {
     "@cqrs-ddd/pipeline": "workspace:*",
     "@opentelemetry/api": "^1.10.0",
-    "@vitest/coverage-v8": "^5.0.5",
-    "vitest": "^5.0.5"
+    "@vitest/coverage-v8": "^5.1.1",
+    "vitest": "^5.1.1"
   },
   "dependencies": {
     "@cqrs-ddd/untyped": "workspace:^"
