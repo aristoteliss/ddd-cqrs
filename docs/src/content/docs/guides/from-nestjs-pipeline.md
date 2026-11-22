@@ -5,7 +5,7 @@ sidebar:
   order: 4.5
 ---
 
-From 0.5.0 the `@nestjs-pipeline/*` packages continue as `@cqrs-ddd/*`. The 0.4.x line receives fixes only, and versions 0.1 to 0.4 stay on npm unchanged, so an application on 0.4.x keeps working without a change. This page lists what changes when it moves to 0.5.0. The requirements stay the same: Node.js 22.12 or later and NestJS 12.
+From 0.5.0 the `@nestjs-pipeline/*` packages continue as `@cqrs-ddd/*`. Versions 0.1 to 0.4 stay on npm unchanged, so an application on 0.4.x keeps working without a change. This page lists what changes when it moves to 0.5.0. The requirements stay the same: Node.js 22.12 or later and NestJS 12.
 
 Handlers do not change. `@CommandHandler`, `@QueryHandler` and `@EventsHandler` stay the ones of `@nestjs/cqrs`, and `@UsePipeline`, `@SkipPipeline` and the behaviors' helpers (`idempotent()`, `audit()`, `cache()`, `requires()`, `rateLimit()`, `featureFlag()`, `resilience()`, `deadLetter()`, `trace()`, `metrics()`) keep their names. What changes is the wiring in the modules.
 
@@ -16,7 +16,7 @@ Handlers do not change. `@CommandHandler`, `@QueryHandler` and `@EventsHandler` 
 | `@nestjs-pipeline/core` | `@cqrs-ddd/pipeline`, and [`@cqrs-ddd/nestjs`](/ddd-cqrs/packages/nestjs/) for `PipelineModule` |
 | `@nestjs-pipeline/<name>` | `@cqrs-ddd/pipeline-<name>`, for `audit`, `cache`, `casl`, `correlation`, `deadletter`, `feature-flags`, `idempotency`, `job-context`, `opentelemetry`, `rate-limit`, `resilience`, `tenant` and `zod` |
 
-`@cqrs-ddd/nestjs` is the NestJS adapter: `PipelineModule`, `ErrorFilter`, and the `/correlation` and `/job-context` entry points. `@nestjs-pipeline/cqrs-ddd` 0.5.0 is a facade that re-exports it from the same three entry points. A NestJS application keeps the buses of `@nestjs/cqrs`; `@cqrs-ddd/cqrs` is for an application without NestJS (see [NestJS & @cqrs-ddd](/ddd-cqrs/guides/from-nestjs/)).
+`@cqrs-ddd/nestjs` is the NestJS adapter: `PipelineModule`, `ErrorFilter`, and the `/correlation` and `/job-context` entry points. `@nestjs-pipeline/cqrs-ddd` is a facade that re-exports it from the same three entry points (see [The `@nestjs-pipeline` Names at 0.6.1](#the-nestjs-pipeline-names-at-061)). A NestJS application keeps the buses of `@nestjs/cqrs`; `@cqrs-ddd/cqrs` is for an application without NestJS (see [NestJS & @cqrs-ddd](/ddd-cqrs/guides/from-nestjs/)).
 
 ```bash
 pnpm remove @nestjs-pipeline/core @nestjs-pipeline/idempotency @nestjs-pipeline/audit
@@ -139,6 +139,19 @@ The per-package filters `ZodValidationFilter`, `UnauthorizedActionFilter`, `Feat
 The injection tokens of the 0.4.x modules are not exported in 0.5.0: `AUDIT_SINK`, `PIPELINE_CACHE`, `CASL_PERMISSION_SOURCE`, `DEAD_LETTER_TRANSPORT`, `FEATURE_FLAGS_CLIENT`, `IDEMPOTENCY_STORE`, `RATE_LIMITER`, `CORRELATION_OPTIONS`, `LOGGING_BEHAVIOR_LOGGER`, the other `FEATURE_FLAGS_*` tokens, and the `*_DEFAULT_OPTIONS` tokens. An application that injected one defines its own token and provides the value under it. `@InjectResiliencePolicy(name)` and `getResiliencePolicyToken(name)` become an injected `ResiliencePolicies` and `policies.execute(name, fn)`, as in [Outbound Dependency Policies](/ddd-cqrs/packages/pipeline-resilience/#outbound-dependency-policies-resiliencepolicies).
 
 The metadata keys `PIPELINE_BEHAVIORS_METADATA`, `PIPELINE_BEHAVIORS_OPTIONS_METADATA` and `PIPELINE_SKIPPED_BEHAVIORS_METADATA` are not exported either; `pipelineOf(handler)` of `@cqrs-ddd/pipeline` reads a handler's declaration.
+
+## The `@nestjs-pipeline` Names at 0.6.1
+
+An application can keep four `@nestjs-pipeline` names. From 0.6.1 they have no code of their own and re-export the `@cqrs-ddd` packages at the same version, so the changes on this page apply to them as well:
+
+| Package | Re-exports |
+| --- | --- |
+| `@nestjs-pipeline/core` | `@cqrs-ddd/pipeline` and `@cqrs-ddd/nestjs` |
+| `@nestjs-pipeline/correlation` | `@cqrs-ddd/pipeline-correlation` and `@cqrs-ddd/nestjs/correlation` |
+| `@nestjs-pipeline/job-context` | `@cqrs-ddd/pipeline-job-context` and `@cqrs-ddd/nestjs/job-context` |
+| `@nestjs-pipeline/cqrs-ddd` | `@cqrs-ddd/nestjs`, from the same three entry points |
+
+Each one depends on `@cqrs-ddd/nestjs` and peers `@cqrs-ddd/core`, `@cqrs-ddd/pipeline` and NestJS 12. The behavior packages of the 0.4.x line peer `@nestjs-pipeline/core` 0.4.x, so an application that moves core to 0.6.1 also moves its behaviors to `@cqrs-ddd/pipeline-<name>`. [Upgrading to 0.6.1](https://aristoteliss.github.io/nestjs-pipeline/upgrading/to-0-6/) gives the steps.
 
 ## The 0.4.x Line
 

@@ -5,7 +5,7 @@ sidebar:
   order: 4.5
 ---
 
-Από την 0.5.0 τα πακέτα `@nestjs-pipeline/*` συνεχίζουν ως `@cqrs-ddd/*`. Η σειρά 0.4.x δέχεται μόνο διορθώσεις, και οι εκδόσεις 0.1 έως 0.4 παραμένουν αμετάβλητες στο npm, οπότε μια εφαρμογή σε 0.4.x συνεχίζει να λειτουργεί χωρίς αλλαγή. Η σελίδα αυτή απαριθμεί τι αλλάζει όταν μεταφέρεται στην 0.5.0. Οι απαιτήσεις μένουν ίδιες: Node.js 22.12 ή νεότερο και NestJS 12.
+Από την 0.5.0 τα πακέτα `@nestjs-pipeline/*` συνεχίζουν ως `@cqrs-ddd/*`. Οι εκδόσεις 0.1 έως 0.4 παραμένουν αμετάβλητες στο npm, οπότε μια εφαρμογή σε 0.4.x συνεχίζει να λειτουργεί χωρίς αλλαγή. Η σελίδα αυτή απαριθμεί τι αλλάζει όταν μεταφέρεται στην 0.5.0. Οι απαιτήσεις μένουν ίδιες: Node.js 22.12 ή νεότερο και NestJS 12.
 
 Οι handlers δεν αλλάζουν. Τα `@CommandHandler`, `@QueryHandler` και `@EventsHandler` παραμένουν αυτά του `@nestjs/cqrs`, και τα `@UsePipeline`, `@SkipPipeline` και οι βοηθητικές συναρτήσεις των behaviors (`idempotent()`, `audit()`, `cache()`, `requires()`, `rateLimit()`, `featureFlag()`, `resilience()`, `deadLetter()`, `trace()`, `metrics()`) διατηρούν τα ονόματά τους. Αλλάζει η σύνδεση στα modules.
 
@@ -16,7 +16,7 @@ sidebar:
 | `@nestjs-pipeline/core` | `@cqrs-ddd/pipeline`, και [`@cqrs-ddd/nestjs`](/ddd-cqrs/el/packages/nestjs/) για το `PipelineModule` |
 | `@nestjs-pipeline/<name>` | `@cqrs-ddd/pipeline-<name>`, για τα `audit`, `cache`, `casl`, `correlation`, `deadletter`, `feature-flags`, `idempotency`, `job-context`, `opentelemetry`, `rate-limit`, `resilience`, `tenant` και `zod` |
 
-Το `@cqrs-ddd/nestjs` είναι ο adapter για το NestJS: `PipelineModule`, `ErrorFilter`, και τα entry points `/correlation` και `/job-context`. Το `@nestjs-pipeline/cqrs-ddd` 0.5.0 είναι ένα facade που τον επανεξάγει από τα ίδια τρία entry points. Μια εφαρμογή NestJS διατηρεί τα buses του `@nestjs/cqrs`· το `@cqrs-ddd/cqrs` προορίζεται για εφαρμογή χωρίς NestJS (δείτε [NestJS & @cqrs-ddd](/ddd-cqrs/el/guides/from-nestjs/)).
+Το `@cqrs-ddd/nestjs` είναι ο adapter για το NestJS: `PipelineModule`, `ErrorFilter`, και τα entry points `/correlation` και `/job-context`. Το `@nestjs-pipeline/cqrs-ddd` είναι ένα facade που τον επανεξάγει από τα ίδια τρία entry points (δείτε [Τα ονόματα `@nestjs-pipeline` στην 0.6.1](#τα-ονόματα-nestjs-pipeline-στην-061)). Μια εφαρμογή NestJS διατηρεί τα buses του `@nestjs/cqrs`· το `@cqrs-ddd/cqrs` προορίζεται για εφαρμογή χωρίς NestJS (δείτε [NestJS & @cqrs-ddd](/ddd-cqrs/el/guides/from-nestjs/)).
 
 ```bash
 pnpm remove @nestjs-pipeline/core @nestjs-pipeline/idempotency @nestjs-pipeline/audit
@@ -139,6 +139,19 @@ export class AppModule {}
 Τα injection tokens των modules της 0.4.x δεν εξάγονται στην 0.5.0: `AUDIT_SINK`, `PIPELINE_CACHE`, `CASL_PERMISSION_SOURCE`, `DEAD_LETTER_TRANSPORT`, `FEATURE_FLAGS_CLIENT`, `IDEMPOTENCY_STORE`, `RATE_LIMITER`, `CORRELATION_OPTIONS`, `LOGGING_BEHAVIOR_LOGGER`, τα υπόλοιπα tokens `FEATURE_FLAGS_*`, και τα tokens `*_DEFAULT_OPTIONS`. Μια εφαρμογή που έκανε inject κάποιο από αυτά ορίζει δικό της token και παρέχει την τιμή με αυτό. Τα `@InjectResiliencePolicy(name)` και `getResiliencePolicyToken(name)` γίνονται ένα injected `ResiliencePolicies` και `policies.execute(name, fn)`, όπως στις [Πολιτικές εξωτερικών εξαρτήσεων](/ddd-cqrs/el/packages/pipeline-resilience/#πολιτικές-εξωτερικών-εξαρτήσεων-resiliencepolicies).
 
 Ούτε τα metadata keys `PIPELINE_BEHAVIORS_METADATA`, `PIPELINE_BEHAVIORS_OPTIONS_METADATA` και `PIPELINE_SKIPPED_BEHAVIORS_METADATA` εξάγονται· το `pipelineOf(handler)` του `@cqrs-ddd/pipeline` διαβάζει τη δήλωση ενός handler.
+
+## Τα ονόματα `@nestjs-pipeline` στην 0.6.1
+
+Μια εφαρμογή μπορεί να κρατήσει τέσσερα ονόματα `@nestjs-pipeline`. Από την 0.6.1 δεν έχουν δικό τους κώδικα και επανεξάγουν τα πακέτα `@cqrs-ddd` στην ίδια έκδοση, οπότε οι αλλαγές αυτής της σελίδας ισχύουν και για αυτά:
+
+| Πακέτο | Επανεξάγει |
+| --- | --- |
+| `@nestjs-pipeline/core` | `@cqrs-ddd/pipeline` και `@cqrs-ddd/nestjs` |
+| `@nestjs-pipeline/correlation` | `@cqrs-ddd/pipeline-correlation` και `@cqrs-ddd/nestjs/correlation` |
+| `@nestjs-pipeline/job-context` | `@cqrs-ddd/pipeline-job-context` και `@cqrs-ddd/nestjs/job-context` |
+| `@nestjs-pipeline/cqrs-ddd` | `@cqrs-ddd/nestjs`, από τα ίδια τρία entry points |
+
+Το καθένα εξαρτάται από το `@cqrs-ddd/nestjs` και έχει peers τα `@cqrs-ddd/core`, `@cqrs-ddd/pipeline` και NestJS 12. Τα πακέτα behaviors της σειράς 0.4.x έχουν peer το `@nestjs-pipeline/core` 0.4.x, οπότε μια εφαρμογή που μεταφέρει το core στην 0.6.1 μεταφέρει και τα behaviors της στα `@cqrs-ddd/pipeline-<name>`. Η σελίδα [Αναβάθμιση στην έκδοση 0.6.1](https://aristoteliss.github.io/nestjs-pipeline/el/upgrading/to-0-6/) δίνει τα βήματα.
 
 ## Η σειρά 0.4.x
 
